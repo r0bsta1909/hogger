@@ -272,7 +272,7 @@ local function q8(frac)
 end
 
 local PFLAG = { alive = 1, ghost = 2, casting = 4, jumping = 8, reviving = 16,
-                leeroy = 32 }
+                leeroy = 32, bleeding = 64 }
 W.PFLAG = PFLAG
 
 local model = require("sim.model")
@@ -334,6 +334,7 @@ function W.snapshot_body(state)
     if p.jump_t and p.jump_t > 0 then flags = flags + PFLAG.jumping end
     if p.revive then flags = flags + PFLAG.reviving end
     if p.is_leeroy then flags = flags + PFLAG.leeroy end
+    if (p.bleed_t or 0) > 0 then flags = flags + PFLAG.bleeding end
     -- Buffs/Zustaende fuer die Buff-Leiste (GDD 4.3)
     local flags2 = 0
     if p.stealth then flags2 = flags2 + 1 end
@@ -447,6 +448,7 @@ function W.read_snapshot(data, off)
       jumping = flags % 16 >= 8,
       reviving = flags % 32 >= 16,
       is_leeroy = flags % 64 >= 32,
+      bleeding = flags % 128 >= 64, -- Hoggers Vicious Slice (GDD 9.2)
       class = CLASS_NAMES[cls],
       race = model.RACES[race],
       stealth = flags2 % 2 >= 1,
