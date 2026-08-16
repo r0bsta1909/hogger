@@ -35,7 +35,20 @@ function R.new()
   self.banner_text = nil
   self.shake = 0
   self.toasts = {} -- Loot-Toasts am Kreisrand (GDD 7.3)
+  self.killcam_t = 0     -- Killcam-Zeile, 2 s (GDD 11)
+  self.killcam_text = nil
+  self.effects = {}      -- DING-Ringe u. ae. (Weltkoordinaten)
   return self
+end
+
+function R:show_killcam(text)
+  self.killcam_text = text
+  self.killcam_t = 2.0 -- GDD 11: 2 s
+end
+
+-- DING-Inszenierung: goldener Ring am Icon (GDD 7.3)
+function R:add_ding(wx, wy)
+  self.effects[#self.effects + 1] = { x = wx, y = wy, t = 1.5, total = 1.5 }
 end
 
 function R:toast(text)
@@ -62,10 +75,15 @@ end
 
 function R:update(dt)
   if self.banner_t > 0 then self.banner_t = self.banner_t - dt end
+  if self.killcam_t > 0 then self.killcam_t = self.killcam_t - dt end
   if self.shake > 0 then self.shake = math.max(0, self.shake - dt * 30) end
   for i = #self.toasts, 1, -1 do
     self.toasts[i].t = self.toasts[i].t - dt
     if self.toasts[i].t <= 0 then table.remove(self.toasts, i) end
+  end
+  for i = #self.effects, 1, -1 do
+    self.effects[i].t = self.effects[i].t - dt
+    if self.effects[i].t <= 0 then table.remove(self.effects, i) end
   end
 end
 
@@ -234,6 +252,16 @@ function R:draw(view, ui)
         hp_bar(x, y + 26, 26, hg.eat.progress, 0.9, 0.8, 0.2)
       end
     end
+  end
+
+  -- DING-Inszenierung: goldene, sich weitende Ringe (GDD 7.3)
+  for _, e in ipairs(self.effects) do
+    local x, y = to_screen(e.x, e.y)
+    local k = 1 - e.t / e.total
+    love.graphics.setColor(1, 0.85, 0.25, 1 - k)
+    love.graphics.setLineWidth(3)
+    love.graphics.circle("line", x, y, 10 + k * 60)
+    love.graphics.setLineWidth(1)
   end
 
   -- Eigener Pfeil exakt im Zentrum (GDD 4.1)
@@ -475,6 +503,20 @@ function R:draw(view, ui)
     local font = love.graphics.getFont()
     love.graphics.print(self.banner_text,
       ox - font:getWidth(self.banner_text) / 2 * 2, oy - radius * 0.4, 0, 2, 2)
+  end
+
+  -- Killcam-Zeile: 2 s, RECOUNT-9000-Ton (GDD 11)
+  if self.killcam_t > 0 and self.killcam_text then
+    local a = math.min(1, self.killcam_t / 0.5)
+    local band_y = oy + radius * 0.52
+    love.graphics.setColor(0, 0, 0, 0.75 * a)
+    love.graphics.rectangle("fill", 0, band_y - 24, w, 58)
+    love.graphics.setColor(0.9, 0.3, 0.25, a)
+    love.graphics.print("RECOUNT-9000 // Todesursachen-Analyse", ox - 120, band_y - 18)
+    love.graphics.setColor(0.95, 0.92, 0.8, a)
+    local font = love.graphics.getFont()
+    love.graphics.print(self.killcam_text,
+      ox - font:getWidth(self.killcam_text) / 2 * 1.4, band_y + 2, 0, 1.4, 1.4)
   end
 
   return to_screen
