@@ -1,6 +1,9 @@
 -- sim/main.lua — CLI der Headless-Sim (GDD 17.2).
--- Einzelzelle: lua sim/main.lua --n 10 --runs 1000 --penalty 30 --crits on
+-- Einzelzelle: lua sim/main.lua --n 10 --runs 1000 --walk 15 --crits on
 --              [--agent koordiniert] [--seed 1]
+-- --walk ist der Laufweg-Anteil der Todesstrafe (Geist + Anmarsch);
+-- die Gesamtstrafe ist respawn_timer(N) + walk (GDD 9.3 + 7.1).
+-- --penalty wird als Alias fuer --walk akzeptiert (Altbefehl aus CLAUDE.md).
 -- Voller Sweep (Matrix aus GDD 17.2 Punkt 6):
 --              lua sim/main.lua --sweep --runs 1000 [--out reports/x.md] [--date 2026-08-16]
 
@@ -12,16 +15,16 @@ local report = require("sim.report")
 -- ---------------------------------------------------------------------------
 local model = require("sim.model")
 
-local opts = { n = 10, runs = 100, penalty = 30, crits = "on",
+local opts = { n = 10, runs = 100, walk = 15, crits = "on",
                agent = "koordiniert", seed = 1, sweep = false,
-               out = nil, date = "bericht", exp = {} }
+               out = nil, date = "bericht" }
 local i = 1
 while i <= #arg do
   local a = arg[i]
   if a == "--sweep" then opts.sweep = true
   elseif a == "--n" then i = i + 1; opts.n = tonumber(arg[i])
   elseif a == "--runs" then i = i + 1; opts.runs = tonumber(arg[i])
-  elseif a == "--penalty" then i = i + 1; opts.penalty = tonumber(arg[i])
+  elseif a == "--walk" or a == "--penalty" then i = i + 1; opts.walk = tonumber(arg[i])
   elseif a == "--crits" then i = i + 1; opts.crits = arg[i]
   elseif a == "--agent" then i = i + 1; opts.agent = arg[i]
   elseif a == "--seed" then i = i + 1; opts.seed = tonumber(arg[i])
@@ -34,22 +37,16 @@ while i <= #arg do
     assert(key and model.params[key], "ungueltiges --set: " .. tostring(arg[i]))
     model.params[key].wert = tonumber(val)
     io.write("SET ", key, " = ", val, "\n")
-  elseif a == "--exp" then
-    -- Sim-Prototyp fuer Vorschlags-Issues (KEINE Designaenderung):
-    -- cleave (Autohit trifft ceil(N/10) Ziele), chargescale (Charge-CD / (N/10))
-    i = i + 1
-    opts.exp[arg[i]] = true
-    io.write("EXPERIMENT ", arg[i], "\n")
   else io.write("unbekannte Option: ", a, "\n"); os.exit(2) end
   i = i + 1
 end
 
-local function run_cell(agent, n, penalty, crits, runs, cell_seed)
+local function run_cell(agent, n, walk, crits, runs, cell_seed)
   local results = {}
   for r = 1, runs do
     results[r] = engine.run_try({
-      n = n, penalty = penalty, crits = crits, agent = agent,
-      seed = cell_seed + r, log = false, exp = opts.exp,
+      n = n, walk = walk, crits = crits, agent = agent,
+      seed = cell_seed + r, log = false,
     })
   end
   local s = report.summarize(results)
@@ -61,11 +58,12 @@ local function pct(x) return string.format("%.1f%%", x * 100) end
 
 -- ---------------------------------------------------------------------------
 if not opts.sweep then
-  local s = run_cell(opts.agent, opts.n, opts.penalty, opts.crits == "on",
+  local s = run_cell(opts.agent, opts.n, opts.walk, opts.crits == "on",
                      opts.runs, opts.seed * 1000000)
   io.write(string.format(
-    "Zelle: agent=%s N=%d penalty=%ds crits=%s runs=%d\n",
-    opts.agent, opts.n, opts.penalty, opts.crits, s.runs))
+    "Zelle: agent=%s N=%d laufweg=%ds (Gesamtstrafe %.0fs) crits=%s runs=%d\n",
+    opts.agent, opts.n, opts.walk,
+    require("sim.model").respawn_timer(opts.n) + opts.walk, opts.crits, s.runs))
   io.write(string.format("  Siegquote        %s\n", pct(s.win_rate)))
   io.write(string.format("  Median-Trylaenge %.1f min%s\n",
     (s.median_duration or 0) / 60,
@@ -90,7 +88,7 @@ end
 -- Sweep: Matrix N x Todesstrafe x Krits x Agent (GDD 17.2 Punkt 6)
 -- ---------------------------------------------------------------------------
 local NS = { 5, 10, 20, 40 }
-local PENALTIES = { 20, 25, 30, 35 }
+local WALKS = { 10, 14, 18, 22 }
 local AGENTS = { "unkoordiniert", "koordiniert", "turtle" }
 
 local cells = {}
@@ -99,37 +97,37 @@ for _, agent in ipairs(AGENTS) do
   cells[agent] = {}
   for _, n in ipairs(NS) do
     cells[agent][n] = {}
-    for _, penalty in ipairs(PENALTIES) do
-      cells[agent][n][penalty] = {}
+    for _, walk in ipairs(WALKS) do
+      cells[agent][n][walk] = {}
       for _, crits in ipairs({ true, false }) do
         cell_index = cell_index + 1
         local key = crits and "an" or "aus"
-        local s = run_cell(agent, n, penalty, crits, opts.runs,
+        local s = run_cell(agent, n, walk, crits, opts.runs,
                            opts.seed * 1000000 + cell_index * 10000000)
-        cells[agent][n][penalty][key] = s
-        io.write(string.format("[%2d/96] %-13s N=%2d strafe=%2d krits=%-3s  sieg=%s\n",
-          cell_index, agent, n, penalty, key, pct(s.win_rate)))
+        cells[agent][n][walk][key] = s
+        io.write(string.format("[%2d/96] %-13s N=%2d laufweg=%2d krits=%-3s  sieg=%s\n",
+          cell_index, agent, n, walk, key, pct(s.win_rate)))
         io.flush()
       end
     end
   end
 end
 
--- Todesstrafe fixieren: kleinstes Penalty, bei dem F1 UND F5 fuer alle N halten;
--- gibt es keins, das mit den wenigsten Verletzungen.
-local best_penalty, best_score = nil, -1
-for _, penalty in ipairs(PENALTIES) do
+-- Laufweg fixieren: kleinster Wert, bei dem F1 UND F5 fuer alle N halten;
+-- gibt es keinen, der mit den wenigsten Verletzungen.
+local best_walk, best_score = nil, -1
+for _, walk in ipairs(WALKS) do
   local score = 0
   for _, n in ipairs(NS) do
-    local s = cells["koordiniert"][n][penalty]["an"]
+    local s = cells["koordiniert"][n][walk]["an"]
     if s.win_rate >= 0.60 and s.win_rate <= 0.90 then score = score + 1 end
     local md = s.median_win_duration
     if md and md >= 6 * 60 and md <= 13 * 60 then score = score + 1 end
   end
-  if score > best_score then best_score, best_penalty = score, penalty end
+  if score > best_score then best_score, best_walk = score, walk end
 end
 
-local f = report.evaluate(cells, best_penalty, NS)
+local f = report.evaluate(cells, best_walk, NS)
 
 -- ---------------------------------------------------------------------------
 -- Markdown-Bericht
@@ -143,11 +141,13 @@ local function w(fmt, ...)
   end
 end
 
+local model_m = require("sim.model")
 w("# M1-Validierungsbericht — Headless-Sim (%s)\n", opts.date)
-w("%d Laeufe je Zelle, Matrix: N x Todesstrafe x Krits x Agent (GDD 17.2).\n", opts.runs)
-w("**Fixierte Todesstrafe: %d s** (kleinste Strafe mit maximaler F1+F5-Erfuellung).\n", best_penalty)
+w("%d Laeufe je Zelle, Matrix: N x Laufweg x Krits x Agent (GDD 17.2).\n", opts.runs)
+w("**Fixierter Laufweg: %d s** (kleinster Wert mit maximaler F1+F5-Erfuellung). Gesamt-Todesstrafe = Respawn-Timer(N) + Laufweg: N=5 -> %.0f s, N=40 -> %.0f s.\n",
+  best_walk, model_m.respawn_timer(5) + best_walk, model_m.respawn_timer(40) + best_walk)
 
-w("\n## F-Kriterien (GDD 13.3) bei Todesstrafe %d s\n", best_penalty)
+w("\n## F-Kriterien (GDD 13.3) bei Laufweg %d s\n", best_walk)
 w("| # | Kriterium | Ergebnis | Detail |")
 w("|---|---|---|---|")
 local names = {
@@ -166,27 +166,27 @@ w("| T | Turtle verliert per Zeitlimit (> 95 %%) | %s | %s |",
 
 for _, agent in ipairs(AGENTS) do
   w("\n## Siegquoten %s (Krits an)\n", agent)
-  local header = "| N \\ Strafe |"
+  local header = "| N \\ Laufweg |"
   local sep = "|---|"
-  for _, p in ipairs(PENALTIES) do
-    header = header .. string.format(" %d s |", p)
+  for _, wv in ipairs(WALKS) do
+    header = header .. string.format(" %d s |", wv)
     sep = sep .. "---|"
   end
   w(header); w(sep)
   for _, n in ipairs(NS) do
     local row = string.format("| %d |", n)
-    for _, p in ipairs(PENALTIES) do
-      row = row .. string.format(" %s |", pct(cells[agent][n][p]["an"].win_rate))
+    for _, wv in ipairs(WALKS) do
+      row = row .. string.format(" %s |", pct(cells[agent][n][wv]["an"].win_rate))
     end
     w(row)
   end
 end
 
-w("\n## Kennzahlen koordiniert (Krits an, Todesstrafe %d s)\n", best_penalty)
+w("\n## Kennzahlen koordiniert (Krits an, Laufweg %d s)\n", best_walk)
 w("| N | Siegquote | Median-Siegtry | Uptime | Tode/Lauf | Fress-Kanaele | unterbrochen | Charges |")
 w("|---|---|---|---|---|---|---|---|")
 for _, n in ipairs(NS) do
-  local s = cells["koordiniert"][n][best_penalty]["an"]
+  local s = cells["koordiniert"][n][best_walk]["an"]
   w("| %d | %s | %s | %s | %.1f | %.2f | %s | %.1f |",
     n, pct(s.win_rate),
     s.median_win_duration and string.format("%.1f min", s.median_win_duration / 60) or "-",
@@ -197,9 +197,9 @@ end
 w("\n## Klassenverteilung der Sieglaeufe (koordiniert, alle Zellen)\n")
 local class_totals, total = {}, 0
 for _, n in ipairs(NS) do
-  for _, p in ipairs(PENALTIES) do
+  for _, wv in ipairs(WALKS) do
     for _, ck in ipairs({ "an", "aus" }) do
-      for cl, k in pairs(cells["koordiniert"][n][p][ck].class_wins) do
+      for cl, k in pairs(cells["koordiniert"][n][wv][ck].class_wins) do
         class_totals[cl] = (class_totals[cl] or 0) + k
         total = total + k
       end

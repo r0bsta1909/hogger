@@ -38,7 +38,7 @@ E.log_ev = log_ev
 -- ---------------------------------------------------------------------------
 local function make_player(run, id, class, is_leeroy)
   local p = {
-    id = id, class = class, is_leeroy = is_leeroy or false,
+    id = id, class = class, is_leeroy = is_leeroy or false, skill = 1,
     alive = false, hp = 0, max_hp = model.hp_for_class(class),
     resource = 0, cp = 0,
     d = HUGE, state = "dead", dead_until = 0,
@@ -116,9 +116,8 @@ end
 function E.player_damage_hogger(run, p, amount, kind)
   local h = run.hogger
   if h.hp <= 0 then return end
-  -- EXPERIMENT noise (nur Sim, Beleg fuer Vorschlags-Issue): Skill-Streuung
-  -- je Spieler glaettet die deterministische Siegquoten-Klippe zu einem Band.
-  if p.skill then amount = amount * p.skill end
+  -- Streuungsmodell (GDD 17.2 Punkt 5b): Skill-Faktor wirkt auf verursachten Schaden
+  amount = amount * p.skill
   local crit = crit_roll(run, "player", kind)
   if crit then amount = amount * model.p("crit_mult_player") end
   if p.shout_until > run.t then amount = amount * (1 + model.p("warrior_shout_bonus")) end
@@ -157,7 +156,8 @@ function E.kill_player(run, p)
   p.imp_alive = false
   if p.add_idx and run.adds[p.add_idx] then run.adds[p.add_idx].engaged_by = nil end
   p.add_idx = nil
-  p.dead_until = run.t + run.cfg.penalty
+  -- Todesstrafe = N-skalierender Respawn-Timer (GDD 9.3) + Laufweg (Geist + Anmarsch)
+  p.dead_until = run.t + model.respawn_timer(run.cfg.n) + run.cfg.walk
   -- Leiche als Fress-Ressource an der Sterbeposition
   run.corpses[#run.corpses + 1] = { d = p.d }
   run.c.deaths = run.c.deaths + 1
@@ -393,12 +393,7 @@ local function hogger_tick(run, dt)
   end
 
   -- Charge: weitestes Ziel mit Bedrohung im Leash-Radius (GDD 9.2)
-  -- EXPERIMENT chargescale (nur Sim, Beleg fuer Vorschlags-Issue):
-  -- Charge-CD skaliert mit N, damit Hoggers Droh-Durchsatz mitwaechst.
   local charge_cd = model.p("hogger_charge_cd")
-  if run.cfg.exp and run.cfg.exp.chargescale then
-    charge_cd = charge_cd / math.max(1, run.cfg.n / 10)
-  end
   if run.t >= h.charge_ready then
     local far, far_d = nil, 0
     for _, p in ipairs(run.players) do
@@ -451,19 +446,16 @@ local function hogger_tick(run, dt)
   if run.t >= h.next_auto then
     h.next_auto = run.t + model.p("hogger_autohit_interval")
     E.hogger_damage_player(run, target, model.p("hogger_autohit_dmg"), "autohit")
-    -- EXPERIMENT cleave (nur Sim, Beleg fuer Vorschlags-Issue): der Autohit
-    -- trifft zusaetzlich bis zu ceil(N/10)-1 weitere Ziele im Nahkampf.
-    if run.cfg.exp and (run.cfg.exp.cleave or run.cfg.exp.cleave8 or run.cfg.exp.cleave5) then
-      local divisor = run.cfg.exp.cleave5 and 5 or run.cfg.exp.cleave8 and 8 or 10
-      local extra = math.ceil(run.cfg.n / divisor) - 1
-      if extra > 0 then
-        local melee_r = model.p("melee_range")
-        for _, q in ipairs(run.players) do
-          if extra <= 0 then break end
-          if q.alive and q ~= target and q.threat > 0 and q.d <= melee_r then
-            E.hogger_damage_player(run, q, model.p("hogger_autohit_dmg"), "autohit")
-            extra = extra - 1
-          end
+    -- Rundumschlag (GDD 9.2, v2.6): der Autohit trifft zusaetzlich bis zu
+    -- ceil(N/Divisor)-1 weitere Ziele mit Bedrohung im Nahkampf.
+    local extra = model.cleave_targets(run.cfg.n) - 1
+    if extra > 0 then
+      local melee_r = model.p("melee_range")
+      for _, q in ipairs(run.players) do
+        if extra <= 0 then break end
+        if q.alive and q ~= target and q.threat > 0 and q.d <= melee_r then
+          E.hogger_damage_player(run, q, model.p("hogger_autohit_dmg"), "autohit")
+          extra = extra - 1
         end
       end
     end
@@ -583,8 +575,9 @@ end
 -- ---------------------------------------------------------------------------
 -- Lauf
 -- ---------------------------------------------------------------------------
--- cfg: { n, penalty, crits, agent="unkoordiniert"|"koordiniert"|"turtle",
---        seed, log=false }
+-- cfg: { n, walk (Laufweg-Anteil der Todesstrafe in s; Gesamtstrafe =
+--        respawn_timer(n) + walk), crits, agent = "unkoordiniert" |
+--        "koordiniert" | "turtle", seed, log=false }
 function E.run_try(cfg)
   local agents = require("sim.agents")
   local run = {
@@ -619,10 +612,12 @@ function E.run_try(cfg)
   -- Leeroy: zusaetzlicher Krieger, immer unkoordiniert, zaehlt nicht in N (GDD 17.2)
   run.players[cfg.n + 1] = make_player(run, "leeroy", "warrior", true)
 
-  if cfg.exp and cfg.exp.noise then
-    for _, p in ipairs(run.players) do
-      p.skill = 0.7 + 0.6 * run.rng:next() -- gleichverteilt 0,7-1,3
-    end
+  -- Streuungsmodell (GDD 17.2 Punkt 5b): Gruppenfaktor je Lauf x Skill je Agent
+  local gmin, gmax = model.p("sim_group_factor_min"), model.p("sim_group_factor_max")
+  local smin, smax = model.p("sim_skill_min"), model.p("sim_skill_max")
+  local group_factor = gmin + (gmax - gmin) * run.rng:next()
+  for _, p in ipairs(run.players) do
+    p.skill = group_factor * (smin + (smax - smin) * run.rng:next())
   end
 
   log_ev(run, 0, "try_start", "sim", tostring(cfg.seed), cfg.n, nil)

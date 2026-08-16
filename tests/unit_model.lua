@@ -7,28 +7,30 @@ local T = _G.T
 
 -- GDD 9.3: Skalierungstabelle als harte Testfaelle -------------------------
 local table93 = {
-  --  N, HP,   Fressheilung, Unterbrecher, Adds, Respawn
-  { 5,   600,  72,  2, 0, 10 },
-  { 10, 1200, 144,  2, 1, 11 },
-  { 20, 2400, 288,  3, 2, 14 },
-  { 40, 4800, 576,  5, 5, 20 },
+  --  N, HP,    Fressheilung, Unterbrecher, Cleave, Adds, Respawn (GDD 9.3, v2.6)
+  -- HP = 430 x N - 950; Cleave = ceil(N/5); Respawn = clamp(8+0,52N; 10; 30)
+  { 5,   1200,  144,  3, 1, 0, 10.6 },
+  { 10,  3350,  402,  3, 2, 1, 13.2 },
+  { 20,  7650,  918,  4, 4, 2, 18.4 },
+  { 40, 16250, 1950,  6, 8, 5, 28.8 },
 }
 for _, row in ipairs(table93) do
   local n = row[1]
   T.eq(M.hogger_hp(n), row[2], "9.3 Hogger-HP N=" .. n)
   T.near(M.eat_heal_per_channel(n), row[3], "9.3 Fress-Heilung N=" .. n)
   T.eq(M.eat_interrupters(n), row[4], "9.3 Unterbrecher N=" .. n)
-  T.eq(M.adds(n), row[5], "9.3 Adds N=" .. n)
-  T.eq(M.respawn_timer(n), row[6], "9.3 Respawn N=" .. n)
+  T.eq(M.cleave_targets(n), row[5], "9.3 Cleave-Ziele N=" .. n)
+  T.eq(M.adds(n), row[6], "9.3 Adds N=" .. n)
+  T.near(M.respawn_timer(n), row[7], "9.3 Respawn N=" .. n)
 end
 
 -- GDD 7.2: Mob-Slots -------------------------------------------------------
 T.eq(M.mob_slots(5), 5, "7.2 Mob-Slots N=5")
 T.eq(M.mob_slots(40), 12, "7.2 Mob-Slots N=40")
 
--- GDD 9.2: Fress-Schadensschwelle 2,5 % Max-HP -----------------------------
-T.near(M.eat_dmg_threshold(10), 30, "9.2 Fress-Schadensschwelle N=10")
-T.near(M.eat_dmg_threshold(40), 120, "9.2 Fress-Schadensschwelle N=40")
+-- GDD 9.2: Fress-Schadensschwelle 5 % Max-HP (v2.6) ------------------------
+T.near(M.eat_dmg_threshold(10), 167.5, "9.2 Fress-Schadensschwelle N=10")
+T.near(M.eat_dmg_threshold(40), 812.5, "9.2 Fress-Schadensschwelle N=40")
 
 -- GDD 13.2: Krit-Ausschluesse ----------------------------------------------
 T.ok(M.can_crit("autohit"), "13.2 Autohit kann kritten")
@@ -124,10 +126,12 @@ for _, n in ipairs({ 5, 10, 20, 40 }) do
 end
 T.ok(M.max_mob_kills_per_try(40) <= 120, "7.3 Richtwert ~100 Mob-Kills pro Try haelt")
 
--- GDD 6: Todesstrafen-Richtwert im Zielkorridor (fixiert erst der M1-Sweep) -
+-- GDD 6: Todesstrafe im fixierten Korridor (M1: 24,6 s bei N=5 bis 42,8 s bei N=40)
+T.near(M.death_penalty(5), 24.6, "6 Todesstrafe N=5")
+T.near(M.death_penalty(40), 42.8, "6 Todesstrafe N=40")
 for _, n in ipairs({ 5, 10, 20, 40 }) do
   local pen = M.death_penalty(n)
-  T.ok(pen >= 20 and pen <= 45,
+  T.ok(pen >= 24 and pen <= 45,
     string.format("6 Todesstrafe plausibel (N=%d: %.1f s)", n, pen))
 end
 
