@@ -3,7 +3,9 @@
 
 local M = {}
 
--- {"t":..,"ev":"..","src":"..","dst":..,"val":..,"crit":..}
+-- {"t":..,"ev":"..","src":"..","dst":..,"val":..,"crit":..[,"art":".."]}
+-- art = Schadensart bei damage-Ereignissen (GDD 17.3): autohit, ability,
+-- dot, charge, slice, mob, add — sie steuert Darstellung und Sound.
 function M.to_jsonl(e)
   local parts = {
     '"t":' .. tostring(e.t),
@@ -13,6 +15,7 @@ function M.to_jsonl(e)
     '"val":' .. (e.val ~= nil and string.format("%.17g", e.val) or "null"),
     '"crit":' .. (e.crit ~= nil and tostring(e.crit) or "null"),
   }
+  if e.art then parts[#parts + 1] = '"art":"' .. tostring(e.art) .. '"' end
   -- Zusatzfelder (nur try_end: Sprungzaehler laut GDD 17.3)
   if e.jumps then
     local js = {}
@@ -24,8 +27,9 @@ function M.to_jsonl(e)
   return "{" .. table.concat(parts, ",") .. "}"
 end
 
-function M.push(list, tick, ev, src, dst, val, crit)
-  list[#list + 1] = { t = tick, ev = ev, src = src, dst = dst, val = val, crit = crit }
+function M.push(list, tick, ev, src, dst, val, crit, art)
+  list[#list + 1] = { t = tick, ev = ev, src = src, dst = dst, val = val,
+                      crit = crit, art = art }
   return list[#list]
 end
 

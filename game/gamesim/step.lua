@@ -109,7 +109,7 @@ local function hogger_damage_player(state, p, amount, kind, ev)
   if p.frost_armor and kind == "autohit" then
     state.hogger.slow_until = state.time + model.p("mage_frostarmor_slow_duration")
   end
-  events.push(ev, state.tick, "damage", "hogger", p.id, amount, crit)
+  events.push(ev, state.tick, "damage", "hogger", p.id, amount, crit, kind)
   if p.hp <= 0 then kill_player(state, p, ev, crit, CAUSE[kind]) end
 end
 
@@ -144,7 +144,7 @@ local function player_damage_hogger(state, p, amount, kind, ev)
       events.push(ev, state.tick, "eat_interrupt", "hogger", nil, e.hitter_count, nil)
     end
   end
-  events.push(ev, state.tick, "damage", p.id, "hogger", amount, crit)
+  events.push(ev, state.tick, "damage", p.id, "hogger", amount, crit, kind)
   if kind == "autohit" and p.class == "warrior" then
     p.resource = math.min(model.p("rage_max"), p.resource + model.p("rage_per_hit_dealt"))
   end
@@ -237,7 +237,7 @@ local function player_damage_npc(state, p, npc, amount, kind, ev)
     npc.state = "combat"
     npc.target_pid = npc.target_pid or p.id
   end
-  events.push(ev, state.tick, "damage", p.id, npc.id, amount, crit)
+  events.push(ev, state.tick, "damage", p.id, npc.id, amount, crit, kind)
   if npc.hp <= 0 then mob_died(state, npc, p, ev) end
 end
 
@@ -585,7 +585,7 @@ local function npc_damage_player(state, npc, p, ev)
   local crit = crit_roll(state, "hogger", kind)
   if crit then dmg = dmg * model.p("crit_mult_hogger") end
   p.hp = p.hp - dmg
-  events.push(ev, state.tick, "damage", npc.id, p.id, dmg, crit)
+  events.push(ev, state.tick, "damage", npc.id, p.id, dmg, crit, kind)
   if p.hp <= 0 then
     kill_player(state, p, ev, crit, CAUSE[npc.kind])
     if MOB_TYPES[npc.kind] then
@@ -750,7 +750,7 @@ local function npc_tick(state, npc, ev)
         events.push(ev, state.tick, "eat_interrupt", "hogger", nil, e.hitter_count, nil)
       end
     end
-    events.push(ev, state.tick, "damage", npc.id, "hogger", dmg, nil)
+    events.push(ev, state.tick, "damage", npc.id, "hogger", dmg, nil, "autohit")
   end
 end
 
@@ -788,7 +788,7 @@ end
 
 local function hogger_damage_npc(state, npc, amount, ev)
   npc.hp = npc.hp - amount
-  events.push(ev, state.tick, "damage", "hogger", npc.id, amount, nil)
+  events.push(ev, state.tick, "damage", "hogger", npc.id, amount, nil, "autohit")
   if npc.hp <= 0 then
     events.push(ev, state.tick, "add_death", npc.id, nil, nil, nil)
     remove_npc(state, npc)

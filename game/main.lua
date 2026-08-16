@@ -198,13 +198,33 @@ local function process_cosmetics(view)
   for _, e in ipairs(list) do
     if e.ev == "damage" then
       local tx, ty = entity_pos(e.dst)
-      local own = tonumber(e.src) == view.me or tonumber(e.dst) == view.me
-      local color = e.crit and { 1, 0.85, 0.2 } or { 1, 1, 1 }
+      local sx, sy = entity_pos(e.src)
+      local incoming = tonumber(e.dst) == view.me
+      local outgoing = tonumber(e.src) == view.me
+      -- Schadensrichtung ist ablesbar (GDD 4.1, Issue #31): eigener Schaden
+      -- weiss, erlittener rot, fremder gedaempft; Krits gold bzw. glutrot
+      local color, prio
+      if e.crit then
+        color = incoming and { 1, 0.45, 0.15 } or { 1, 0.85, 0.2 }
+        prio = (incoming or outgoing) and 3 or 2
+      elseif incoming then
+        color, prio = { 1, 0.35, 0.30 }, 2
+      elseif outgoing then
+        color, prio = { 1, 1, 1 }, 2
+      else
+        color, prio = { 0.72, 0.72, 0.66 }, 1
+      end
+      app.floating:add(tostring(math.floor((e.val or 0) + 0.5))
+        .. (e.crit and "!" or ""), tx, ty, color, prio)
+      -- Geschoss/Schlag zwischen Quelle und Ziel (Issue #30)
+      local src_p = view.players[tonumber(e.src)]
+      app.render:add_attack_fx(src_p and src_p.class,
+        src_p and src_p.class and model.classes[src_p.class].attack or nil,
+        e.art, sx, sy, tx, ty)
+      if incoming then app.render:add_hurt_flash(e.crit and 1.0 or 0.45) end
       -- Krit-Inszenierung (GDD 11): gross und gelb, Screenshake beide Seiten
-      app.floating:add(tostring(math.floor((e.val or 0) + 0.5)), tx, ty,
-        color, e.crit and 3 or (own and 2 or 1))
-      if e.crit and tonumber(e.dst) == view.me then app.render:add_shake(12)
-      elseif e.crit and tonumber(e.src) == view.me then app.render:add_shake(6) end
+      if e.crit and incoming then app.render:add_shake(12)
+      elseif e.crit and outgoing then app.render:add_shake(6) end
       -- Treffer-Sounds (GDD 12 Nr. 5-7, 9, 11), gedrosselt + Distanz
       local vol = audio.falloff(world.dist(tx, ty, view.me_x, view.me_y))
       if e.crit then
@@ -212,15 +232,15 @@ local function process_cosmetics(view)
       elseif vol > 0.05 and app.uptime - (app.last_hit_snd or 0) > 0.08 then
         app.last_hit_snd = app.uptime
         local src_id = tonumber(e.src)
-        local src_p = view.players[src_id]
         local src_npc = view.npcs and view.npcs[src_id]
         local id = "snd_melee_hit"
         if src_p and src_p.class then
           local atk = model.classes[src_p.class].attack
           if atk == "shot" then id = "snd_shot"
           elseif atk == "wand" then
-            -- Caster: grosse Hits = Zauber-Impact je Schule, kleine = Stab
-            if (e.val or 0) >= 5 then
+            -- Caster: Zauber je Schule, Autoangriff = Stab (Schadensart aus
+            -- dem Ereignis, GDD 17.3 — nicht mehr an der Schadenshoehe geraten)
+            if e.art == "ability" then
               id = ({ mage = "snd_impact_fire", warlock = "snd_impact_shadow",
                       priest = "snd_impact_holy", druid = "snd_impact_fire" })
                    [src_p.class] or "snd_wand"
@@ -243,6 +263,7 @@ local function process_cosmetics(view)
       local tx, ty = entity_pos(e.dst)
       app.floating:add("+" .. tostring(math.floor((e.val or 0) + 0.5)),
         tx, ty, { 0.3, 0.95, 0.3 }, tonumber(e.dst) == view.me and 2 or 1)
+      app.render:add_heal_fx(tx, ty)
       if tonumber(e.dst) == view.me then app.last_healed_t = app.uptime end
     elseif e.ev == "death" then
       local dp = view.players[tonumber(e.src)]
