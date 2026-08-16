@@ -176,11 +176,16 @@ M.params = {
   leeroy_threat_factor   = p(0.5, 0.1, 1.0, 0.05, "10"),
   leeroy_kragen_trys     = p(3, 1, 10, 1, "10"),
   leeroy_stuck_timeout   = p(5, 1, 15, 1, "10"),
-  -- Try-Start-Bedingung (GDD 10.3): Leeroys allererster Anmarsch wartet, bis
-  -- sich der erste echte Spieler wiederbelebt hat — sonst rennt er mitten im
-  -- Intro los, das er selbst haelt (Playtest 2026-08-16). Notbremse, falls
-  -- niemand auf ein Klassenicon tritt:
+  -- Try-Start-Bedingung (GDD 10.3): Leeroys allererster Anmarsch wartet auf
+  -- die erste angenommene Quest auf dem Realm — sonst rennt er los, waehrend
+  -- sein Echo noch redet (Playtest 2026-08-16). Notbremse, falls niemand
+  -- annimmt:
   leeroy_first_march_wait = p(120, 10, 600, 10, "10.3"),
+  -- Das Echo von Leeroy Jenkins (GDD 10.1): Questgeber am Friedhof. Es
+  -- chargt seine Quest persoenlich heran — Krieger bleibt Krieger.
+  echo_charge_speed      = p(420, 100, 900, 20, "10.1"),
+  echo_deliver_range     = p(70, 30, 200, 5, "10.1"),
+  echo_deliver_pause     = p(1.5, 0.2, 10, 0.1, "10.1"),
 
   -- Sim-Streuungsmodell (GDD 17.2 Punkt 5b, v2.6) — Agentenmodell, kein Spielverhalten
   sim_skill_min          = p(0.7, 0.3, 1.0, 0.05, "17.2"),

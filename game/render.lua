@@ -344,6 +344,32 @@ function R:draw(view, ui)
     end
   end
 
+  -- Das Echo von Leeroy Jenkins (GDD 10.1): blasses Krieger-Icon, gruener
+  -- Name, goldenes Ausrufezeichen solange es eine Quest zu vergeben hat
+  -- (Referenz questgeber-ausrufezeichen.jpg)
+  if view.echo then
+    local ex, ey = to_screen(view.echo.x, view.echo.y)
+    local me_quest = me and (me.quest or 2) or 2
+    local pulse = 0.7 + 0.3 * math.sin(love.timer.getTime() * 3)
+    love.graphics.setColor(0.75, 0.85, 1.0, 0.18 * pulse)
+    love.graphics.circle("fill", ex, ey, 26 * scale)
+    assets.draw("icon_warrior", ex, ey, scale * 1.9, 0.55)
+    love.graphics.setColor(0.72, 0.86, 0.55, 0.95) -- freundlicher NPC: gruen
+    local font = love.graphics.getFont()
+    local nm = "Echo von Leeroy Jenkins"
+    love.graphics.print(nm, ex - font:getWidth(nm) / 2, ey + 18 * scale)
+    if me_quest < 2 then
+      -- das Ausrufezeichen: goldener Balken plus Punkt, leicht schwebend
+      local bob = math.sin(love.timer.getTime() * 2.5) * 3
+      local y0 = ey - 34 * scale + bob
+      love.graphics.setColor(0.98, 0.80, 0.15, 1)
+      love.graphics.rectangle("fill", ex - 3, y0 - 20, 6, 15, 2, 2)
+      love.graphics.circle("fill", ex, y0 - 1, 3.4)
+      love.graphics.setColor(0.35, 0.25, 0.05, 0.9)
+      love.graphics.rectangle("line", ex - 3, y0 - 20, 6, 15, 2, 2)
+    end
+  end
+
   -- Geister zuerst (gedimmt), dann Lebende (GDD 4.1)
   for pass = 1, 2 do
     for pid, p in pairs(view.players) do

@@ -38,13 +38,16 @@ function H.new(opts)
   self.by_pid = {}
   self.log = opts.log     -- function(jsonl_line) oder nil
   world.add_leeroy(self.state) -- pid 1: der verfluchte Raid-Lead (GDD 10)
-  self.local_pid = world.add_player(self.state, opts.name)
+  -- Debug-Laeufe (--auto/--name) ueberspringen die Quest wie das Intro
+  self.local_pid = world.add_player(self.state, opts.name,
+    { quest_done = opts.skip_quest })
   self:_restore_char(self.local_pid)
   self.cosmetics = {}     -- Ereignisse fuer die eigene Darstellung
   -- Debug-Bots (Solo-Test): eigene Eingabequelle je Bot (ADR-002)
   self.bot_pids = {}
   for i = 1, (opts.bots or 0) do
-    self.bot_pids[#self.bot_pids + 1] = world.add_player(self.state, "bot" .. i)
+    self.bot_pids[#self.bot_pids + 1] = world.add_player(self.state, "bot" .. i,
+      { quest_done = true })
   end
   local ev = {}
   world.begin_try(self.state, ev)
@@ -146,7 +149,8 @@ function H:_handle(peer, data)
       end
       rejoin = self.session and self.session.chars
                and self.session.chars[name] ~= nil or false
-      pid = world.add_player(self.state, name)
+      -- Rejoin (Charakter aus session.json bekannt) bekommt keine Quest
+      pid = world.add_player(self.state, name, { quest_done = rejoin })
       self:_restore_char(pid)
     end
     self.clients[peer] = { pid = pid, queue = {}, last_mask = 0,
@@ -159,6 +163,9 @@ function H:_handle(peer, data)
     local wish = wire.read_rename(data, off)
     local ok = self:rename(c.pid, wish)
     self:_peer_send(peer, wire.rename_result(ok), CH_RELIABLE, "reliable")
+  elseif c and msg == wire.MSG.QUEST_ACCEPT then
+    local ev = {}
+    if step.accept_quest(self.state, c.pid, ev) then self:_after_step(ev) end
   elseif c and msg == wire.MSG.REVANCHE then
     self:revanche() -- jeder darf den Knopf druecken (LAN-Party, GDD 11)
   elseif c and msg == wire.MSG.INPUT then
@@ -237,6 +244,23 @@ function H:revanche()
   if step.revanche(self.state, ev) then
     self:_after_step(ev)
   end
+end
+
+-- Questannahme des lokalen Spielers (Host spielt selbst mit)
+function H:accept_quest()
+  local ev = {}
+  if step.accept_quest(self.state, self.local_pid, ev) then
+    self:_after_step(ev)
+    return true
+  end
+  return false
+end
+
+-- Admin (F12 [R]): Quest des lokalen Spielers zuruecksetzen — das Echo
+-- kommt danach noch einmal (Issue #36)
+function H:reset_quest()
+  local p = self.state.players[self.local_pid]
+  if p then p.quest = 0 end
 end
 
 -- Admin: Hogger sofort toeten (F12, host-seitig; Issue #35)

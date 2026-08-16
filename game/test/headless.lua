@@ -42,6 +42,7 @@ function T.run()
   local log_lines = {}
   local host = hostmod.new({
     name = "hostbot", seed = 4242, bots = 0, session = false,
+    skip_quest = true, -- der Host laeuft hier als Bot, ohne Questfenster
     log = function(line) log_lines[#log_lines + 1] = line end,
   })
 
@@ -89,6 +90,13 @@ function T.run()
           inp = bot.decide(snap_to_botstate(c.snap, c.pid), c.pid)
         end
         c:update(DT, inp)
+        -- Quest des Echos annehmen, sobald sie aufgedrueckt wurde (GDD 5):
+        -- ohne Annahme bleibt der Spieler stehen (Issue #50)
+        local me = c.snap and c.pid and c.snap.players[c.pid]
+        if me and (me.quest or 2) == 1 and not c.quest_sent then
+          c.quest_sent = true
+          c:accept_quest()
+        end
       end
     end
 
@@ -108,6 +116,17 @@ function T.run()
         "Rejoin: Charakter haengt am Namen (gleiche PID)")
       ok(clients[2].rejoin == true,
         "Rejoin: WELCOME-Flag gesetzt (kein Intro, GDD 5)")
+    end
+
+    -- Quest des Echos (GDD Kap. 5 / Issue #50): aufgedrueckt und angenommen
+    if iter == math.floor(40 / DT) then
+      local pid1 = clients[1].pid
+      ok(host.state.players[pid1] and host.state.players[pid1].quest == 2,
+        "Quest: Client 1 hat die Quest des Echos angenommen")
+      ok(host.state.leeroy_started == true,
+        "Quest: die erste Annahme startet den Raid-Leeroy (GDD 10.3)")
+      ok(clients[1].snap and clients[1].snap.echo ~= nil,
+        "Quest: das Echo steht im Snapshot")
     end
 
     -- Rename-Pfad des Intros (GDD 5): Annahme, Kollision, Roster-Broadcast

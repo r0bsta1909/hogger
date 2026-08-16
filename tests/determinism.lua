@@ -44,7 +44,7 @@ local gbot = require("game.gamesim.bot")
 local gevents = require("game.gamesim.events")
 local function gamesim_hash(seed, ticks)
   local state = gworld.new(seed)
-  for i = 1, 5 do gworld.add_player(state, "bot" .. i) end
+  for i = 1, 5 do gworld.add_player(state, "bot" .. i, { quest_done = true }) end
   local evs = {}
   gworld.begin_try(state, evs)
   gbot.run(state, ticks, evs)

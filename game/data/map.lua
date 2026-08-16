@@ -51,6 +51,16 @@ function M.spirit_healer()
            y = g.y + py * 150 - M.path_dir.y * 60 }
 end
 
+-- Standposition des Echos von Leeroy Jenkins (GDD 7.1/10.1): am Friedhof,
+-- dem Geistheiler gegenueber, mit Blick auf den Pfad Richtung Huegel — es
+-- sieht seinen eigenen Koerper jeden Try losrennen
+function M.echo_home()
+  local g = M.graveyard()
+  local px, py = perp()
+  return { x = g.x - px * 150 - M.path_dir.x * 60,
+           y = g.y - py * 150 - M.path_dir.y * 60 }
+end
+
 -- Grabsteine in zwei Reihen laengs des Pfads, plus ein paar schiefe
 function M.gravestones()
   local g = M.graveyard()

@@ -12,6 +12,7 @@ W.MSG = {
   HELLO = 1, WELCOME = 2, INPUT = 3, SNAPSHOT = 4, EVENTS = 5,
   SET_TARGET = 6, PARAM_SET = 7, ZOOM = 8, ROSTER = 9,
   RENAME = 10, RENAME_RESULT = 11, STATS = 12, REVANCHE = 13,
+  QUEST_ACCEPT = 14,
 }
 
 -- Ereignistypen fuers Netz (Kosmetik-Feed; das JSONL-Log bleibt Host-Sache)
@@ -247,6 +248,11 @@ function W.read_events(data, off)
   return list
 end
 
+-- QUEST_ACCEPT: der Spieler nimmt die Quest des Echos an (GDD Kap. 5)
+function W.quest_accept()
+  return header(W.MSG.QUEST_ACCEPT)
+end
+
 -- SNAPSHOT ----------------------------------------------------------------
 -- Feldliste ist gegen den echten State erhoben; der Stufe-4-Test erzwingt sie.
 local function q16(x) -- Position quantisiert auf ganze logische px
@@ -301,6 +307,12 @@ function W.snapshot_body(state)
     q16(h.x), q16(h.y), math.max(0, math.floor(h.hp + 0.5)),
     math.floor(h.max_hp + 0.5), hstate, eatphase, eathit, eatneed, eatprog,
     ctarget, cprog, htarget)
+  -- Das Echo von Leeroy Jenkins (GDD 10.1): Position und Zustand
+  do
+    local e = state.echo or { x = 0, y = 0, state = "idle" }
+    local est = ({ idle = 0, charge = 1, deliver = 2, ["return"] = 3 })[e.state] or 0
+    parts[#parts + 1] = pack("<I2I2B", q16(e.x), q16(e.y), est)
+  end
   -- Leichen
   parts[#parts + 1] = pack("<B", math.min(255, #state.corpses))
   for i = 1, math.min(255, #state.corpses) do
@@ -326,6 +338,8 @@ function W.snapshot_body(state)
     -- Bits 5/6: laufender Cast-Slot (1..3) — der Castbalken kann die
     -- Faehigkeit damit beim Namen nennen (GDD 4.2)
     if p.cast and p.cast.slot then flags2 = flags2 + 16 * (p.cast.slot % 4) end
+    -- Bits 7/8: Quest-Zustand (0 offen, 1 aufgedrueckt, 2 angenommen)
+    flags2 = flags2 + 64 * ((p.quest or 2) % 4)
     local prog = 0
     if p.cast and p.cast.total then
       prog = q8(1 - p.cast.t_left / p.cast.total)
@@ -396,6 +410,12 @@ function W.read_snapshot(data, off)
     charge = ctarget ~= 255 and { target = ctarget, progress = cprog / 255 } or nil,
     target = htarget ~= 255 and htarget or nil,
   }
+  do
+    local ex, ey, est
+    ex, ey, est, off = love.data.unpack("<I2I2B", data, off)
+    s.echo = { x = ex, y = ey,
+               state = ({ [0] = "idle", "charge", "deliver", "return" })[est] }
+  end
   local ccount
   ccount, off = love.data.unpack("<B", data, off)
   s.corpses = {}
@@ -426,6 +446,7 @@ function W.read_snapshot(data, off)
       seal = flags2 % 8 >= 4,
       frost_armor = flags2 % 16 >= 8,
       cast_slot = math.floor(flags2 / 16) % 4, -- 0 = kein Cast
+      quest = math.floor(flags2 / 64) % 4,
       cp = cp,
       x = px, y = py, hp = php, resource = pres / 255 * 100,
       facing = pfacing, target = ptarget, progress = pprog / 255,

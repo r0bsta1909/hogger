@@ -44,8 +44,11 @@ function M.new(seed)
     mob_by_slot = {},   -- Spawn-Slot -> npc-id
     mob_respawn = {},   -- Spawn-Slot -> Restzeit bis Respawn (GDD 7.2: 120 s)
     hogger = nil,
-    -- Leeroys allererster Anmarsch wartet auf den ersten wiederbelebten
-    -- Spieler (GDD 10.3, Issue #33); danach laeuft er jeden Try normal los
+    -- Das Echo von Leeroy Jenkins (GDD 10.1): Questgeber am Friedhof.
+    -- state: idle | charge | deliver | return
+    echo = nil,
+    -- Leeroys allererster Anmarsch wartet auf die erste angenommene Quest
+    -- (GDD 10.3, Issues #33/#53); danach laeuft er jeden Try normal los
     leeroy_started = false,
     rng = nil,
     stats = nil,        -- je Try, gesetzt in begin_try (GDD 11)
@@ -104,7 +107,9 @@ function M.add_loot(state, x, y, kupfer, item_idx)
   return state.loot[id]
 end
 
-function M.add_player(state, name)
+-- opts.quest_done: Bots, Debug-Laeufe und Rejoins bekommen keine Quest
+-- aufgedrueckt (GDD Kap. 5, Punkt 4)
+function M.add_player(state, name, opts)
   local id = #state.players + 1
   local g = map.graveyard()
   state.players[id] = {
@@ -130,17 +135,35 @@ function M.add_player(state, name)
     jump_t = 0, jumps = 0,
     dmg_done = 0, heal_done = 0, deaths = 0,
     xp = 0, kupfer = 0, plunder = 0, ding_done = false, -- GDD 7.3
+    -- Quest des Echos (GDD Kap. 5): 0 = offen, 1 = aufgedrueckt, 2 = angenommen.
+    -- Unter 2 kann sich der Spieler nur um die eigene Achse drehen.
+    quest = (opts and opts.quest_done) and 2 or 0,
   }
   return id
+end
+
+-- Quest angenommen: ab jetzt darf sich der Spieler bewegen, und der
+-- Raid-Leeroy nimmt seinen Pfad auf (GDD 10.3)
+function M.accept_quest(state, pid)
+  local p = state.players[pid]
+  if not p or p.quest ~= 1 then return false end
+  p.quest = 2
+  return true
 end
 
 -- Leeroy Jenkins: Spieler-Entitaet mit KI-Eingabequelle (GDD 10);
 -- zaehlt nie in die N-Skalierung, Bedrohung halbiert
 function M.add_leeroy(state)
-  local id = M.add_player(state, "Leeroy")
+  local id = M.add_player(state, "Leeroy", { quest_done = true })
   state.players[id].is_leeroy = true
   state.leeroy_pid = id
   return id
+end
+
+-- Das Echo steht am Friedhof und wartet auf Neuankoemmlinge (GDD 10.1)
+function M.reset_echo(state)
+  local home = map.echo_home()
+  state.echo = { x = home.x, y = home.y, state = "idle", target = nil, t = 0 }
 end
 
 local function reset_hogger(state)
@@ -187,6 +210,7 @@ function M.begin_try(state, evlist)
   local try_seed = state.seed + state.try_nr * 1000
   state.rng = rngmod.new(try_seed)
   reset_hogger(state)
+  if not state.echo then M.reset_echo(state) end
   for _, p in ipairs(state.players) do
     p.jumps = 0
   end

@@ -42,6 +42,8 @@ Der Raid läuft bereits zum x-ten Mal, wenn neue Spieler das Spiel betreten. Die
 
 Leeroy erinnert sich nur an den Charge in die Welpen und den Wipe; danach tauchte er hier auf — als Icon, in einer Welt, die "so flach" ist. Er hat aufgehört, die Trys zu zählen.
 
+**Der Fluch hat ihn geteilt** (v2.7): Was mit den Spielern redet, ist das **Echo von Leeroy Jenkins** — es steht am Friedhof, gibt die Quest, kommentiert alles und **muss dabei zusehen, wie seine eigene physische Gestalt Try um Try in denselben Gnoll chargt und abgeschlachtet wird.** Der Körper da vorne hört nichts, lernt nichts und schreit einmal pro Try seinen eigenen Namen. Die Strafe des Hexenmeisters ist damit vollständig: Leeroy muss sich selbst ewig beim Sterben zusehen — und den Neuen dabei freundlich erklären, dass Ablehnen keine Option ist.
+
 **Fiktion als Systemklammer:** Der Fluch erklärt jede Spielmechanik diegetisch — warum alle Level 1 sind und bleiben (Fluch), warum man nach dem Tod zurückkommt (Fluch), warum man die Klasse wechseln kann (man belebt sich als eine der herumliegenden Leichen wieder), warum es kein Entkommen von der Karte gibt, und warum der Sieg das Spiel beendet (Fluchbruch). Nichts davon wird je als "Spielregel" erklärt.
 
 ---
@@ -95,25 +97,25 @@ Am Ring der Minimap sitzen ausschließlich funktionale Elemente im Add-on-Button
 
 ### 4.4 Was es bewusst NICHT gibt
 
-**Keinen Chat. Kein großes Kartenfenster.** Keine Menüleiste, keine Taschen, kein Charakterfenster, keine Einstellungen im Spiel (Lautstärke etc. im Debug-Overlay). Jede Information, die früher als Systemmeldung im Chat gelandet wäre, kommt jetzt aus genau einer Quelle: **Leeroy** (Kap. 10). Kommunikation zwischen Spielern findet auf der LAN statt, wo sie hingehört — im Raum.
+**Keinen Chat. Kein großes Kartenfenster.** Keine Menüleiste, keine Taschen, kein Charakterfenster, keine Einstellungen im Spiel (Lautstärke etc. im Debug-Overlay). **Genau zwei Fenster gibt es**: die Statistik-Tafel (Kap. 11) und das Questfenster des Echos (Kap. 5) — beide erscheinen von selbst, beide schließen sich wieder. Jede Information, die früher als Systemmeldung im Chat gelandet wäre, kommt jetzt aus genau einer Quelle: **dem Echo von Leeroy Jenkins** (Kap. 10.1). Kommunikation zwischen Spielern findet auf der LAN statt, wo sie hingehört — im Raum.
 
 ---
 
-## 5. Onboarding: Leeroy-Intro & Wiederbelebung
+## 5. Onboarding: Die Quest des Echos & Wiederbelebung
 
-Jeder Spieler erlebt zu seinem individuellen Spielstart dasselbe Intro — lokal, während andere längst spielen (der Raid "lief ja bereits"):
+Jeder Spieler erlebt zu seinem individuellen Spielstart dasselbe Onboarding — lokal, während andere längst spielen (der Raid "lief ja bereits"). Es läuft so ab, wie ein MMO einem Spieler etwas beibringt, den es nie gefragt hat: **als Quest** (v2.7, Playtest-Runde 1).
 
-1. Nach der Aufblende: **Eingaben gesperrt.** Leeroys Icon nähert sich dem Geist des Spielers, Dialog in Sprechblasen-/Untertitel-Panels im WoW-Stil, weiterklickbar:
-   - Er klärt über die Situation auf: der Fluch, der Gnoll, der x-te Try, der verschwundene Vollpfosten-Raid ("ausgeloggt, disconnected, wer weiß das schon").
-   - Er wundert sich beiläufig, dass hier alles "so flach" ist, und erinnert sich nur an Drachenwelpen, einen Charge und einen Wipe.
-2. **Erste Interaktion: Leeroy fragt nach dem Namen** — Namenseingabefeld (2–12 Buchstaben, erster automatisch groß). Namenskollision auf dem Realm quittiert Leeroy mit "Den gibt's schon. Streng dich an." und das Feld bleibt offen.
-3. Leeroy: "Such dir eine Leiche aus. Da vorne, am Ende des Wegs." — **Eingaben frei.** Der Spieler läuft als Geist den Elwynn-Pfad hinunter zum **Wiederbelebungsfeld** (7.1): Dort, unmittelbar wo der Pfad endet und der Anmarsch auf Hogger beginnt, liegen die **acht Klassenicons** als begehbare Bodenmarker — **sichtbar nur für Geister**. Draufstellen, kurzer Wiederbelebungs-Channel (2 s), der Blaufilter fällt ab, der eigene Pfeil leuchtet wieder golden, die Klassenicons verschwinden aus der eigenen Sicht, und für alle anderen erscheint man ab jetzt als Icon der gewählten Klasse. Ab jetzt gilt der normale Loop.
+1. Nach der Aufblende steht man als frische Leiche am Friedhof. **Bewegung gesperrt — man kann sich nur um die eigene Achse drehen.** Am Friedhof steht das **Echo von Leeroy Jenkins** (Kap. 10.1), Krieger-Icon, blass, grüner NPC-Name, **goldenes Ausrufezeichen** darüber (Referenz `questgeber-ausrufezeichen.jpg`).
+2. Das Echo wartet nicht darauf, angesprochen zu werden: **es chargt heran** — Krieger bleibt Krieger — und drückt die Quest auf. Anklicken geht trotzdem, wer das Fenster wegklickt, holt es damit zurück.
+3. **Das Questfenster** (Referenz `quest text beispiel.jpg`): Titelleiste mit Portrait und Namen, Questtitel "Der Fluch des Leeroy Jenkins", der komplette Intro-Text in Questgeber-Manier (Fluch, Gnoll, x-ter Try, verschwundener Vollpfosten-Raid, "wie FLACH hier alles ist"), Abschnitt **Questziele**, darunter das Namensfeld (2–12 Buchstaben, erster automatisch groß; Kollision: "Den gibt's schon. Streng dich an.", Fenster bleibt offen).
+4. Unten links **Annehmen**, unten rechts **Ablehnen — ausgegraut und wirkungslos.** Der Knopf, der nichts tut, ist die Pointe: Ablehnen ist keine Option, das ist keine Redewendung. Mit der Annahme ist die Bewegung frei (host-seitig erzwungen), und **die erste angenommene Quest auf dem Realm startet den Raid-Leeroy** (Kap. 10.3).
+5. Danach: "Such dir eine Leiche aus. Da vorne, am Ende des Wegs." Der Spieler läuft als Geist den Elwynn-Pfad hinunter zum **Wiederbelebungsfeld** (7.1): Dort, unmittelbar wo der Pfad endet und der Anmarsch auf Hogger beginnt, liegen die **acht Klassenicons** als begehbare Bodenmarker — **sichtbar nur für Geister**. Draufstellen, kurzer Wiederbelebungs-Channel (2 s), der Blaufilter fällt ab, der eigene Pfeil leuchtet wieder golden, die Klassenicons verschwinden aus der eigenen Sicht, und für alle anderen erscheint man ab jetzt als Icon der gewählten Klasse. Ab jetzt gilt der normale Loop.
    **Rasse:** wird bei jeder Wiederbelebung regelkonform ausgewürfelt — man belebt sich schließlich als eine der herumliegenden Leichen wieder. Verteilung: **⅔ Mensch, wo die Klasse es erlaubt**, Rest gleichverteilt auf die gültigen Vanilla-Kombinationen (8.2); Druide ist immer Nachtelf, Jäger immer Zwerg oder Nachtelf. Die Rasse ist **rein kosmetisch** (Portrait im Einheitenfenster, Namenszusatz in Killcam-Zeilen: "Der Gnom [Name] wurde …") — **keine Volksfähigkeiten**, bewusst gestrichen: Steingestalt & Co. würden die Antizufalls-Balance und die Klassenlesbarkeit für null Comedy-Gewinn verkomplizieren.
-4. **Rejoin** nach Verbindungsabbruch: kein Intro, Leeroy sagt nur "Ah. Wieder da." — Name und XP-Stand hängen am Charakternamen (session.json).
+6. **Rejoin** nach Verbindungsabbruch oder erneutem Start am selben Abend: keine Quest, das Echo sagt nur "Ah. Wieder da." — Name und XP-Stand hängen am Charakternamen (session.json).
 
 **Klassenwechsel** = bei jeder Wiederbelebung frei: einfach auf ein anderes Klassenicon stellen. Die erwartete emergente Raid-Komposition über die Trys hinweg bleibt der versteckte Lerninhalt des Spiels.
 
-Intro-Dauer Ziel: unter 60 Sekunden bei zügigem Klicken. Kein Wort der Bedienungserklärung — Bewegung, Klicken und sechs beschriftete Bodenicons müssen sich selbst erklären, und der Raum hilft ohnehin.
+Dauer bis zur Questannahme: unter 60 Sekunden bei zügigem Lesen. Kein Wort der Bedienungserklärung — Bewegung, Klicken und sechs beschriftete Bodenicons müssen sich selbst erklären, und der Raum hilft ohnehin.
 
 ---
 
@@ -138,7 +140,7 @@ kurzer Anmarsch zum Hogger Hill → Kampf → Tod → Geisterlauf zum Feld (Klas
 
 Eine zusammenhängende Karte (~3×2 Bildschirmradien bei mittlerem Zoom), als Datendatei geladen (Vorhalt für Modus 2):
 
-- **Friedhof** (Nordosten): Geistheiler-Icon und Leeroys Standposition zwischen den Trys; unantastbare Zone (Hogger betritt sie nie). Hier wird nur gespawnt, nicht wiederbelebt. Der **Geistheiler ist funktionslose Szenerie** — klickt man ihn an, kommentiert Leeroy: "Der funktioniert nicht mehr. Frag nicht."
+- **Friedhof** (Nordosten): Geistheiler-Icon, Grabsteine, Zaun auf der Zonengrenze und die Standposition des **Echos von Leeroy Jenkins** (Kap. 10.1), das von dort aus zusieht; unantastbare Zone (Hogger betritt sie nie). Hier wird nur gespawnt, nicht wiederbelebt. Der **Geistheiler ist funktionslose Szenerie** — klickt man ihn an, kommentiert Leeroy: "Der funktioniert nicht mehr. Frag nicht."
 - **Der Elwynn-Pfad** (Diagonale): der Weg vom Friedhof Richtung Südwesten, offene Fläche mit Baum-Icons als Sichtblocker und Charge-Köder-Geometrie, Fluss-Linie am Südrand.
 - **Das Wiederbelebungsfeld** (eigene Unterzone im Zonenbanner): unmittelbar am Ende des Pfads, vor dem Anmarsch auf den Hügel, außerhalb von Hoggers Leash-Zone. Hier liegen die acht Klassenicons (nur für Geister sichtbar, Kap. 5) und ein paar der Deko-Schädel. **Die Feldposition ist ein Balancing-Hebel:** Sie teilt die Todesstrafe in Geisterlauf (Friedhof → Feld, 150 % Tempo) und lebendigen Restanmarsch (Feld → Hogger) auf — die Gesamtstrafe (24,6–42,8 s über N, Kap. 6) bleibt die Konstante, die Feldposition ist der Feinsteller dafür und liegt im Tuning-Panel (v2.6: Geisterlauf 8 s + Restanmarsch 6 s).
 - **Hogger Hill** (Südwesten): Plateau mit Rampe, Hoggers Leash-Zone (Radius 600 px um die Hügelmitte; verlässt er sie, resettet er mit voller HP). Rundherum einige Deko-Schädel (Kap. 2).
@@ -250,12 +252,26 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 
 ## 10. Leeroy Jenkins (NPC-Spezifikation)
 
-Leeroy ist **vollwertiger KI-NPC mit eigenem Pathfinding** (Technik in Kap. 14) und vier Systeme in einer Figur: Erzähler, Try-Starter, Mitkämpfer und Announcer. Die Idealvorstellung ist umgesetzt: Er zieht jeden Try aufs Neue mit den Spielern zu Hogger — läuft los, stirbt, wird zum Geist, läuft zurück, belebt sich wieder, läuft wieder los. Für immer, bis der Fluch bricht.
+**Es sind zwei Figuren** (v2.7, Playtest-Runde 1) — und genau das ist der Witz, den der Fluch möglich macht:
 
-1. **Erzähler:** Das Intro (Kap. 5). Außerdem kurze Zwischen-Zeilen am Friedhof zwischen Trys.
+### 10.1 Das Echo von Leeroy Jenkins (Friedhof)
+
+Was von Leeroy übrig ist, während sein Körper da vorne schon wieder losrennt. Das Echo steht am Friedhof, greift **nie** in den Kampf ein und muss zusehen, wie seine eigene physische Gestalt Try um Try anstürmt und abgeschlachtet wird. Es ist **Erzähler, Questgeber und Announcer**:
+
+- **Questgeber:** goldenes Ausrufezeichen, grüner NPC-Name, chargt neuen Spielern die Quest persönlich auf (Kap. 5). Nach der Übergabe geht es sofort zum nächsten Neuankömmling — wer sich mit dem Lesen Zeit lässt, hält niemanden auf. Parameter: `echo_charge_speed`, `echo_deliver_range`, `echo_deliver_pause`.
+- **Erzähler:** die Quest, kurze Zwischen-Zeilen am Friedhof, "Ah. Wieder da." beim Rejoin.
+- **Announcer** (siehe 10.4): alle Kommentare gehören dem Echo — Fress-Alarm, HP-Meilensteine, Todeskommentare, Wipe-Ansage, der Kragen-Platzer. **Einzige Ausnahme: DER Schrei** beim Losrennen gehört dem Raid-Leeroy.
+- Der Sieg-Monolog (Kap. 11) gehört ebenfalls dem Echo: es sieht seinen eigenen Körper endlich zur Ruhe kommen.
+- Anzeige: Zeilen des Echos werden mit "Echo:" ausgezeichnet, der Schrei mit "Leeroy:".
+
+### 10.2 Der Raid-Leeroy (Kampf)
+
+**Vollwertiger KI-NPC mit eigenem Pathfinding** (Technik in Kap. 14): Try-Starter und Mitkämpfer. Er zieht jeden Try aufs Neue mit den Spielern zu Hogger — läuft los, stirbt, wird zum Geist, läuft zurück, belebt sich wieder, läuft wieder los. Für immer, bis der Fluch bricht. Er redet nicht; er schreit genau einmal pro Try.
+
+1. **Erzähler (jetzt beim Echo, 10.1):** Quest und Zwischen-Zeilen.
 2. **Try-Starter:** Jeder Try beginnt damit, dass Leeroy vom Friedhof seinen Pfad Richtung Hügel aufnimmt, dabei seinen ikonischen Schrei ausstößt — **"LEEEEEROY JEEENKINNNS"** (kartenweit hörbar, das akustische Startsignal) — und als Erster in Hogger chargt.
 3. **Mitkämpfer (KI-Verhaltensmodell, host-seitig):**
-   - **Try-Start-Bedingung:** Leeroys allererster Anmarsch des Abends beginnt erst, wenn sich der erste echte Spieler wiederbelebt hat (Notbremse: `leeroy_first_march_wait`, 120 s). Er hält das Intro (Kap. 5) — losrennen, während er noch redet, zerreißt die Szene (Playtest 2026-08-16). Für alle weiteren Trys gilt wieder die normale kurze Wartezeit am Friedhof.
+   - **Try-Start-Bedingung:** Der allererste Anmarsch des Abends beginnt erst, wenn **der erste Spieler auf dem Realm die Quest des Echos angenommen hat** (Notbremse: `leeroy_first_march_wait`, 120 s). Losrennen, während das Echo noch redet, zerreißt die Szene (Playtest 2026-08-16). Für alle weiteren Trys gilt wieder die normale kurze Wartezeit am Friedhof.
    - Zustände: `WARTEN_FRIEDHOF` (zwischen Trys, bis Try-Start-Bedingung) → `ANMARSCH` (Pfad zum Hügel, Schrei beim Losrennen) → `KAMPF` (Krieger-Kit: hält Nahkampf, Heroischer Stoß bei Wut, Schlachtruf, wenn ≥ 3 Verbündete im Umkreis — sein einziger echter Gruppenbeitrag) → `TOT/GEIST` (Geisterlauf zum Wiederbelebungsfeld) → `WIEDERBELEBUNG` (immer als Mensch-Krieger, fluchbedingt) → `ANMARSCH` … im Loop bis Try-Ende.
    - Er weicht **nichts** aus: keine Charge-Reaktion, kein Fress-Fokus über das Normale hinaus — Leeroy ist tapfer, nicht klug. Sein Sterben als meist Erster ist der Running Gag und emergent aus dem Verhaltensmodell, nicht geskriptet.
    - Er zählt nie in die N-Skalierung, seine Bedrohung ist halbiert (Comedy, nicht Tank), seine DPS steckt im Sim-Modell (17.2).
@@ -268,7 +284,7 @@ Leeroy ist **vollwertiger KI-NPC mit eigenem Pathfinding** (Technik in Kap. 14) 
    - Nach 3 Trys ohne einzige Fress-Unterbrechung platzt ihm der Kragen und er sagt die Mechanik einmal klar an ("IHR MÜSST IHN SCHLAGEN, WÄHREND ER FRISST!") — das Sicherheitsnetz für den Aha-Moment, diegetisch verpackt.
 5. **Fluchbruch:** Stirbt Hogger, gehört Leeroy die Siegsequenz (Kap. 11).
 
-Leeroys Zeilen sind Text (Sprechblase + Einblendung). Einzige Voice-Line ist der Schrei — Eigenproduktion (selbst einsprechen oder TTS/Suno), da er kartenweit und oft erklingt, muss er sitzen.
+Die Zeilen sind Text (Sprechblase + Einblendung), gesprochen vom Echo. Einzige Voice-Line ist der Schrei des Raid-Leeroy — Eigenproduktion (selbst einsprechen oder TTS/Suno), da er kartenweit und oft erklingt, muss er sitzen.
 
 ---
 
@@ -436,7 +452,7 @@ hogger/
 
 `art` steht bei `damage`-Ereignissen und nennt die Schadensart: `autohit`, `ability`, `dot`, `charge`, `slice`, `mob`, `add`. Sie steuert Darstellung (Geschoss/Schlagbogen, 4.1) und Trefferklang (Kap. 12) und macht beides von geratenen Schadenshöhen unabhängig. Im Netz kostet sie nichts: sie teilt sich das Flag-Byte mit dem Krit-Bit.
 
-Typen (abschließend v2.0): `try_start` (val = N, dst = Try-Nr.), `spawn`, `revive` (dst = Klasse, val = Rassen-ID), `death` (ab M4: val = Todesursachen-ID aus `game/gamesim/killcam.lua` — Autohit/Charge/Slice/Blutung/Mob-Typ/Welpe —, crit = tödlicher Krit; speist Killcam und Statistik-Tafel), `damage`, `heal`, `crit_kill`, `eat_start`, `eat_drag`, `eat_tick`, `eat_interrupt` (val = Beteiligte), `eat_complete`, `charge`, `class_change`, `add_death`, `mob_kill` (dst = Typ), `mob_death_by`, `xp_gain`, `loot_pickup` (val = Kupfer), `ding`, `target_switch`, `zoom_change` (val = Stufe), `leeroy_line` (dst = Zeilen-ID — misst Announcer-Dichte), `leeroy_stuck` (Failsafe ausgelöst — jedes Vorkommen ist ein Pathfinding-Bug-Report), `param_change`, `try_end` (val = 1 Sieg / 0 Wipe, dst = Boss-Rest-HP). Jeder `try_start` loggt zusätzlich den kompletten Parametersatz. Sprünge werden NICHT einzeln geloggt (zu spammig bei 40 Dauerhüpfern), sondern host-seitig pro Spieler gezählt und in `try_end` als Zählerliste mitgeschrieben. Neue Typen nur per GDD-Update hier.
+Typen (abschließend v2.0): `try_start` (val = N, dst = Try-Nr.), `spawn`, `revive` (dst = Klasse, val = Rassen-ID), `death` (ab M4: val = Todesursachen-ID aus `game/gamesim/killcam.lua` — Autohit/Charge/Slice/Blutung/Mob-Typ/Welpe —, crit = tödlicher Krit; speist Killcam und Statistik-Tafel), `damage`, `heal`, `crit_kill`, `eat_start`, `eat_drag`, `eat_tick`, `eat_interrupt` (val = Beteiligte), `eat_complete`, `charge`, `class_change`, `add_death`, `mob_kill` (dst = Typ), `mob_death_by`, `xp_gain`, `loot_pickup` (val = Kupfer), `ding`, `target_switch`, `zoom_change` (val = Stufe), `leeroy_line` (dst = Zeilen-ID — misst Announcer-Dichte), `leeroy_stuck` (Failsafe ausgelöst — jedes Vorkommen ist ein Pathfinding-Bug-Report), `param_change`, `quest_offer` (src = echo, dst = Spieler-ID: das Echo hat die Quest aufgedrückt), `quest_accept` (src = Spieler-ID: angenommen — die erste Annahme startet den Raid-Leeroy), `try_end` (val = 1 Sieg / 0 Wipe, dst = Boss-Rest-HP). Jeder `try_start` loggt zusätzlich den kompletten Parametersatz. Sprünge werden NICHT einzeln geloggt (zu spammig bei 40 Dauerhüpfern), sondern host-seitig pro Spieler gezählt und in `try_end` als Zählerliste mitgeschrieben. Neue Typen nur per GDD-Update hier.
 
 `session.json` (Host, `love.filesystem`): XP/Kupfer je Charaktername, Try-Zähler, Titel. Einzige rundenübergreifende Persistenz; "Neuer Abend" löscht sie (Debug-Overlay).
 

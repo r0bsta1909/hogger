@@ -11,7 +11,7 @@ local debugui = require("game.ui.debug")
 do
   local st = world.new(11)
   world.add_leeroy(st)
-  world.add_player(st, "rob")
+  world.add_player(st, "rob", { quest_done = true })
   world.begin_try(st, {})
   T.ok(st.hogger.hp > 0, "Admin: Hogger lebt zu Beginn")
   T.eq(step.admin_kill_hogger(st), true, "Admin: Kill greift im laufenden Try")
