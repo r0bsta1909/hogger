@@ -7,6 +7,7 @@ local world = require("game.gamesim.world")
 local step = require("game.gamesim.step")
 local wire = require("game.net.wire")
 local events = require("game.gamesim.events")
+local netguard = require("game.net.netguard")
 
 local H = {}
 H.__index = H
@@ -22,6 +23,8 @@ function H.new(opts)
   local self = setmetatable({}, H)
   self.host = enet.host_create("*:" .. H.PORT, 48, 2) -- 40 Spieler + Reserve
   assert(self.host, "ENet-Port " .. H.PORT .. " nicht bindbar")
+  -- Socket-Fehler duerfen den Realm nicht toeten (Issue #23, macOS-Firewall)
+  self.guard = netguard.new()
   self.state = world.new(opts.seed)
   -- session.json: einzige rundenuebergreifende Persistenz (GDD 17.3)
   self.use_session = opts.session ~= false
@@ -78,6 +81,16 @@ function H:_save_session()
   require("game.session").save(self.session)
 end
 
+-- Sendewege durch den Guard (Issue #23): ein Socket-Fehler ist ein
+-- Netzproblem, kein Programmabbruch
+function H:_broadcast(data, channel, mode)
+  return self.guard:call(self.host.broadcast, self.host, data, channel, mode)
+end
+
+function H:_peer_send(peer, data, channel, mode)
+  return self.guard:call(peer.send, peer, data, channel, mode)
+end
+
 function H:_log_events(evlist)
   if not self.log then return end
   for _, e in ipairs(evlist) do
@@ -97,13 +110,13 @@ function H:_after_step(evlist)
       if e.board then
         self.stats_board = e.board
         if next(self.clients) then
-          self.host:broadcast(wire.stats(e.board), CH_RELIABLE, "reliable")
+          self:_broadcast(wire.stats(e.board), CH_RELIABLE, "reliable")
         end
       end
     end
   end
   if #net > 0 and next(self.clients) then
-    self.host:broadcast(wire.events(net), CH_RELIABLE, "reliable")
+    self:_broadcast(wire.events(net), CH_RELIABLE, "reliable")
   end
 end
 
@@ -139,13 +152,13 @@ function H:_handle(peer, data)
     self.clients[peer] = { pid = pid, queue = {}, last_mask = 0,
                            ack = 0, next_ctick = nil, facing = 0 }
     self.by_pid[pid] = self.clients[peer]
-    peer:send(wire.welcome(pid, rejoin, model.params), CH_RELIABLE, "reliable")
-    self.host:broadcast(wire.roster(self.state.players), CH_RELIABLE, "reliable")
+    self:_peer_send(peer, wire.welcome(pid, rejoin, model.params), CH_RELIABLE, "reliable")
+    self:_broadcast(wire.roster(self.state.players), CH_RELIABLE, "reliable")
   elseif c and msg == wire.MSG.RENAME then
     -- Namenswunsch aus dem Intro (Kap. 5); Kollision -> "Den gibt's schon."
     local wish = wire.read_rename(data, off)
     local ok = self:rename(c.pid, wish)
-    peer:send(wire.rename_result(ok), CH_RELIABLE, "reliable")
+    self:_peer_send(peer, wire.rename_result(ok), CH_RELIABLE, "reliable")
   elseif c and msg == wire.MSG.REVANCHE then
     self:revanche() -- jeder darf den Knopf druecken (LAN-Party, GDD 11)
   elseif c and msg == wire.MSG.INPUT then
@@ -191,7 +204,7 @@ function H:set_param(key, value)
   value = math.max(entry.min, math.min(entry.max, value))
   entry.wert = value
   if next(self.clients) then
-    self.host:broadcast(wire.param_set(key, value), CH_RELIABLE, "reliable")
+    self:_broadcast(wire.param_set(key, value), CH_RELIABLE, "reliable")
   end
   if self.log then
     self.log(events.to_jsonl({ t = self.state.tick, ev = "param_change",
@@ -213,7 +226,7 @@ function H:rename(pid, wish)
   p.name = wish
   self:_restore_char(pid)
   if next(self.clients) then
-    self.host:broadcast(wire.roster(self.state.players), CH_RELIABLE, "reliable")
+    self:_broadcast(wire.roster(self.state.players), CH_RELIABLE, "reliable")
   end
   return true
 end
@@ -234,13 +247,15 @@ end
 
 -- local_input: { mask, facing } vom Tastatur-Layer
 function H:update(dt, local_input)
-  -- ENet-Schleife pro Frame vollstaendig leeren (Skill Par. 4)
-  local event = self.host:service(0)
-  while event do
+  -- ENet-Schleife pro Frame vollstaendig leeren (Skill Par. 4); jeder Aufruf
+  -- durch den Guard, damit ein Socket-Fehler den Abend nicht beendet
+  self.guard:frame(dt)
+  local ok, event = self.guard:call(self.host.service, self.host, 0)
+  while ok and event do
     if event.type == "receive" then
       self:_handle(event.peer, event.data)
     elseif event.type == "connect" then
-      event.peer:timeout(0, 0, 5000) -- 5-s-Timeout statt 30 s (Skill Par. 4)
+      self.guard:call(event.peer.timeout, event.peer, 0, 0, 5000) -- 5 s (Skill Par. 4)
     elseif event.type == "disconnect" then
       local c = self.clients[event.peer]
       if c then
@@ -250,7 +265,7 @@ function H:update(dt, local_input)
         self.clients[event.peer] = nil
       end
     end
-    event = self.host:service(0)
+    ok, event = self.guard:call(self.host.service, self.host, 0)
   end
 
   -- fixer Schritt mit gedeckeltem Akkumulator (Skill Par. 1)
@@ -277,11 +292,19 @@ function H:update(dt, local_input)
   if stepped and next(self.clients) then
     local body = wire.snapshot_body(self.state)
     for peer, c in pairs(self.clients) do
-      peer:send(wire.snapshot(c.ack, body), CH_UNRELIABLE, "unsequenced")
+      self.guard:call(peer.send, peer, wire.snapshot(c.ack, body),
+        CH_UNRELIABLE, "unsequenced")
     end
   end
 
-  self.host:flush() -- am Frame-Ende, nach allen Ticks (Skill Par. 4, [gemessen])
+  -- am Frame-Ende, nach allen Ticks (Skill Par. 4, [gemessen])
+  self.guard:call(self.host.flush, self.host)
+
+  -- anhaltender Netzfehler: der Realm gibt auf, statt abzustuerzen (#23)
+  if self.guard.dead and not self.failed then
+    self.failed = "Netzwerk nicht erreichbar."
+    self.net_error = self.guard.last_error
+  end
 end
 
 function H:destroy()
