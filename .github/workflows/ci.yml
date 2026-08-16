@@ -1,0 +1,27 @@
+# CI-Skelett — M0-Auftrag: lauffähig machen (siehe CLAUDE.md).
+# Pflicht-Matrix für Stufe 1 (Unit) + Stufe 3 (Determinismus): ubuntu, windows, macos.
+# Stufe 2 (Sim, Minuten) nur bei Balancing-Labels; Stufe 4 (headless LÖVE) auf ubuntu+macos.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lua einrichten
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "luajit-2.1"
+        # M0: prüfen, ob diese Action auf windows-latest trägt; sonst
+        # scoop/choco-Fallback oder vorgebautes LuaJIT-Binary einchecken.
+      - name: "Stufe 1: Unit"
+        run: lua tests/run_all.lua --stage unit
+      - name: "Stufe 3: Determinismus"
+        run: lua tests/run_all.lua --stage determinism

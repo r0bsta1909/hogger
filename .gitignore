@@ -1,0 +1,6 @@
+logs/
+reports/
+*.love
+dist/
+.DS_Store
+Thumbs.db
