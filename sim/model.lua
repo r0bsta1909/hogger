@@ -206,8 +206,8 @@ M.classes = {
     name_de = "Krieger", races = { "mensch", "zwerg", "nachtelf", "gnom" },
     armor = "plate", resource = "rage", attack = "melee",
     abilities = {
-      { id = "heroic_strike", dmg = "warrior_heroic_dmg", cost = "warrior_heroic_rage" },
-      { id = "battle_shout", buff_bonus = "warrior_shout_bonus",
+      { id = "heroic_strike", name_de = "Heroischer Stoss", dmg = "warrior_heroic_dmg", cost = "warrior_heroic_rage" },
+      { id = "battle_shout", name_de = "Schlachtruf", buff_bonus = "warrior_shout_bonus",
         duration = "warrior_shout_duration", cost = "warrior_shout_rage" },
     },
   },
@@ -215,9 +215,9 @@ M.classes = {
     name_de = "Paladin", races = { "mensch", "zwerg" },
     armor = "plate", resource = "mana", attack = "melee",
     abilities = {
-      { id = "holy_light", heal = "paladin_holylight_heal",
+      { id = "holy_light", name_de = "Heiliges Licht", heal = "paladin_holylight_heal",
         cast = "paladin_holylight_cast", cost = "paladin_holylight_mana" },
-      { id = "seal_of_righteousness", bonus_hits = "paladin_seal_hits",
+      { id = "seal_of_righteousness", name_de = "Siegel der Rechtschaffenheit", bonus_hits = "paladin_seal_hits",
         bonus_dmg = "paladin_seal_bonus_dmg", cost = "paladin_seal_mana" },
     },
   },
@@ -225,48 +225,48 @@ M.classes = {
     name_de = "Jaeger", races = { "zwerg", "nachtelf" },
     armor = "leather", resource = "mana", attack = "shot",
     abilities = {
-      { id = "raptor_strike", dmg = "hunter_raptor_dmg", cd = "hunter_raptor_cd" },
+      { id = "raptor_strike", name_de = "Raptorstoss", dmg = "hunter_raptor_dmg", cd = "hunter_raptor_cd" },
     },
   },
   rogue = {
     name_de = "Schurke", races = { "mensch", "zwerg", "nachtelf", "gnom" },
     armor = "leather", resource = "energy", attack = "melee",
     abilities = {
-      { id = "sinister_strike", dmg = "rogue_sinister_dmg", cost = "rogue_sinister_energy" },
-      { id = "eviscerate", dmg_per_cp = "rogue_evis_dmg_per_cp", cost = "rogue_evis_energy" },
-      { id = "stealth", speed_factor = "rogue_stealth_speed" },
+      { id = "sinister_strike", name_de = "Finsterer Stoss", dmg = "rogue_sinister_dmg", cost = "rogue_sinister_energy" },
+      { id = "eviscerate", name_de = "Ausweiden", dmg_per_cp = "rogue_evis_dmg_per_cp", cost = "rogue_evis_energy" },
+      { id = "stealth", name_de = "Verstohlenheit", speed_factor = "rogue_stealth_speed" },
     },
   },
   priest = {
     name_de = "Priester", races = { "mensch", "zwerg", "nachtelf" },
     armor = "cloth", resource = "mana", attack = "wand",
     abilities = {
-      { id = "smite", dmg = "priest_smite_dmg", cast = "priest_smite_cast", cost = "priest_smite_mana" },
-      { id = "lesser_heal", heal = "priest_heal_amount", cast = "priest_heal_cast", cost = "priest_heal_mana" },
+      { id = "smite", name_de = "Goettliche Pein", dmg = "priest_smite_dmg", cast = "priest_smite_cast", cost = "priest_smite_mana" },
+      { id = "lesser_heal", name_de = "Geringes Heilen", heal = "priest_heal_amount", cast = "priest_heal_cast", cost = "priest_heal_mana" },
     },
   },
   mage = {
     name_de = "Magier", races = { "mensch", "gnom" },
     armor = "cloth", resource = "mana", attack = "wand",
     abilities = {
-      { id = "fireball", dmg = "mage_fireball_dmg", cast = "mage_fireball_cast", cost = "mage_fireball_mana" },
-      { id = "frost_armor", slow = "mage_frostarmor_slow", slow_duration = "mage_frostarmor_slow_duration" },
+      { id = "fireball", name_de = "Feuerball", dmg = "mage_fireball_dmg", cast = "mage_fireball_cast", cost = "mage_fireball_mana" },
+      { id = "frost_armor", name_de = "Frostruestung", slow = "mage_frostarmor_slow", slow_duration = "mage_frostarmor_slow_duration" },
     },
   },
   warlock = {
     name_de = "Hexenmeister", races = { "mensch", "gnom" },
     armor = "cloth", resource = "mana", attack = "wand",
     abilities = {
-      { id = "shadow_bolt", dmg = "warlock_bolt_dmg", cast = "warlock_bolt_cast", cost = "warlock_bolt_mana" },
-      { id = "summon_imp", cast = "warlock_imp_cast", cost = "warlock_imp_mana" },
+      { id = "shadow_bolt", name_de = "Schattenblitz", dmg = "warlock_bolt_dmg", cast = "warlock_bolt_cast", cost = "warlock_bolt_mana" },
+      { id = "summon_imp", name_de = "Wichtel beschwoeren", cast = "warlock_imp_cast", cost = "warlock_imp_mana" },
     },
   },
   druid = {
     name_de = "Druide", races = { "nachtelf" },
     armor = "leather", resource = "mana", attack = "melee",
     abilities = {
-      { id = "wrath", dmg = "druid_wrath_dmg", cast = "druid_wrath_cast", cost = "druid_wrath_mana" },
-      { id = "healing_touch", heal = "druid_touch_heal", cast = "druid_touch_cast", cost = "druid_touch_mana" },
+      { id = "wrath", name_de = "Zorn", dmg = "druid_wrath_dmg", cast = "druid_wrath_cast", cost = "druid_wrath_mana" },
+      { id = "healing_touch", name_de = "Heilende Beruehrung", heal = "druid_touch_heal", cast = "druid_touch_cast", cost = "druid_touch_mana" },
     },
   },
 }

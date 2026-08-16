@@ -289,3 +289,20 @@ for _, p in ipairs(state2.players) do
   end
 end
 T.ok(state2.players[1].jumps > 0, "step: Sprungzaehler zaehlt (GDD 4.1)")
+
+-- Faehigkeits-Spezifikationen und Klassenkits duerfen nie auseinanderlaufen:
+-- die UI liest den Namen ueber denselben Slot-Index aus model.classes
+-- (eine Wahrheit, Issue #28)
+for _, class_id in ipairs(model.CLASS_IDS) do
+  local specs = step.ABILITIES[class_id]
+  local defs = model.classes[class_id].abilities
+  T.ok(specs ~= nil, "ABILITIES kennt " .. class_id)
+  T.eq(#specs, #defs, "gleich viele Slots wie im Modell: " .. class_id)
+  for i = 1, #defs do
+    T.ok(defs[i].name_de ~= nil and #defs[i].name_de > 2,
+      "Slot hat einen deutschen Namen: " .. class_id .. "/" .. i)
+    T.ok(specs[i] ~= nil and specs[i].id ~= nil,
+      "Slot hat eine Spezifikation: " .. class_id .. "/" .. i)
+  end
+end
+T.ok(step.ICON_RADIUS > 0, "Draufstellen-Radius fuer die UI verfuegbar")

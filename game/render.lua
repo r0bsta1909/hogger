@@ -24,9 +24,24 @@ local ABILITY_ICON = {
   bolt = "ab_bolt", imp = "ab_imp", wrath = "ab_wrath", touch = "ab_touch",
 }
 local ABILITIES = require("game.gamesim.step").ABILITIES
+local ICON_RADIUS = require("game.gamesim.step").ICON_RADIUS
 local UI_BG = { 0.09, 0.08, 0.07 }
 local GRASS = { 0.30, 0.44, 0.22 }
 local PATH = { 0.48, 0.40, 0.26 }
+-- Klassenfarben (Vanilla) fuer Portraitrahmen und Namensbalken (GDD 4.3)
+local CLASS_COL = {
+  warrior = { 0.78, 0.61, 0.43 }, paladin = { 0.96, 0.55, 0.73 },
+  hunter  = { 0.67, 0.83, 0.45 }, rogue   = { 1.00, 0.96, 0.41 },
+  priest  = { 1.00, 1.00, 1.00 }, mage    = { 0.41, 0.80, 0.94 },
+  warlock = { 0.58, 0.51, 0.79 }, druid   = { 1.00, 0.49, 0.04 },
+}
+-- Autoangriff je Klasse in Worten (GDD 8.1) — beim Jaeger IST der Autoschuss
+-- die erste "Faehigkeit", er hat deshalb nur einen Button (GDD 8.2)
+local AUTO_DE = {
+  melee = "Nahkampf-Autohit", shot = "Autoschuss (laeuft automatisch)",
+  wand  = "Zauberstab (laeuft automatisch)",
+}
+local RES_DE = { mana = "Mana", rage = "Wut", energy = "Energie" }
 
 function R.new()
   local self = setmetatable({}, R)
@@ -107,6 +122,24 @@ local function hp_bar(x, y, w2, frac, r, g, b)
   love.graphics.rectangle("fill", x - w2, y, w2 * 2, 4)
   love.graphics.setColor(r, g, b, 1)
   love.graphics.rectangle("fill", x - w2, y, w2 * 2 * math.max(0, math.min(1, frac)), 4)
+end
+
+-- Balken der Eckfenster: links oben verankert, Beschriftung liegt IM Balken
+-- (Original-Vorbild spieleranzeige_und_ziel.png) — nie mehr quer durch die
+-- Zahlen wie zuvor (Issue #25)
+local function ui_bar(x, y, w, h, frac, col, text)
+  love.graphics.setColor(0.02, 0.02, 0.02, 0.9)
+  love.graphics.rectangle("fill", x - 1, y - 1, w + 2, h + 2, 2, 2)
+  love.graphics.setColor(0.12, 0.12, 0.12, 1)
+  love.graphics.rectangle("fill", x, y, w, h)
+  love.graphics.setColor(col[1], col[2], col[3], 1)
+  love.graphics.rectangle("fill", x, y, w * math.max(0, math.min(1, frac or 0)), h)
+  if text then
+    local font = love.graphics.getFont()
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(text, x + w / 2 - font:getWidth(text) / 2,
+      y + h / 2 - font:getHeight() / 2)
+  end
 end
 
 -- view: dekodierter Snapshot + me/me_x/me_y; ui: { facing_angle, cooldowns }
@@ -321,45 +354,79 @@ function R:draw(view, ui)
                     energy = { 0.9, 0.85, 0.2 } }
   local RACE_K = { mensch = "M", zwerg = "Z", nachtelf = "N", gnom = "G" }
 
-  -- Einheitenfenster nach Original-Vorbild: Portrait, Namensbalken,
-  -- Stufen-Medaillon, HP/Ressource (GDD 4.3)
+  -- Einheitenfenster nach Original-Vorbild (Referenz spieleranzeige_und_ziel):
+  -- rundes Portrait, Namensbalken, Stufen-Medaillon, HP-Balken mit Zahlen
+  -- IM Balken, Ressourcenbalken darunter (GDD 4.3)
   local function unit_frame(x, y, u)
-    love.graphics.setColor(0.07, 0.07, 0.09, 0.85)
-    love.graphics.rectangle("fill", x, y, 214, 48, 3, 3)
-    local px, py = x + 24, y + 24
-    love.graphics.setColor(0.35, 0.30, 0.24, 1)
-    love.graphics.circle("fill", px, py, 18)
-    if u.elite then -- goldener Elite-Drachenrahmen (Platzhalter-Doppelring)
-      love.graphics.setColor(0.95, 0.78, 0.2, 1)
-      love.graphics.setLineWidth(3)
-      love.graphics.circle("line", px, py, 21)
-      love.graphics.setLineWidth(1)
+    local FW, FH = 214, 56
+    love.graphics.setColor(0.07, 0.07, 0.09, 0.88)
+    love.graphics.rectangle("fill", x, y, FW, FH, 3, 3)
+    love.graphics.setColor(0.30, 0.26, 0.18, 1)
+    love.graphics.rectangle("line", x, y, FW, FH, 3, 3)
+    -- Portrait: das Klassen-/Einheitenicon selbst — die Bildsprache des
+    -- Spiels beantwortet "wer bin ich" ohne einen Buchstaben (Issue #24)
+    local px, py = x + 26, y + 26
+    love.graphics.setColor(0.16, 0.15, 0.13, 1)
+    love.graphics.circle("fill", px, py, 19)
+    if u.icon then
+      assets.draw(u.icon, px, py, 32 / assets.size(u.icon))
+    else
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.print(u.rk or "?", px - 5, py - 8)
     end
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print(u.rk or "?", px - 5, py - 8)
+    local ring = u.elite and { 0.95, 0.78, 0.2 } or u.ring_col or { 0.45, 0.40, 0.30 }
+    love.graphics.setColor(ring[1], ring[2], ring[3], 1)
+    love.graphics.setLineWidth(u.elite and 3 or 2)
+    love.graphics.circle("line", px, py, 20)
+    love.graphics.setLineWidth(1)
+    -- Rassenkuerzel als kleines Abzeichen, Stufen-Medaillon wie im Original
+    if u.rk and u.icon then
+      love.graphics.setColor(0.12, 0.12, 0.14, 0.95)
+      love.graphics.circle("fill", px - 14, py + 15, 8)
+      love.graphics.setColor(0.8, 0.8, 0.75, 1)
+      love.graphics.print(u.rk, px - 18, py + 7)
+    end
     love.graphics.setColor(0.85, 0.72, 0.25, 1)
-    love.graphics.circle("fill", px + 15, py + 13, 9)
+    love.graphics.circle("fill", px + 15, py + 15, 9)
     love.graphics.setColor(0, 0, 0, 1)
     local lv = tostring(u.level or 1)
-    love.graphics.print(lv, px + 15 - #lv * 4, py + 6)
+    love.graphics.print(lv, px + 15 - #lv * 4, py + 8)
+    -- Namensbalken (Fraktionsfarbe) mit Zusatz rechts (Klasse bzw. Art)
+    local bx, bw = x + 52, FW - 62
+    love.graphics.setColor(0.05, 0.05, 0.06, 0.95)
+    love.graphics.rectangle("fill", bx, y + 5, bw, 15, 2, 2)
     love.graphics.setColor(u.name_col[1], u.name_col[2], u.name_col[3], 1)
-    love.graphics.print(u.name or "?", x + 50, y + 4)
-    love.graphics.setColor(0.85, 0.85, 0.8, 1)
-    love.graphics.print(string.format("%d/%d", u.hp or 0, u.maxhp or 1), x + 50, y + 18)
-    hp_bar(x + 128, y + 24, 80, (u.hp or 0) / math.max(1, u.maxhp or 1), 0.2, 0.8, 0.2)
+    love.graphics.print(u.name or "?", bx + 4, y + 5)
+    if u.sub then
+      local font = love.graphics.getFont()
+      love.graphics.setColor(0.75, 0.72, 0.62, 1)
+      love.graphics.print(u.sub, bx + bw - 4 - font:getWidth(u.sub), y + 5)
+    end
+    ui_bar(bx, y + 23, bw, 13, (u.hp or 0) / math.max(1, u.maxhp or 1),
+      { 0.15, 0.72, 0.18 },
+      string.format("%d/%d", math.max(0, u.hp or 0), u.maxhp or 1))
     if u.res_frac then
       local c = u.res_col or RES_COL.mana
-      hp_bar(x + 128, y + 34, 80, u.res_frac, c[1], c[2], c[3])
+      ui_bar(bx, y + 39, bw, 10, u.res_frac, c,
+        u.res_txt and string.format("%s %d", u.res_txt,
+          math.floor(u.res_frac * 100 + 0.5)) or nil)
     end
   end
 
-  -- Oben links: das eigene Einheitenfenster (GDD 4.3)
-  if me and me.class then
+  -- Oben links: das eigene Einheitenfenster (GDD 4.3). Es zeigt die eigene
+  -- Klasse dauerhaft — Icon, Klassenfarbe und Klassenname (Issue #24)
+  if me then
+    local cls = me.class and model.classes[me.class]
     unit_frame(12, 10, {
-      name = names[view.me] or "?", rk = RACE_K[me.race] or "?",
-      level = 1, hp = me.hp, maxhp = model.hp_for_class(me.class),
-      res_frac = (me.resource or 0) / 100,
-      res_col = RES_COL[model.classes[me.class].resource],
+      name = names[view.me] or "?", rk = RACE_K[me.race],
+      icon = me.class and CLASS_ICON[me.class] or nil,
+      ring_col = me.class and CLASS_COL[me.class] or nil,
+      sub = cls and cls.name_de or (me.alive and "?" or "Geist"),
+      level = 1, hp = me.hp or 0,
+      maxhp = me.class and model.hp_for_class(me.class) or 0,
+      res_frac = cls and (me.resource or 0) / 100 or nil,
+      res_col = cls and RES_COL[cls.resource],
+      res_txt = cls and RES_DE[cls.resource],
       name_col = { 0.95, 0.92, 0.8 },
     })
     if me.class == "rogue" and (me.cp or 0) > 0 then
@@ -368,7 +435,7 @@ function R:draw(view, ui)
     end
     love.graphics.setColor(0.6, 0.56, 0.45, 1)
     love.graphics.print(string.format("Kupfer %d   Plunder %d",
-      me.kupfer or 0, me.plunder or 0), 14, 62)
+      me.kupfer or 0, me.plunder or 0), 14, 70)
   end
 
   -- Oben rechts: Zielfenster, Ziel des Ziels, Buff-Leiste (GDD 4.3)
@@ -377,14 +444,20 @@ function R:draw(view, ui)
     local frame
     if t == 0 then
       frame = { name = "Hogger", rk = "H", level = 11, elite = true,
+                icon = "icon_hogger", sub = "Gnoll",
                 hp = view.hogger.hp, maxhp = view.hogger.max_hp,
                 name_col = { 0.9, 0.25, 0.2 } }
     elseif view.players[t] then
       local q = view.players[t]
-      frame = { name = names[t] or "?", rk = RACE_K[q.race] or "?", level = 1,
+      local qc = q.class and model.classes[q.class]
+      frame = { name = names[t] or "?", rk = RACE_K[q.race], level = 1,
+                icon = q.class and CLASS_ICON[q.class] or nil,
+                ring_col = q.class and CLASS_COL[q.class] or nil,
+                sub = qc and qc.name_de or "Geist",
                 hp = q.hp, maxhp = q.class and model.hp_for_class(q.class) or 1,
-                res_frac = (q.resource or 0) / 100,
-                res_col = q.class and RES_COL[model.classes[q.class].resource],
+                res_frac = qc and (q.resource or 0) / 100 or nil,
+                res_col = qc and RES_COL[qc.resource],
+                res_txt = qc and RES_DE[qc.resource],
                 name_col = { 0.4, 0.9, 0.4 } }
     elseif view.npcs and view.npcs[t] then
       local npc = view.npcs[t]
@@ -392,7 +465,8 @@ function R:draw(view, ui)
       local mobdef = model.mobs[npc.kind]
       frame = { name = mobdef and mobdef.name_de
                   or (npc.kind == "add" and "Gnoll-Welpe" or "Wichtel"),
-                rk = "-", level = 1, hp = npc.hp,
+                icon = "icon_" .. npc.kind,
+                rk = nil, level = 1, hp = npc.hp,
                 maxhp = npc.kind == "add" and model.p("add_hp")
                         or (mobdef and model.p(npc.kind .. "_hp")) or 1,
                 name_col = hostile and { 0.9, 0.25, 0.2 } or { 0.9, 0.8, 0.3 } }
@@ -402,9 +476,9 @@ function R:draw(view, ui)
       -- Ziel des Ziels: wen verpruegelt Hogger gerade? (GDD 4.3)
       if t == 0 and view.hogger.target and names[view.hogger.target] then
         love.graphics.setColor(0.07, 0.07, 0.09, 0.85)
-        love.graphics.rectangle("fill", w - 226, 62, 214, 20, 3, 3)
+        love.graphics.rectangle("fill", w - 226, 70, 214, 20, 3, 3)
         love.graphics.setColor(0.85, 0.8, 0.7, 1)
-        love.graphics.print("> " .. names[view.hogger.target], w - 220, 64)
+        love.graphics.print("> " .. names[view.hogger.target], w - 220, 72)
       end
     end
     -- Buff-Leiste: nur Buffs, die Level-1-Klassen haben (GDD 4.3)
@@ -414,7 +488,7 @@ function R:draw(view, ui)
     if me.frost_armor then buffs[#buffs + 1] = { "FR" } end
     if me.stealth then buffs[#buffs + 1] = { "VS" } end
     for i, b in ipairs(buffs) do
-      local bx, by = w - 226 + (i - 1) * 34, 88
+      local bx, by = w - 226 + (i - 1) * 34, 96
       love.graphics.setColor(0.2, 0.25, 0.4, 0.9)
       love.graphics.rectangle("fill", bx, by, 30, 30, 3, 3)
       love.graphics.setColor(0.9, 0.9, 0.95, 1)
@@ -466,28 +540,118 @@ function R:draw(view, ui)
     love.graphics.print("Zoom " .. self.zoom, zx - 24, zy + 60)
   end
 
-  -- Faehigkeitenleiste unten mittig, aus den Faehigkeits-Spezifikationen
-  -- generiert — nie mehr Buttons als die Klasse Faehigkeiten hat (GDD 4.2)
-  if me and me.class then
-    local buttons = {}
-    for slot, spec in ipairs(ABILITIES[me.class] or {}) do
-      buttons[slot] = { ABILITY_ICON[spec.id], tostring(slot) }
-    end
-    local bx = ox - (#buttons * 48) / 2 + 24
-    for i, b in ipairs(buttons) do
-      local x, y = bx + (i - 1) * 48, oy + radius - 34
-      assets.draw(b[1], x, y, 1)
+  -- Faehigkeiten als runde Add-on-Buttons am unteren Ring, mit Cooldown-Sweep
+  -- und Tastenkuerzel (GDD 4.2, Referenz minimap.webp). Nie mehr Buttons als
+  -- die Klasse Faehigkeiten hat — und keine, solange man tot ist (Issue #29)
+  local hover_tip = nil
+  if me and me.class and me.alive then
+    local specs = ABILITIES[me.class] or {}
+    local defs = model.classes[me.class].abilities or {}
+    local n = #specs
+    local BR = 23                       -- Buttonradius
+    local ring_r = radius * 0.87        -- Bahn knapp innerhalb des Rings
+    local dtheta = (BR * 2 + 10) / ring_r
+    for i, spec in ipairs(specs) do
+      -- Slot 1 links, aufsteigend nach rechts (Tastenreihenfolge)
+      local a = math.pi / 2 - (i - (n + 1) / 2) * dtheta
+      local x, y = ox + math.cos(a) * ring_r, oy + math.sin(a) * ring_r
+      love.graphics.setColor(0.10, 0.09, 0.07, 0.95)
+      love.graphics.circle("fill", x, y, BR)
+      local icon = ABILITY_ICON[spec.id]
+      if icon then assets.draw(icon, x, y, (BR * 1.7) / assets.size(icon)) end
+      -- Cooldown-Sweep im Uhrzeigersinn (Original-Verhalten)
       local cd = ui.cooldowns and ui.cooldowns[i] or 0
       if cd > 0 then
-        love.graphics.setColor(0, 0, 0, 0.6)
-        love.graphics.rectangle("fill", x - 20, y - 20 + 40 * (1 - cd), 40, 40 * cd)
+        love.graphics.setColor(0, 0, 0, 0.62)
+        love.graphics.arc("fill", "pie", x, y, BR, -math.pi / 2,
+          -math.pi / 2 + cd * 2 * math.pi)
       end
-      love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.print(b[2], x - 18, y - 18)
+      -- laufender Cast hebt seinen Button hervor
+      local active = (me.cast_slot or 0) == i
+      love.graphics.setColor(active and 1 or 0.78, active and 0.9 or 0.63,
+        active and 0.4 or 0.28, 1)
+      love.graphics.setLineWidth(active and 3 or 2)
+      love.graphics.circle("line", x, y, BR)
+      love.graphics.setLineWidth(1)
+      love.graphics.setColor(0.95, 0.92, 0.8, 1)
+      love.graphics.print(tostring(i), x + BR - 10, y + BR - 16)
+      -- Tooltip: der Grund, warum "RS" niemanden mehr ratlos laesst (#28)
+      if ui.mouse then
+        local d = math.sqrt((ui.mouse[1] - x) ^ 2 + (ui.mouse[2] - y) ^ 2)
+        if d <= BR then hover_tip = { spec = spec, def = defs[i], slot = i } end
+      end
     end
-    -- Cast-/Wiederbelebungsbalken
-    if me.casting or me.reviving then
-      hp_bar(ox, oy + 40, 50, me.progress, 0.9, 0.8, 0.3)
+    -- Autoangriff der Klasse in Worten: der Jaeger hat genau deshalb nur
+    -- einen Button (GDD 8.1/8.2)
+    local auto = AUTO_DE[model.classes[me.class].attack]
+    if auto then
+      local font = love.graphics.getFont()
+      love.graphics.setColor(0.62, 0.58, 0.46, 1)
+      love.graphics.print(auto, ox - font:getWidth(auto) / 2,
+        oy + ring_r - BR - 22)
+    end
+  end
+
+  -- Cast- und Wiederbelebungsbalken: unabhaengig von der Klasse, denn beim
+  -- allerersten Wiederbeleben hat man noch keine (Issue #26)
+  if me and (me.casting or me.reviving) then
+    local label
+    if me.reviving then
+      -- Ziel-Klasse aus dem Bodenicon ableiten, auf dem der Geist steht
+      local best, bd = nil, ICON_RADIUS
+      for slot = 1, #world.CLASSES do
+        local ix, iy = world.class_icon_pos(slot)
+        local d = world.dist(view.me_x, view.me_y, ix, iy)
+        if d <= bd then best, bd = slot, d end
+      end
+      local cls = best and model.classes[world.CLASSES[best]]
+      label = "Wiederbelebung" .. (cls and ": " .. cls.name_de or "")
+    else
+      local def = me.class and model.classes[me.class].abilities[me.cast_slot or 0]
+      label = def and def.name_de or "Zauber"
+    end
+    local bw2, bx2, by2 = 260, ox - 130, oy + radius * 0.34
+    ui_bar(bx2, by2, bw2, 18, me.progress, { 0.85, 0.72, 0.28 }, label)
+  end
+
+  -- Faehigkeits-Tooltip ueber dem Button (Original-Stil, GDD 4.2)
+  if hover_tip then
+    local spec, def = hover_tip.spec, hover_tip.def
+    local font = love.graphics.getFont()
+    local lines = { def and def.name_de or spec.id }
+    local cls = model.classes[me.class]
+    if spec.cost then
+      lines[#lines + 1] = string.format("%d %s", model.p(spec.cost),
+        RES_DE[cls.resource] or "")
+    end
+    lines[#lines + 1] = spec.cast
+      and string.format("%.1f s Zauberzeit", model.p(spec.cast))
+      or "Sofort"
+    if spec.cd then
+      lines[#lines + 1] = string.format("%d s Abklingzeit", model.p(spec.cd))
+    end
+    if spec.range then
+      lines[#lines + 1] = string.format("Reichweite %d px", model.p(spec.range))
+    elseif spec.target == "ally" then
+      lines[#lines + 1] = "Ziel: Verbuendeter (sonst selbst)"
+    elseif spec.target == "self" then
+      lines[#lines + 1] = "Wirkt auf einen selbst"
+    end
+    if spec.requires_cp then lines[#lines + 1] = "Braucht Combopunkte" end
+    lines[#lines + 1] = "Taste " .. hover_tip.slot
+    local tw = 0
+    for _, l in ipairs(lines) do tw = math.max(tw, font:getWidth(l)) end
+    local th = #lines * 16 + 8
+    local tx = math.min(w - tw - 20, math.max(8, ui.mouse[1] - tw / 2))
+    local ty = math.max(8, ui.mouse[2] - th - 16)
+    love.graphics.setColor(0.05, 0.05, 0.07, 0.94)
+    love.graphics.rectangle("fill", tx, ty, tw + 12, th, 3, 3)
+    love.graphics.setColor(0.45, 0.40, 0.28, 1)
+    love.graphics.rectangle("line", tx, ty, tw + 12, th, 3, 3)
+    for i, l in ipairs(lines) do
+      love.graphics.setColor(i == 1 and 1 or 0.8, i == 1 and 0.85 or 0.78,
+        i == 1 and 0.4 or 0.66, 1)
+      love.graphics.print(l, tx + 6, ty + 4 + (i - 1) * 16)
     end
   end
 

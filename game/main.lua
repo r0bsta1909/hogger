@@ -663,14 +663,18 @@ function love.keypressed(key)
     app.render:set_zoom(app.render.zoom + 1)
     if app.net.send_zoom then app.net:send_zoom(app.render.zoom) end
   elseif key == "1" or key == "2" or key == "3" then
+    -- Cooldown-Anzeige aus der Faehigkeits-Spezifikation ableiten, nicht aus
+    -- Sonderfaellen (eine Wahrheit); tot loest nichts aus (Issue #29)
     local slot = tonumber(key)
     local me = app.view and app.view.players[app.view.me]
-    local cd = model.p("gcd")
-    if me and me.class == "hunter" and slot == 1 then
-      cd = model.p("hunter_raptor_cd")
+    local specs = me and me.alive and me.class
+      and require("game.gamesim.step").ABILITIES[me.class]
+    local spec = specs and specs[slot]
+    if spec then
+      local cd = spec.cd and model.p(spec.cd) or model.p("gcd")
+      app.cooldown_view[slot] = cd
+      app.cooldown_max[slot] = cd
     end
-    app.cooldown_view[slot] = cd
-    app.cooldown_max[slot] = cd
   elseif key == "tab" then
     if app.mode == "host" then app.net:set_local_target(world.HOGGER_ID)
     else app.net:set_target(world.HOGGER_ID) end

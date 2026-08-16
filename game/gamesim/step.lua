@@ -12,6 +12,7 @@ local events = require("game.gamesim.events")
 local S = {}
 local DT = model.TICK_DT
 local ICON_RADIUS = 60      -- Draufstellen-Radius der Klassenicons (GDD 5)
+S.ICON_RADIUS = ICON_RADIUS -- der Renderer beschriftet den Balken damit
 -- Leeroys letzte Zeilen nach dem Fluchbruch (GDD 11): Zeit -> Zeilen-ID
 local WON_LINES = { { 1.0, 31 }, { 4.5, 32 }, { 9.0, 33 } }
 
