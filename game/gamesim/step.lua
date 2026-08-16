@@ -24,7 +24,10 @@ local function crit_roll(state, side, kind)
   return state.rng:roll(chance)
 end
 
-local function kill_player(state, p, ev, was_crit)
+local CAUSE = require("game.gamesim.killcam").CAUSE
+
+-- cause: Todesursache fuer die Killcam (killcam.CAUSE, GDD Kap. 11)
+local function kill_player(state, p, ev, was_crit, cause)
   p.alive = false
   p.ghost = false
   p.hp = 0
@@ -43,7 +46,7 @@ local function kill_player(state, p, ev, was_crit)
   p.dead_until = model.respawn_timer(math.max(1, state.n_scale))
   state.hogger.threat[p.id] = nil -- Bedrohung wird beim Tod geloescht (GDD 9.4)
   state.corpses[#state.corpses + 1] = { x = p.x, y = p.y }
-  events.push(ev, state.tick, "death", p.id, nil, nil, nil)
+  events.push(ev, state.tick, "death", p.id, nil, cause, was_crit or nil)
   if was_crit then
     events.push(ev, state.tick, "crit_kill", "hogger", p.id, nil, true)
   end
@@ -62,7 +65,7 @@ local function hogger_damage_player(state, p, amount, kind, ev)
     state.hogger.slow_until = state.time + model.p("mage_frostarmor_slow_duration")
   end
   events.push(ev, state.tick, "damage", "hogger", p.id, amount, crit)
-  if p.hp <= 0 then kill_player(state, p, ev, crit) end
+  if p.hp <= 0 then kill_player(state, p, ev, crit, CAUSE[kind]) end
 end
 
 local function player_damage_hogger(state, p, amount, kind, ev)
@@ -530,7 +533,7 @@ local function npc_damage_player(state, npc, p, ev)
   p.hp = p.hp - dmg
   events.push(ev, state.tick, "damage", npc.id, p.id, dmg, crit)
   if p.hp <= 0 then
-    kill_player(state, p, ev, crit)
+    kill_player(state, p, ev, crit, CAUSE[npc.kind])
     if MOB_TYPES[npc.kind] then
       -- die Pflicht-Anekdote (GDD 7.2)
       events.push(ev, state.tick, "mob_death_by", p.id, npc.kind, nil, nil)

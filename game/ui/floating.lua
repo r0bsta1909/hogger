@@ -48,7 +48,7 @@ function F:draw(to_screen)
   for _, it in ipairs(self.items) do
     local x, y = to_screen(it.wx, it.wy)
     local a = math.min(1, it.t / (it.total * 0.4))
-    local scale = it.prio >= 2 and 1.5 or 1
+    local scale = it.prio >= 3 and 2.0 or it.prio >= 2 and 1.5 or 1
     love.graphics.setColor(it.color[1], it.color[2], it.color[3], a)
     local tw = font:getWidth(it.text) * scale
     love.graphics.print(it.text, x - tw / 2, y - 24, 0, scale, scale)

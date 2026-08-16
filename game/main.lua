@@ -198,13 +198,25 @@ local function process_cosmetics(view)
       local tx, ty = entity_pos(e.dst)
       local own = tonumber(e.src) == view.me or tonumber(e.dst) == view.me
       local color = e.crit and { 1, 0.85, 0.2 } or { 1, 1, 1 }
+      -- Krit-Inszenierung (GDD 11): gross und gelb, Screenshake beide Seiten
       app.floating:add(tostring(math.floor((e.val or 0) + 0.5)), tx, ty,
-        color, (e.crit or own) and 2 or 1)
-      if e.crit and tonumber(e.dst) == view.me then app.render:add_shake(10) end
+        color, e.crit and 3 or (own and 2 or 1))
+      if e.crit and tonumber(e.dst) == view.me then app.render:add_shake(12)
+      elseif e.crit and tonumber(e.src) == view.me then app.render:add_shake(6) end
     elseif e.ev == "heal" then
       local tx, ty = entity_pos(e.dst)
       app.floating:add("+" .. tostring(math.floor((e.val or 0) + 0.5)),
         tx, ty, { 0.3, 0.95, 0.3 }, tonumber(e.dst) == view.me and 2 or 1)
+      if tonumber(e.dst) == view.me then app.last_healed_t = app.uptime end
+    elseif e.ev == "death" and tonumber(e.src) == view.me then
+      -- Killcam-Zeile (GDD 11): kontextsensitiv, deterministische Rotation
+      app.my_deaths = (app.my_deaths or 0) + 1
+      local healed = app.last_healed_t ~= nil
+                     and (app.uptime - app.last_healed_t) < 4
+      app.render:show_killcam(require("game.gamesim.killcam").pick(
+        tonumber(e.val), e.crit, app.my_deaths, healed))
+    elseif e.ev == "crit_kill" and tonumber(e.dst) == view.me then
+      app.render:add_shake(18) -- der "WAS?!"-Moment (GDD 9.2)
     elseif e.ev == "eat_start" then
       app.render:announce("HOGGER FRISST!", 2.5)
     elseif e.ev == "eat_complete" then
@@ -222,7 +234,11 @@ local function process_cosmetics(view)
       local item = pool[tonumber(e.dst) or 0] or "Plunder"
       app.render:toast(item .. "  (+" .. tostring(math.floor(e.val or 0)) .. " Kupfer)")
     elseif e.ev == "ding" then
-      app.render:announce("DING! ... das ist nicht moeglich.", 6)
+      -- DING-Inszenierung (GDD 7.3): goldener Ring + Ansage; Leeroys
+      -- Kommentar (Zeile 29) folgt als eigenes leeroy_line-Event
+      app.render:announce("DING!", 6)
+      local dp = view.players[tonumber(e.src)]
+      if dp then app.render:add_ding(dp.x, dp.y) end
     elseif e.ev == "leeroy_line" then
       local lines = require("game.gamesim.lines")
       local text = lines[tonumber(e.dst) or 0]
