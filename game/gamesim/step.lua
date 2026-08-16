@@ -1111,6 +1111,16 @@ local function restart_all(state, ev)
   end
 end
 
+-- Admin-Werkzeug (GDD 4.4, Issue #35): Hogger sofort toeten, damit sich der
+-- Fluchbruch samt Statistik-Tafel und REVANCHE auch allein testen laesst.
+-- Aendert Zustand ausschliesslich hier in step (ADR-002); der regulaere
+-- Sieg-Pfad im naechsten Tick erledigt den Rest.
+function S.admin_kill_hogger(state)
+  if state.phase ~= "try" or state.hogger.hp <= 0 then return false end
+  state.hogger.hp = 0
+  return true
+end
+
 -- REVANCHE (GDD 11): startet den naechsten Abend-Durchlauf, Try-Zaehler
 -- bei 1 — der Fluch ist gebrochen, ab jetzt zergt man freiwillig
 function S.revanche(state, ev)
