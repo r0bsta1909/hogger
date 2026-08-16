@@ -105,6 +105,25 @@ function T.run()
       ok(clients[2].connected, "Rejoin: Client 2 wieder verbunden")
       ok(clients[2].pid == old_pid_of_c2,
         "Rejoin: Charakter haengt am Namen (gleiche PID)")
+      ok(clients[2].rejoin == true,
+        "Rejoin: WELCOME-Flag gesetzt (kein Intro, GDD 5)")
+    end
+
+    -- Rename-Pfad des Intros (GDD 5): Annahme, Kollision, Roster-Broadcast
+    if iter == math.floor(70 / DT) then
+      clients[1]:send_rename("Erwin")
+    end
+    if iter == math.floor(73 / DT) then
+      clients[4]:send_rename("erwin") -- Kollision (case-insensitiv)
+    end
+    if iter == math.floor(76 / DT) then
+      ok(clients[1].rename_result == true, "Rename: Wunschname angenommen")
+      ok(clients[4].rename_result == false, "Rename: Kollision abgelehnt")
+      local pid1 = clients[1].pid
+      ok(host.state.players[pid1].name == "Erwin",
+        "Rename: Host-Zustand aktualisiert")
+      ok(clients[3].names[pid1] == "Erwin",
+        "Rename: Roster-Broadcast bei allen angekommen")
     end
 
     -- Invarianten je Tick (GDD 17.7 Stufe 4)

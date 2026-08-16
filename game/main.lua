@@ -33,7 +33,7 @@ local function parse_args(args)
     local a = args[i]
     if a == "--join" then i = i + 1; app.join_ip = args[i]; app.mode = "client"
     elseif a == "--host" then app.mode = "host"
-    elseif a == "--name" then i = i + 1; app.name = args[i]
+    elseif a == "--name" then i = i + 1; app.name = args[i]; app.name_given = true
     elseif a == "--seed" then i = i + 1; app.seed = tonumber(args[i])
     elseif a == "--bots" then i = i + 1; app.bots = tonumber(args[i]) or 0; app.mode = "host"
     elseif a == "--headless" then app.headless = true
@@ -113,6 +113,21 @@ function love.load(args)
   -- Boot-Sequenz (GDD Kap. 3) im Normalstart; Debug-Laeufe starten direkt
   if not app.auto then
     app.boot = require("game.ui.boot").new()
+  end
+
+  -- Name & Intro (GDD Kap. 5): ohne --name laeuft das Intro; der bestaetigte
+  -- Name haengt pro Abend am Rechner (charname.dat) -> Rejoin ohne Intro
+  if not app.name_given then
+    local saved = love.filesystem.read("charname.dat")
+    local today = os.date("%Y-%m-%d")
+    local d, n = (saved or ""):match("^(%S+)\n(%a+)")
+    if d == today and n then
+      app.name = n
+      app.rejoin_known = true
+    else
+      app.name = "gast" .. tostring(math.floor(socket.gettime() * 1000) % 10000)
+      app.need_intro = not app.auto -- Debug-Autolaeufe starten ohne Intro
+    end
   end
 
   if app.mode == "host" then start_host()
@@ -251,7 +266,8 @@ function love.update(dt)
     inp = require("game.gamesim.bot").decide(app.net.state, app.net.local_pid)
   end
   if (app.panel and app.panel.visible) or app.debug.visible
-     or (app.boot and app.boot:active() and app.boot:covers_screen()) then
+     or (app.boot and app.boot:active() and app.boot:covers_screen())
+     or (app.intro and app.intro:blocking()) then
     inp = { mask = 0, facing = inp.facing }
   end
 
@@ -286,6 +302,44 @@ function love.update(dt)
   app.view = view
   app.floating:update(dt)
   app.render:update(dt)
+
+  -- Leeroy-Intro (GDD Kap. 5): startet nach der Aufblende (Boot fertig);
+  -- Rejoin bekommt statt des Intros nur "Ah. Wieder da." (GDD 5, Punkt 4)
+  if view and (not app.boot or not app.boot:active()) then
+    if app.need_intro and not app.intro then
+      app.need_intro = nil
+      app.intro = require("game.ui.intro").new()
+    elseif app.rejoin_known and not app.rejoin_greeted then
+      app.rejoin_greeted = true
+      local known = (app.mode == "host" and app.net.session
+                     and app.net.session.chars
+                     and app.net.session.chars[app.name] ~= nil)
+                    or (app.mode == "client" and app.net.rejoin)
+      if known then app.render:announce('Leeroy: "Ah. Wieder da."', 4) end
+    end
+  end
+  if app.intro then
+    app.intro:update(dt)
+    local wish = app.intro:take_submit()
+    if wish then
+      if app.mode == "host" then
+        app.intro:result(app.net:rename(app.net.local_pid, wish))
+      else
+        app.net:send_rename(wish)
+      end
+    end
+    if app.mode == "client" and app.net.rename_result ~= nil then
+      app.intro:result(app.net.rename_result)
+      app.net.rename_result = nil
+    end
+    if app.intro.accepted and app.name ~= app.intro.accepted then
+      -- bestaetigter Name: merken (Rejoin) und Charakter daran haengen
+      app.name = app.intro.accepted
+      love.filesystem.write("charname.dat",
+        os.date("%Y-%m-%d") .. "\n" .. app.name)
+    end
+    if not app.intro:blocking() then app.intro = nil end
+  end
 
   if app.shot_at then
     app.shot_at = app.shot_at - dt
@@ -328,6 +382,7 @@ function love.draw()
       mouse = { love.mouse.getPosition() },
     })
     app.floating:draw(to_screen)
+    if app.intro then app.intro:draw(app.view, bw, bh) end
     if app.panel then app.panel:draw() end
   end
   if app.boot and app.boot:active() and not app.boot:covers_screen() then
@@ -389,6 +444,10 @@ function love.keypressed(key)
       return
     end
   end
+  if app.intro and app.intro:blocking() then
+    app.intro:keypressed(key) -- Intro schluckt alles (Eingaben gesperrt)
+    return
+  end
   if app.mode == "discover" then return end
   if app.panel and app.panel:keypressed(key) then return end
   if key == "f10" and app.panel then
@@ -417,6 +476,7 @@ end
 function love.textinput(t)
   if app.debug and app.debug:textinput(t) then return end
   if app.boot and app.boot:active() and app.boot:textinput(t) then return end
+  if app.intro and app.intro:blocking() then app.intro:textinput(t) end
 end
 
 function love.mousepressed(mx, my)
@@ -431,6 +491,10 @@ function love.mousepressed(mx, my)
   end
   if app.boot and app.boot:active() and app.boot:covers_screen() then
     app.boot:mousepressed() -- ab dem zweiten Start ueberspringbar (GDD 3)
+    return
+  end
+  if app.intro and app.intro:blocking() then
+    app.intro:mousepressed() -- Dialog-Panels weiterklicken (GDD 5)
     return
   end
   if not app.view then return end

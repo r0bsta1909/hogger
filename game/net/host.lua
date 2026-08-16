@@ -67,8 +67,11 @@ function H:_save_session()
   if not self.use_session then return end
   local chars = (self.session and self.session.chars) or {}
   for _, p in ipairs(self.state.players) do
-    chars[p.name] = { xp = p.xp, kupfer = p.kupfer, plunder = p.plunder,
-                     ding = p.ding_done or false }
+    -- provisorische Intro-Namen ("gastNNNN") nicht persistieren (Kap. 5)
+    if not p.name:find("^gast%d") then
+      chars[p.name] = { xp = p.xp, kupfer = p.kupfer, plunder = p.plunder,
+                       ding = p.ding_done or false }
+    end
   end
   self.session = { try_nr = self.state.try_nr, chars = chars }
   require("game.session").save(self.session)
@@ -100,12 +103,14 @@ function H:_handle(peer, data)
   local c = self.clients[peer]
   if msg == wire.MSG.HELLO then
     local name = wire.read_hello(data, off)
-    -- Rejoin: Charakter haengt am Namen (GDD Kap. 14)
-    local pid
+    -- Rejoin: Charakter haengt am Namen (GDD Kap. 14); Rejoin-Flag steuert
+    -- das Intro auf dem Client (Kap. 5: "Ah. Wieder da.")
+    local pid, rejoin
     for _, p in ipairs(self.state.players) do
       if p.name == name and p.disconnected then
         pid = p.id
         p.disconnected = nil
+        rejoin = true
         break
       end
     end
@@ -116,14 +121,21 @@ function H:_handle(peer, data)
           name = name .. " 2"
         end
       end
+      rejoin = self.session and self.session.chars
+               and self.session.chars[name] ~= nil or false
       pid = world.add_player(self.state, name)
       self:_restore_char(pid)
     end
     self.clients[peer] = { pid = pid, queue = {}, last_mask = 0,
                            ack = 0, next_ctick = nil, facing = 0 }
     self.by_pid[pid] = self.clients[peer]
-    peer:send(wire.welcome(pid, model.params), CH_RELIABLE, "reliable")
+    peer:send(wire.welcome(pid, rejoin, model.params), CH_RELIABLE, "reliable")
     self.host:broadcast(wire.roster(self.state.players), CH_RELIABLE, "reliable")
+  elseif c and msg == wire.MSG.RENAME then
+    -- Namenswunsch aus dem Intro (Kap. 5); Kollision -> "Den gibt's schon."
+    local wish = wire.read_rename(data, off)
+    local ok = self:rename(c.pid, wish)
+    peer:send(wire.rename_result(ok), CH_RELIABLE, "reliable")
   elseif c and msg == wire.MSG.INPUT then
     local ctick, m0, m1, m2 = wire.read_input(data, off)
     local _, _, _, _, facing = wire.read_input(data, off)
@@ -174,6 +186,24 @@ function H:set_param(key, value)
                                src = self.local_pid, dst = key, val = value }))
   end
   return value
+end
+
+-- Umbenennung nach dem Intro (Kap. 5): jeder vorhandene Charaktername
+-- (verbunden ODER getrennt) kollidiert — getrennte gehoeren ihren Spielern
+-- und kommen ueber den Rejoin-Pfad zurueck. Erfolg: umbenennen, Session-
+-- Stand des Namens uebernehmen, Roster an alle.
+function H:rename(pid, wish)
+  local p = self.state.players[pid]
+  if not p or #wish < 2 or #wish > 12 or wish:find("[^%a]") then return false end
+  for _, q in ipairs(self.state.players) do
+    if q.id ~= pid and q.name:lower() == wish:lower() then return false end
+  end
+  p.name = wish
+  self:_restore_char(pid)
+  if next(self.clients) then
+    self.host:broadcast(wire.roster(self.state.players), CH_RELIABLE, "reliable")
+  end
+  return true
 end
 
 function H:set_local_target(target_id)

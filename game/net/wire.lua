@@ -11,6 +11,7 @@ W.PROTO = 1
 W.MSG = {
   HELLO = 1, WELCOME = 2, INPUT = 3, SNAPSHOT = 4, EVENTS = 5,
   SET_TARGET = 6, PARAM_SET = 7, ZOOM = 8, ROSTER = 9,
+  RENAME = 10, RENAME_RESULT = 11,
 }
 
 -- Ereignistypen fuers Netz (Kosmetik-Feed; das JSONL-Log bleibt Host-Sache)
@@ -60,27 +61,45 @@ function W.read_hello(data, off)
   return love.data.unpack("<s1", data, off)
 end
 
--- WELCOME: pid + selbstbeschreibender Parametersatz (Skill Par. 4)
-function W.welcome(pid, params)
+-- WELCOME: pid + Rejoin-Flag (Kap. 5: kein Intro beim Rejoin) +
+-- selbstbeschreibender Parametersatz (Skill Par. 4)
+function W.welcome(pid, rejoin, params)
   local keys = {}
   for k in pairs(params) do keys[#keys + 1] = k end
   table.sort(keys)
-  local parts = { header(W.MSG.WELCOME), pack("<BI2", pid, #keys) }
+  local parts = { header(W.MSG.WELCOME),
+                  pack("<BBI2", pid, rejoin and 1 or 0, #keys) }
   for _, k in ipairs(keys) do
     parts[#parts + 1] = pack("<s1d", k, z(params[k].wert))
   end
   return table.concat(parts)
 end
 function W.read_welcome(data, off)
-  local pid, count
-  pid, count, off = love.data.unpack("<BI2", data, off)
+  local pid, rejoin, count
+  pid, rejoin, count, off = love.data.unpack("<BBI2", data, off)
   local kv = {}
   for _ = 1, count do
     local k, v
     k, v, off = love.data.unpack("<s1d", data, off)
     kv[k] = v
   end
-  return pid, kv
+  return pid, rejoin == 1, kv
+end
+
+-- RENAME: Namenswunsch aus dem Intro (Kap. 5); Antwort ok/Kollision
+function W.rename(name)
+  return header(W.MSG.RENAME) .. pack("<s1", name:sub(1, 12))
+end
+function W.read_rename(data, off)
+  return love.data.unpack("<s1", data, off)
+end
+
+function W.rename_result(ok)
+  return header(W.MSG.RENAME_RESULT) .. pack("<B", ok and 1 or 0)
+end
+function W.read_rename_result(data, off)
+  local ok = love.data.unpack("<B", data, off)
+  return ok == 1
 end
 
 -- INPUT: Client-Tick + Masken der letzten 3 Ticks + Blickrichtung ---------
