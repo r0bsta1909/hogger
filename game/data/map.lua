@@ -33,6 +33,41 @@ function M.graveyard()
   return along_path(model.p("field_to_hill_dist") + model.p("graveyard_to_field_dist"))
 end
 
+-- Friedhof von Elwynn (GDD 7.1): unantastbare Zone mit Radius 400. Der
+-- Geistheiler ist funktionslose Szenerie (Kap. 7.1), die Grabsteine machen
+-- aus der Wiese ueberhaupt erst einen Friedhof (Playtest 2026-08-16).
+M.GRAVEYARD_RADIUS = 400
+
+-- quer zur Pfadrichtung (fuer Anordnungen am Friedhof)
+local function perp()
+  return -M.path_dir.y, M.path_dir.x
+end
+
+-- Der Geistheiler steht abseits der Spawnpunkte, Richtung Zaun
+function M.spirit_healer()
+  local g = M.graveyard()
+  local px, py = perp()
+  return { x = g.x + px * 150 - M.path_dir.x * 60,
+           y = g.y + py * 150 - M.path_dir.y * 60 }
+end
+
+-- Grabsteine in zwei Reihen laengs des Pfads, plus ein paar schiefe
+function M.gravestones()
+  local g = M.graveyard()
+  local px, py = perp()
+  local list = {}
+  local function add(along, side)
+    list[#list + 1] = { x = g.x + M.path_dir.x * along + px * side,
+                        y = g.y + M.path_dir.y * along + py * side }
+  end
+  for i = -2, 2 do
+    add(i * 90 + 40, -170)
+    add(i * 90 - 10, -260)
+  end
+  add(200, 60); add(250, -60); add(-190, 120); add(-230, -120)
+  return list
+end
+
 -- Huegel-Patrouille (IDLE-Wegpunkte, GDD 9.1)
 M.patrol = {
   { x = M.hill.x - 120, y = M.hill.y - 60 },
@@ -115,7 +150,9 @@ function M.zone_at(x, y)
     local dx, dy = px - qx, py - qy
     return dx * dx + dy * dy
   end
-  if d2(x, y, g.x, g.y) < 400 * 400 then return "Friedhof von Elwynn" end
+  if d2(x, y, g.x, g.y) < M.GRAVEYARD_RADIUS ^ 2 then
+    return "Friedhof von Elwynn"
+  end
   if d2(x, y, f.x, f.y) < 300 * 300 then return "Wiederbelebungsfeld" end
   if d2(x, y, M.hill.x, M.hill.y) < (model.p("hogger_leash_radius")) ^ 2 then
     return "Hogger Hill"
@@ -127,7 +164,7 @@ end
 function M.in_graveyard(x, y)
   local g = M.graveyard()
   local dx, dy = x - g.x, y - g.y
-  return dx * dx + dy * dy < 400 * 400
+  return dx * dx + dy * dy < M.GRAVEYARD_RADIUS ^ 2
 end
 
 function M.clamp(x, y)

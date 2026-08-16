@@ -799,6 +799,19 @@ function love.mousepressed(mx, my)
     audio.play("snd_ui_click")
     app.render:set_zoom(app.render.zoom + 1) return
   end
+  -- Geistheiler anklicken: funktionslose Szenerie mit genau einer Reaktion
+  -- (GDD 7.1) — Leeroy-Zeile 26, rein lokal, kein Spielzustand
+  do
+    local sh = require("game.data.map").spirit_healer()
+    local x, y = to_screen(sh.x, sh.y)
+    if math.sqrt((x - mx) ^ 2 + (y - my) ^ 2) < 26 then
+      local lines = require("game.gamesim.lines")
+      app.render:announce("Leeroy: " .. lines[26], 4)
+      audio.play("snd_ui_click")
+      return
+    end
+  end
+
   local best, best_d = nil, 24
   for pid, p in pairs(app.view.players) do
     if pid ~= app.view.me then
