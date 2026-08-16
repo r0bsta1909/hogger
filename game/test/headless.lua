@@ -150,7 +150,17 @@ function T.run()
   ok(try_starts >= 2, "Voller Try inkl. Try-Uebergang (" .. try_starts .. " Starts)")
   ok(revives >= 4, "Clients beleben sich ueber das Netz wieder (" .. revives .. ")")
   ok(damage_evs > 50, "Kampf laeuft ueber das Netz (" .. damage_evs .. " Treffer)")
-  ok(host.state.try_nr >= 2, "Try-Zaehler tickt")
+  ok(host.state.try_nr >= 1000, "Try-Zaehler vierstellig (GDD 6)")
+  -- Leeroy vollendet seinen Loop ohne leeroy_stuck (GDD 17.7 Stufe 4)
+  local leeroy_revive, leeroy_stuck = false, false
+  for _, line in ipairs(log_lines) do
+    if line:find('"ev":"revive","src":"' .. host.state.leeroy_pid .. '"') then
+      leeroy_revive = true
+    end
+    if line:find('"ev":"leeroy_stuck"') then leeroy_stuck = true end
+  end
+  ok(leeroy_revive, "Leeroy vollendet seinen Loop (Wiederbelebung im Log)")
+  ok(not leeroy_stuck, "kein leeroy_stuck-Event")
 
   for _, c in ipairs(clients) do c:destroy() end
   host:destroy()

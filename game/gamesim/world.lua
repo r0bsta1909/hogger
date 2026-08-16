@@ -130,6 +130,15 @@ function M.add_player(state, name)
   return id
 end
 
+-- Leeroy Jenkins: Spieler-Entitaet mit KI-Eingabequelle (GDD 10);
+-- zaehlt nie in die N-Skalierung, Bedrohung halbiert
+function M.add_leeroy(state)
+  local id = M.add_player(state, "Leeroy")
+  state.players[id].is_leeroy = true
+  state.leeroy_pid = id
+  return id
+end
+
 local function reset_hogger(state)
   state.hogger = {
     id = M.HOGGER_ID,
@@ -155,7 +164,12 @@ function M.begin_try(state, evlist)
   state.try_nr = state.try_nr + 1
   state.clock = 0
   state.phase = "try"
-  state.n_scale = #state.players
+  -- N = verbundene, wiederbelebbare Spieler; Leeroy zaehlt nie mit (GDD 6/10)
+  local n = 0
+  for _, p in ipairs(state.players) do
+    if not p.is_leeroy and not p.disconnected then n = n + 1 end
+  end
+  state.n_scale = math.max(1, n)
   state.corpses = {}
   local try_seed = state.seed + state.try_nr * 1000
   state.rng = rngmod.new(try_seed)

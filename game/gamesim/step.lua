@@ -75,7 +75,8 @@ local function player_damage_hogger(state, p, amount, kind, ev)
   end
   h.hp = h.hp - amount
   p.dmg_done = p.dmg_done + amount
-  h.threat[p.id] = (h.threat[p.id] or 0) + model.threat_for(amount, false)
+  local tf = p.is_leeroy and model.p("leeroy_threat_factor") or 1 -- GDD 10.3
+  h.threat[p.id] = (h.threat[p.id] or 0) + model.threat_for(amount, false) * tf
   if h.state == "idle" then h.state = "combat" end
   -- Fress-Unterbrechung (GDD 9.2): verschiedene Spieler ODER Schadensschwelle
   if h.eating and h.eating.phase == "channel" then
@@ -105,6 +106,7 @@ local function heal_player(state, src, dst, amount, ev)
   local effective = math.min(amount, dst.max_hp - dst.hp)
   dst.hp = dst.hp + effective
   src.heal_done = src.heal_done + effective
+  src.last_heal_t = state.time -- fuer den Heal-Aggro-Kommentar (GDD 10.4)
   local h = state.hogger
   if h.state == "combat" or h.state == "eating" then
     h.threat[src.id] = (h.threat[src.id] or 0) + model.threat_for(effective, true)
@@ -404,8 +406,9 @@ local function player_tick(state, p, inp, ev)
           events.push(ev, state.tick, "class_change", p.id, class, nil, nil)
         end
         p.class = class
-        -- Rasse je Wiederbelebung regelkonform ausgewuerfelt (GDD 5), kosmetisch
-        p.race = model.roll_race(class, state.rng:next())
+        -- Rasse je Wiederbelebung regelkonform ausgewuerfelt (GDD 5), kosmetisch;
+        -- Leeroy ist fluchbedingt immer Mensch-Krieger (GDD 10.3)
+        p.race = p.is_leeroy and "mensch" or model.roll_race(class, state.rng:next())
         local race_idx = 1
         for i, r in ipairs(model.RACES) do
           if r == p.race then race_idx = i end
@@ -1007,6 +1010,11 @@ function S.step(state, inputs)
 
   state.clock = state.clock + DT
 
+  -- Leeroys Eingabequelle ist Teil der Sim (GDD 10, ADR-002)
+  if state.leeroy_pid then
+    inputs[state.leeroy_pid] = require("game.gamesim.leeroy").decide(state, ev)
+  end
+
   for _, p in ipairs(state.players) do
     player_tick(state, p, inputs[p.id], ev)
   end
@@ -1057,6 +1065,9 @@ function S.step(state, inputs)
     end_try(state, ev, false)
     world.begin_try(state, ev)
   end
+
+  -- Leeroy kommentiert die Ereignisse dieses Ticks (GDD 10.4)
+  require("game.gamesim.announcer").process(state, ev)
 
   return ev
 end

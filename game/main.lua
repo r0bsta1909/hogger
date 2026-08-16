@@ -162,6 +162,10 @@ local function process_cosmetics(view)
       app.render:toast(item .. "  (+" .. tostring(math.floor(e.val or 0)) .. " Kupfer)")
     elseif e.ev == "ding" then
       app.render:announce("DING! ... das ist nicht moeglich.", 6)
+    elseif e.ev == "leeroy_line" then
+      local lines = require("game.gamesim.lines")
+      local text = lines[tonumber(e.dst) or 0]
+      if text then app.render:announce("Leeroy: " .. text, 4) end
     end
   end
   for i = #list, 1, -1 do list[i] = nil end

@@ -34,6 +34,7 @@ function H.new(opts)
                           --           last_mask, ack, facing }
   self.by_pid = {}
   self.log = opts.log     -- function(jsonl_line) oder nil
+  world.add_leeroy(self.state) -- pid 1: der verfluchte Raid-Lead (GDD 10)
   self.local_pid = world.add_player(self.state, opts.name)
   self:_restore_char(self.local_pid)
   self.cosmetics = {}     -- Ereignisse fuer die eigene Darstellung

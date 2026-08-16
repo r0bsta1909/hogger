@@ -212,6 +212,56 @@ do
   T.ok(bad == nil, "json: kaputte Datei faellt sauber durch")
 end
 
+-- M3-3: Begehbarkeits-Grid + A* — Erreichbarkeits-Beweis (GDD 14/17.7) ------
+do
+  local grid = require("game.gamesim.grid")
+  local g, f = map.graveyard(), map.field()
+  local targets = {
+    { f.x, f.y, "Wiederbelebungsfeld" },
+    { map.hill.x, map.hill.y, "Hogger Hill" },
+  }
+  for i, sp in ipairs(map.MOB_SPAWNS) do
+    targets[#targets + 1] = { sp.x, sp.y, "Mob-Spawn " .. i }
+  end
+  for _, t in ipairs(targets) do
+    local path = grid.path(g.x, g.y, t[1], t[2])
+    T.ok(path ~= nil and #path >= 1, "grid: Friedhof erreicht " .. t[3])
+    if path then
+      local last = path[#path]
+      T.ok(world.dist(last.x, last.y, t[1], t[2]) < 1,
+        "grid: Pfad endet exakt am Ziel (" .. t[3] .. ")")
+    end
+  end
+  T.ok(grid.path(-100, -100, 50, 50) == nil, "grid: ausserhalb -> kein Pfad")
+end
+
+-- M3-3: Leeroys ewiger Loop (GDD 10) ----------------------------------------
+do
+  local st = world.new(77)
+  world.add_leeroy(st)
+  world.add_player(st, "b1")
+  world.add_player(st, "b2")
+  local evs = {}
+  world.begin_try(st, evs)
+  T.eq(st.n_scale, 2, "world: Leeroy zaehlt nie in die N-Skalierung")
+  bot.run(st, 200 * 60, evs)
+  local leeroy_revived, screamed, stuck, lines_said = false, false, 0, 0
+  for _, e in ipairs(evs) do
+    if e.ev == "revive" and e.src == st.leeroy_pid then leeroy_revived = true end
+    if e.ev == "leeroy_line" and e.dst == 1 then screamed = true end
+    if e.ev == "leeroy_line" then lines_said = lines_said + 1 end
+    if e.ev == "leeroy_stuck" then stuck = stuck + 1 end
+  end
+  T.ok(leeroy_revived, "leeroy: belebt sich als Krieger wieder")
+  T.ok(screamed, "leeroy: DER Schrei beim Anmarsch (Zeile 1)")
+  T.eq(stuck, 0, "leeroy: kein leeroy_stuck (jedes Vorkommen = Bug-Report)")
+  T.ok(lines_said >= 2, "leeroy: Announcer spricht (" .. lines_said .. " Zeilen)")
+  local lp = st.players[st.leeroy_pid]
+  T.ok(lp.class == "warrior" or lp.class == nil,
+    "leeroy: immer Krieger (fluchbedingt)")
+  T.ok(lp.race == "mensch" or lp.race == nil, "leeroy: immer Mensch")
+end
+
 -- Bot-Volllauf: Invarianten ueber 90 Simulationssekunden --------------------
 local state2 = world.new(7)
 for i = 1, 5 do world.add_player(state2, "bot" .. i) end
