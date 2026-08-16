@@ -70,6 +70,9 @@ M.params = {
   wand_range             = p(120, 50, 300, 10, "8.1"),
   melee_range            = p(40, 20, 100, 5, "8.1"),  -- im GDD nicht beziffert, siehe frage-Issue
   gcd                    = p(1.5, 0.5, 3.0, 0.1, "8.1"),
+  -- Frontbogen fuer Angriffe (GDD 8.1, Playtest 2026-08-16): das Ziel muss
+  -- vor einem liegen, Wegdrehen bricht laufende Zauber ab. 360 = Regel aus.
+  facing_arc_deg         = p(180, 60, 360, 10, "8.1"),
   hp_plate               = p(80, 40, 160, 5, "8.1"),
   hp_leather             = p(65, 30, 130, 5, "8.1"),
   hp_cloth               = p(50, 25, 100, 5, "8.1"),

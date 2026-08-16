@@ -6,6 +6,7 @@
 local model = require("sim.model")
 local map = require("game.data.map")
 local world = require("game.gamesim.world")
+local input = require("game.gamesim.input")
 local assets = require("game.assets")
 
 local R = {}
@@ -715,6 +716,28 @@ function R:draw(view, ui)
       love.graphics.setColor(0.62, 0.58, 0.46, 1)
       love.graphics.print(auto, ox - font:getWidth(auto) / 2,
         oy + ring_r - BR - 22)
+    end
+  end
+
+  -- Frontbogen-Warnung (GDD 8.1): ohne sie sucht man ewig nach dem Grund,
+  -- warum die Zahlen ausbleiben (Issue #32)
+  if me and me.alive and me.class then
+    local t = me.target
+    local tx, ty
+    if t == 0 and view.hogger.state ~= "reset" then
+      tx, ty = view.hogger.x, view.hogger.y
+    elseif view.players[t] and view.players[t].alive then
+      tx, ty = view.players[t].x, view.players[t].y
+    elseif view.npcs and view.npcs[t] then
+      tx, ty = view.npcs[t].x, view.npcs[t].y
+    end
+    if tx and not input.facing_ok(me.facing, view.me_x, view.me_y, tx, ty,
+                                  model.p("facing_arc_deg")) then
+      local font = love.graphics.getFont()
+      local msg = "Ziel ist nicht vor dir."
+      love.graphics.setColor(0.95, 0.3, 0.25, 0.95)
+      love.graphics.print(msg, ox - font:getWidth(msg) / 2 * 1.2,
+        oy + radius * 0.62, 0, 1.2, 1.2)
     end
   end
 

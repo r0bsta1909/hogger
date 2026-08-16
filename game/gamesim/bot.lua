@@ -33,10 +33,11 @@ function M.decide(state, pid)
     -- zum zugeteilten Klassenicon laufen und stehenbleiben (Channel)
     local slot = ((pid - 1) % #world.CLASSES) + 1
     local ix, iy = world.class_icon_pos(slot)
+    local face = input.facing_towards(p.x, p.y, ix, iy)
     if world.dist(p.x, p.y, ix, iy) <= 30 then
-      return { mask = 0, facing = 0 }
+      return { mask = 0, facing = face }
     end
-    return { mask = move_mask_towards(p.x, p.y, ix, iy, 8), facing = 0 }
+    return { mask = move_mask_towards(p.x, p.y, ix, iy, 8), facing = face }
   end
 
   -- lebend: auf Klassenreichweite an Hogger heran, dann Faehigkeiten
@@ -75,7 +76,9 @@ function M.decide(state, pid)
     -- WoW-Spieler huepfen permanent (GDD 4.1)
     if state.tick % 90 == 45 then mask = mask + input.JUMP end
   end
-  return { mask = mask, facing = (pid * 37) % 256 }
+  -- Blickrichtung immer aufs Ziel: seit der Frontbogen-Regel (GDD 8.1)
+  -- trifft nur, wer sein Ziel ansieht
+  return { mask = mask, facing = input.facing_towards(p.x, p.y, h.x, h.y) }
 end
 
 -- Bequemer Runner fuer Tests: laeuft n Ticks mit Bots, sammelt Events

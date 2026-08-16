@@ -214,9 +214,14 @@ end
 -- ---------------------------------------------------------------------------
 -- Faehigkeiten (GDD 8.2) als Daten: je Klasse bis zu 3 Slots (Tasten 1-3)
 -- ---------------------------------------------------------------------------
-local function enemy_in_range(state, p, range)
+-- Reichweite UND Blickrichtung: wer sich wegdreht, trifft nicht mehr
+-- (GDD 8.1, Playtest 2026-08-16 / Issue #32)
+local function enemy_in_reach(state, p, range)
   local enemy = current_enemy(state, p)
-  return enemy ~= nil and world.dist(p.x, p.y, enemy.x, enemy.y) <= range
+  if not enemy then return false end
+  if world.dist(p.x, p.y, enemy.x, enemy.y) > range then return false end
+  return input.facing_ok(p.facing, p.x, p.y, enemy.x, enemy.y,
+    model.p("facing_arc_deg"))
 end
 
 local function player_damage_npc(state, p, npc, amount, kind, ev)
@@ -375,7 +380,7 @@ local function try_ability(state, p, slot, ev)
   local cost = spec.cost and model.p(spec.cost) or 0
   if p.resource < cost then return end
   if spec.target == "enemy" and spec.range
-     and not enemy_in_range(state, p, model.p(spec.range)) then return end
+     and not enemy_in_reach(state, p, model.p(spec.range)) then return end
   if p.stealth and spec.id ~= "stealth" then
     set_stealth(state, p, false) -- bricht beim Angriff (GDD 8.2)
   end
@@ -400,7 +405,7 @@ local function finish_cast(state, p, ev)
   local cost = spec.cost and model.p(spec.cost) or 0
   if p.resource < cost then return end
   if spec.target == "enemy" and spec.range
-     and not enemy_in_range(state, p, model.p(spec.range)) then return end
+     and not enemy_in_reach(state, p, model.p(spec.range)) then return end
   local target
   if spec.target == "ally" then
     target = c.target and state.players[c.target] or nil
@@ -528,7 +533,16 @@ local function player_tick(state, p, inp, ev)
   if p.gcd > 0 then p.gcd = p.gcd - DT end
   if p.raptor_cd > 0 then p.raptor_cd = p.raptor_cd - DT end
 
-  -- Cast abschliessen
+  -- Cast abschliessen; Wegdrehen bricht ihn ab wie Bewegung (GDD 8.1,
+  -- Issue #32) — das Ziel muss die ganze Zeit vor einem bleiben
+  if p.cast then
+    local spec = ABILITIES[p.class] and ABILITIES[p.class][p.cast.slot]
+    local enemy = spec and spec.target == "enemy" and current_enemy(state, p)
+    if enemy and not input.facing_ok(p.facing, p.x, p.y, enemy.x, enemy.y,
+                                     model.p("facing_arc_deg")) then
+      p.cast = nil
+    end
+  end
   if p.cast then
     p.cast.t_left = p.cast.t_left - DT
     if p.cast.t_left <= 0 then finish_cast(state, p, ev) end
@@ -554,7 +568,7 @@ local function player_tick(state, p, inp, ev)
         dmg = dmg + model.p("paladin_seal_bonus_dmg")
       end
     end
-    if enemy_in_range(state, p, range) then
+    if enemy_in_reach(state, p, range) then
       p.next_auto = model.p("autohit_interval")
       if attack ~= "shot" and attack ~= "wand" and p.seal_hits > 0 then
         p.seal_hits = p.seal_hits - 1

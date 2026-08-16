@@ -151,7 +151,7 @@ local function local_input_frame()
   local w, h = love.graphics.getDimensions()
   local mx, my = love.mouse.getPosition()
   local angle = math.atan2(my - h / 2, mx - w / 2) + math.pi / 2
-  local facing = math.floor((angle % (2 * math.pi)) / (2 * math.pi) * 256) % 256
+  local facing = input.facing_from_angle(angle)
   return { mask = mask, facing = facing }, angle
 end
 

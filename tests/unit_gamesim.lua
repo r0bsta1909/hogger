@@ -306,3 +306,51 @@ for _, class_id in ipairs(model.CLASS_IDS) do
   end
 end
 T.ok(step.ICON_RADIUS > 0, "Draufstellen-Radius fuer die UI verfuegbar")
+
+-- Frontbogen (GDD 8.1, Issue #32): das Ziel muss vor einem liegen ----------
+do
+  -- Winkelrechnung: 0 = Norden, im Uhrzeigersinn
+  T.eq(input.facing_towards(0, 0, 0, -100), 0, "facing: Norden ist 0")
+  T.eq(input.facing_towards(0, 0, 100, 0), 64, "facing: Osten ist ein Viertel")
+  T.eq(input.facing_towards(0, 0, 0, 100), 128, "facing: Sueden ist die Haelfte")
+  T.ok(input.facing_ok(0, 0, 0, 0, -100, 180), "facing: direkt voraus zaehlt")
+  T.ok(not input.facing_ok(0, 0, 0, 0, 100, 180), "facing: genau hinten zaehlt nicht")
+  T.ok(input.facing_ok(0, 0, 0, 100, 0, 180), "facing: 90 Grad liegt im 180er-Bogen")
+  T.ok(not input.facing_ok(0, 0, 0, 100, 0, 90), "facing: 90 Grad faellt aus dem 90er-Bogen")
+  T.ok(input.facing_ok(0, 0, 0, 0, 100, 360), "facing: 360 schaltet die Regel ab")
+
+  -- Autohit: derselbe Aufbau, nur die Blickrichtung entscheidet
+  local function uptime(facing)
+    local st = world.new(7)
+    world.add_player(st, "a")
+    local q = st.players[1]
+    world.begin_try(st, {})
+    q.alive, q.ghost = true, false
+    q.class, q.race = "warrior", "mensch"
+    q.max_hp, q.hp = model.hp_for_class("warrior"), model.hp_for_class("warrior")
+    q.x, q.y = st.hogger.x, st.hogger.y - 20 -- Hogger liegt genau suedlich
+    local hp0 = st.hogger.hp
+    for _ = 1, 300 do
+      st.players[1].x, st.players[1].y = st.hogger.x, st.hogger.y - 20
+      step.step(st, { [1] = { mask = 0, facing = facing } })
+    end
+    return hp0 - st.hogger.hp
+  end
+  T.ok(uptime(128) > 0, "facing: zum Ziel gedreht trifft der Autohit")
+  T.eq(uptime(0), 0, "facing: weggedreht geht kein Angriff durch")
+
+  -- Wegdrehen bricht einen laufenden Cast ab
+  local st = world.new(9)
+  world.add_player(st, "m")
+  world.begin_try(st, {})
+  local q = st.players[1]
+  q.alive, q.ghost = true, false
+  q.class, q.race = "mage", "mensch"
+  q.max_hp, q.hp = model.hp_for_class("mage"), model.hp_for_class("mage")
+  q.resource = model.p("mana_max")
+  q.x, q.y = st.hogger.x, st.hogger.y - 60
+  step.step(st, { [1] = { mask = input.AB1, facing = 128 } })
+  T.ok(q.cast ~= nil, "facing: Cast startet mit Ziel im Blick")
+  step.step(st, { [1] = { mask = 0, facing = 0 } })
+  T.eq(q.cast, nil, "facing: Wegdrehen bricht den laufenden Cast ab")
+end
