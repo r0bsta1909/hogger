@@ -11,7 +11,7 @@ W.PROTO = 1
 W.MSG = {
   HELLO = 1, WELCOME = 2, INPUT = 3, SNAPSHOT = 4, EVENTS = 5,
   SET_TARGET = 6, PARAM_SET = 7, ZOOM = 8, ROSTER = 9,
-  RENAME = 10, RENAME_RESULT = 11,
+  RENAME = 10, RENAME_RESULT = 11, STATS = 12,
 }
 
 -- Ereignistypen fuers Netz (Kosmetik-Feed; das JSONL-Log bleibt Host-Sache)
@@ -150,6 +150,56 @@ function W.param_set(key, value)
 end
 function W.read_param_set(data, off)
   return love.data.unpack("<s1d", data, off)
+end
+
+-- STATS: fertig formatierte Statistik-Tafel am Try-Ende (GDD 11) ----------
+-- Zeilen als Strings — der Client rendert nur; ein Format, eine Wahrheit
+local function pack_rows(rows)
+  local parts = { pack("<B", #rows) }
+  for _, r in ipairs(rows) do
+    parts[#parts + 1] = pack("<s1s1", r[1]:sub(1, 250), r[2]:sub(1, 250))
+  end
+  return table.concat(parts)
+end
+local function read_rows(data, off)
+  local count
+  count, off = love.data.unpack("<B", data, off)
+  local rows = {}
+  for _ = 1, count do
+    local a, b
+    a, b, off = love.data.unpack("<s1s1", data, off)
+    rows[#rows + 1] = { a, b }
+  end
+  return rows, off
+end
+
+function W.stats(board)
+  local parts = { header(W.MSG.STATS),
+                  pack("<s1s1", board.header:sub(1, 250),
+                       (board.big or ""):sub(1, 250)),
+                  pack_rows(board.hogger), pack_rows(board.raid) }
+  parts[#parts + 1] = pack("<B", #board.titles)
+  for _, t in ipairs(board.titles) do
+    parts[#parts + 1] = pack("<s1", t:sub(1, 250))
+  end
+  return table.concat(parts)
+end
+function W.read_stats(data, off)
+  local board = {}
+  local big
+  board.header, big, off = love.data.unpack("<s1s1", data, off)
+  board.big = big ~= "" and big or nil
+  board.hogger, off = read_rows(data, off)
+  board.raid, off = read_rows(data, off)
+  local count
+  count, off = love.data.unpack("<B", data, off)
+  board.titles = {}
+  for _ = 1, count do
+    local t
+    t, off = love.data.unpack("<s1", data, off)
+    board.titles[#board.titles + 1] = t
+  end
+  return board
 end
 
 -- EVENTS: kompakter Kosmetik-Feed ----------------------------------------

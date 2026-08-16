@@ -26,6 +26,31 @@ end
 
 local CAUSE = require("game.gamesim.killcam").CAUSE
 
+-- Statistik-Tafel (GDD 11): Zaehler je Try; Spieler-Eintrag lazy angelegt
+local function stat_p(state, pid)
+  local s = state.stats
+  if not s then return nil end
+  local e = s.players[pid]
+  if not e then
+    e = { dmg = 0, deaths = 0, ghost_t = 0, eaten = 0, heal_aggro = 0,
+          interrupts = 0, mob_kills = 0 }
+    s.players[pid] = e
+  end
+  return e
+end
+
+-- Unterbrechung fuer die Statistik verbuchen (Hogger + beteiligte Spieler);
+-- reine Zaehler, Reihenfolge der hitters-Menge ist ergebnisneutral
+local function note_interrupt(state, eating)
+  local s = state.stats
+  if not s then return end
+  s.hogger.interrupts = s.hogger.interrupts + 1
+  for pid in pairs(eating.hitters) do
+    local sp = stat_p(state, pid)
+    sp.interrupts = sp.interrupts + 1
+  end
+end
+
 -- cause: Todesursache fuer die Killcam (killcam.CAUSE, GDD Kap. 11)
 local function kill_player(state, p, ev, was_crit, cause)
   p.alive = false
@@ -45,7 +70,22 @@ local function kill_player(state, p, ev, was_crit, cause)
   p.deaths = p.deaths + 1
   p.dead_until = model.respawn_timer(math.max(1, state.n_scale))
   state.hogger.threat[p.id] = nil -- Bedrohung wird beim Tod geloescht (GDD 9.4)
-  state.corpses[#state.corpses + 1] = { x = p.x, y = p.y }
+  -- owner: "Am haeufigsten gefressen worden" braucht den Leichen-Besitzer
+  state.corpses[#state.corpses + 1] = { x = p.x, y = p.y, owner = p.id }
+  local s = state.stats
+  if s then
+    local sp = stat_p(state, p.id)
+    sp.deaths = sp.deaths + 1
+    if not s.first_death then s.first_death = p.id end
+    if cause and cause <= 4 then -- Hogger-Ursachen (Autohit/Charge/Slice/DoT)
+      s.hogger.kills = s.hogger.kills + 1
+      if was_crit then s.hogger.crit_kills = s.hogger.crit_kills + 1 end
+    end
+    if cause == CAUSE.boar then s.boar_victim = p.name end
+    if state.time - (p.last_heal_t or -1000) < 5 then
+      sp.heal_aggro = sp.heal_aggro + 1 -- Heal-Aggro-Tod (GDD 11 / 9.4)
+    end
+  end
   events.push(ev, state.tick, "death", p.id, nil, cause, was_crit or nil)
   if was_crit then
     events.push(ev, state.tick, "crit_kill", "hogger", p.id, nil, true)
@@ -57,6 +97,9 @@ local function hogger_damage_player(state, p, amount, kind, ev)
   local crit = crit_roll(state, "hogger", kind)
   if crit then amount = amount * model.p("crit_mult_hogger") end
   p.hp = p.hp - amount
+  if state.stats then
+    state.stats.hogger.dmg = state.stats.hogger.dmg + amount
+  end
   if kind == "autohit" and p.class == "warrior" then
     p.resource = math.min(model.p("rage_max"), p.resource + model.p("rage_per_hit_taken"))
   end
@@ -78,6 +121,8 @@ local function player_damage_hogger(state, p, amount, kind, ev)
   end
   h.hp = h.hp - amount
   p.dmg_done = p.dmg_done + amount
+  local sp = stat_p(state, p.id)
+  if sp then sp.dmg = sp.dmg + amount end
   local tf = p.is_leeroy and model.p("leeroy_threat_factor") or 1 -- GDD 10.3
   h.threat[p.id] = (h.threat[p.id] or 0) + model.threat_for(amount, false) * tf
   if h.state == "idle" then h.state = "combat" end
@@ -93,6 +138,7 @@ local function player_damage_hogger(state, p, amount, kind, ev)
        or e.dmg_accum >= model.eat_dmg_threshold(state.n_scale) then
       h.eating = nil
       h.eat_cd = model.p("eat_cd")
+      note_interrupt(state, e)
       events.push(ev, state.tick, "eat_interrupt", "hogger", nil, e.hitter_count, nil)
     end
   end
@@ -148,6 +194,8 @@ local function mob_died(state, npc, killer, ev)
     events.push(ev, state.tick, "add_death", npc.id, nil, nil, nil)
   elseif MOB_TYPES[npc.kind] then
     events.push(ev, state.tick, "mob_kill", killer.id, npc.kind, nil, nil)
+    local sp = stat_p(state, killer.id)
+    if sp then sp.mob_kills = sp.mob_kills + 1 end
     give_xp(state, killer, ev)
     -- Loot-Roll: sanktionierter Zufall (GDD 13.2), fester Kupferwert je Typ
     local item_idx = state.rng:range(1, #loot_pool)
@@ -177,6 +225,8 @@ local function player_damage_npc(state, p, npc, amount, kind, ev)
   if crit then amount = amount * model.p("crit_mult_player") end
   npc.hp = npc.hp - amount
   p.dmg_done = p.dmg_done + amount
+  local sp = stat_p(state, p.id)
+  if sp then sp.dmg = sp.dmg + amount end
   if p.stealth then p.stealth = false end
   if MOB_TYPES[npc.kind] and npc.state ~= "flee" then
     npc.state = "combat"
@@ -389,6 +439,8 @@ local function player_tick(state, p, inp, ev)
   if p.jump_t > 0 then p.jump_t = p.jump_t - DT end
 
   if p.ghost then
+    local spg = stat_p(state, p.id) -- "Meiste Zeit als Geist" (GDD 11)
+    if spg then spg.ghost_t = spg.ghost_t + DT end
     local speed = model.p("move_speed_ghost")
     p.x, p.y = map.clamp(p.x + dx * speed * DT, p.y + dy * speed * DT)
     -- Wiederbelebung: auf Klassenicon stehen, 2-s-Channel (GDD 5)
@@ -680,6 +732,8 @@ local function npc_tick(state, npc, ev)
     npc.next_auto = model.p("imp_interval")
     local dmg = model.p("imp_dmg")
     h.hp = h.hp - dmg
+    local sp = stat_p(state, owner.id) -- Wichtel-Schaden zaehlt dem Meister
+    if sp then sp.dmg = sp.dmg + dmg end
     h.threat[npc.id] = (h.threat[npc.id] or 0) + dmg
     if h.state == "idle" then h.state = "combat" end
     -- Fress-Schwelle: Schaden zaehlt, der Wichtel ist aber kein
@@ -690,6 +744,7 @@ local function npc_tick(state, npc, ev)
       if e.dmg_accum >= model.eat_dmg_threshold(state.n_scale) then
         h.eating = nil
         h.eat_cd = model.p("eat_cd")
+        note_interrupt(state, e)
         events.push(ev, state.tick, "eat_interrupt", "hogger", nil, e.hitter_count, nil)
       end
     end
@@ -813,7 +868,11 @@ local function hogger_tick(state, ev)
       end
       return
     else
+      local before = h.hp
       h.hp = math.min(h.max_hp, h.hp + model.eat_heal_per_second(state.n_scale) * DT)
+      if state.stats then
+        state.stats.hogger.healed = state.stats.hogger.healed + (h.hp - before)
+      end
       e.t_left = e.t_left - DT
       -- eat_tick je voller Sekunde Kanal (GDD 17.3)
       if model.p("eat_channel_duration") - e.t_left >= e.heal_tick then
@@ -822,6 +881,13 @@ local function hogger_tick(state, ev)
                     model.eat_heal_per_second(state.n_scale), nil)
       end
       if e.t_left <= 0 then
+        if state.stats then
+          state.stats.hogger.eaten = state.stats.hogger.eaten + 1
+          if c.owner then -- "Am haeufigsten gefressen worden" (GDD 11)
+            local sp = stat_p(state, c.owner)
+            sp.eaten = sp.eaten + 1
+          end
+        end
         table.remove(state.corpses, e.corpse)
         h.eating = nil
         h.eat_cd = model.p("eat_cd")
@@ -846,6 +912,9 @@ local function hogger_tick(state, ev)
       local ky = (target.y - oy) / d * model.p("hogger_charge_knockback")
       target.x, target.y = map.clamp(target.x + kx, target.y + ky)
       if target.cast then target.cast = nil end
+      if state.stats then
+        state.stats.hogger.charges = state.stats.hogger.charges + 1
+      end
       events.push(ev, state.tick, "charge", "hogger", target.id, nil, nil)
       hogger_damage_player(state, target, model.p("hogger_charge_dmg"), "charge", ev)
       h.charge = nil
@@ -989,6 +1058,15 @@ local function end_try(state, ev, won)
     jumps[#jumps + 1] = { p.id, p.jumps }
   end
   e.jumps = jumps
+  -- Statistik-Tafel (GDD 11): VOR begin_try bauen (das setzt die Zaehler
+  -- zurueck); haengt als e.board am Event, wird nicht ins JSONL serialisiert
+  if state.stats then
+    local board = require("game.gamesim.statboard").build(state, won)
+    for _, t in ipairs(board.title_awards) do
+      state.players[t.pid].titel = t.title -- persistiert via session.json
+    end
+    e.board = board
+  end
 end
 
 -- ---------------------------------------------------------------------------

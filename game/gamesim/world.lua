@@ -45,6 +45,7 @@ function M.new(seed)
     mob_respawn = {},   -- Spawn-Slot -> Restzeit bis Respawn (GDD 7.2: 120 s)
     hogger = nil,
     rng = nil,
+    stats = nil,        -- je Try, gesetzt in begin_try (GDD 11)
   }
   return state
 end
@@ -171,6 +172,15 @@ function M.begin_try(state, evlist)
   end
   state.n_scale = math.max(1, n)
   state.corpses = {}
+  -- Statistik-Tafel (GDD 11): Zaehler je Try, gefuellt in step.lua
+  state.stats = {
+    hogger = { dmg = 0, kills = 0, crit_kills = 0, eaten = 0, healed = 0,
+               interrupts = 0, charges = 0 },
+    players = {},        -- pid -> { dmg, deaths, ghost_t, eaten, heal_aggro,
+                         --          interrupts, mob_kills }
+    first_death = nil,   -- pid des ersten Todes im Try
+    boar_victim = nil,   -- Name: "Von einem Wildschwein getoetet" (GDD 7.2)
+  }
   local try_seed = state.seed + state.try_nr * 1000
   state.rng = rngmod.new(try_seed)
   reset_hogger(state)

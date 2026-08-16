@@ -319,6 +319,16 @@ function love.update(dt)
   app.floating:update(dt)
   app.render:update(dt)
 
+  -- Statistik-Tafel am Try-Ende (GDD 11): Host baut, alle zeigen
+  if app.net and app.net.stats_board then
+    app.stats = require("game.ui.stats").new(app.net.stats_board)
+    app.net.stats_board = nil
+  end
+  if app.stats then
+    app.stats:update(dt)
+    if not app.stats.visible then app.stats = nil end
+  end
+
   -- Leeroy-Intro (GDD Kap. 5): startet nach der Aufblende (Boot fertig);
   -- Rejoin bekommt statt des Intros nur "Ah. Wieder da." (GDD 5, Punkt 4)
   if view and (not app.boot or not app.boot:active()) then
@@ -399,6 +409,7 @@ function love.draw()
     })
     app.floating:draw(to_screen)
     if app.intro then app.intro:draw(app.view, bw, bh) end
+    if app.stats then app.stats:draw() end
     if app.panel then app.panel:draw() end
   end
   if app.boot and app.boot:active() and not app.boot:covers_screen() then
@@ -464,6 +475,7 @@ function love.keypressed(key)
     app.intro:keypressed(key) -- Intro schluckt alles (Eingaben gesperrt)
     return
   end
+  if app.stats and app.stats:keypressed(key) then return end
   if app.mode == "discover" then return end
   if app.panel and app.panel:keypressed(key) then return end
   if key == "f10" and app.panel then
@@ -513,6 +525,7 @@ function love.mousepressed(mx, my)
     app.intro:mousepressed() -- Dialog-Panels weiterklicken (GDD 5)
     return
   end
+  if app.stats and app.stats:mousepressed(mx, my) then return end
   if not app.view then return end
   local w, h = love.graphics.getDimensions()
   local radius = h / 2 - 8
