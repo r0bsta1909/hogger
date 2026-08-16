@@ -487,3 +487,111 @@ do
   for _ = 1, grace_ticks do step.step(st2, { [pid2] = { mask = 0, facing = 0 } }) end
   T.eq(q.ghost, true, "Freigabe: Nachfrist gibt AFK-Spieler automatisch frei")
 end
+
+-- Auren sterben mit dem Spieler (Issue #71) und Wut kommt auch von Mobs
+-- (Issue #72). Beides wird gegen die echten Regeln geprueft, nicht gegen
+-- Sonderfaelle je Gegnertyp.
+do
+  local st = world.new(31)
+  local pid = world.add_player(st, "kr", { quest_done = true })
+  world.begin_try(st, {})
+  local p = st.players[pid]
+  p.alive, p.ghost, p.class, p.race = true, false, "warrior", "mensch"
+  p.max_hp, p.hp = model.hp_for_class("warrior"), model.hp_for_class("warrior")
+  p.resource = 0
+
+  -- ein Wildschwein neben den Spieler setzen und draufschlagen
+  p.x, p.y = map.MOB_SPAWNS[1].x, map.MOB_SPAWNS[1].y
+  local boar
+  for id = world.NPC_ID_BASE, 250 do
+    local n = st.npcs[id]
+    if n and n.kind == "boar" then boar = n break end
+  end
+  T.ok(boar ~= nil, "Mob: Wildschwein vorhanden")
+  boar.x, boar.y = p.x + 10, p.y
+  p.target = boar.id
+  p.facing = input.facing_towards(p.x, p.y, boar.x, boar.y)
+  local hp0 = boar.hp
+  for _ = 1, 200 do
+    p.x, p.y = map.MOB_SPAWNS[1].x, map.MOB_SPAWNS[1].y
+    boar.x, boar.y = p.x + 10, p.y
+    step.step(st, { [pid] = { mask = 0, facing = p.facing } })
+    if p.resource > 0 then break end
+  end
+  T.ok(boar.hp < hp0, "Mob: der Krieger trifft das Wildschwein")
+  T.ok(p.resource > 0, "Wut: ausgeteilter Autohit auf einen Mob macht Wut")
+
+  -- erlittener Mob-Schaden macht ebenfalls Wut
+  local before = p.resource
+  p.resource = 0
+  boar.state, boar.target_pid, boar.next_auto = "combat", pid, 0
+  for _ = 1, 300 do
+    p.x, p.y = map.MOB_SPAWNS[1].x, map.MOB_SPAWNS[1].y
+    boar.x, boar.y = p.x + 10, p.y
+    boar.state, boar.target_pid = "combat", pid
+    p.facing = 0 -- weggedreht: er selbst trifft nicht, kassiert aber
+    step.step(st, { [pid] = { mask = 0, facing = 0 } })
+    if p.resource > 0 then break end
+  end
+  T.ok(before > 0, "Wut: Wert war vorher aufgebaut")
+  T.ok(p.resource > 0, "Wut: erlittener Mob-Treffer macht ebenfalls Wut")
+
+  -- Schlachtruf wirkt auch gegen Mobs
+  local st2 = world.new(32)
+  local pid2 = world.add_player(st2, "kr2", { quest_done = true })
+  world.begin_try(st2, {})
+  local q = st2.players[pid2]
+  q.alive, q.ghost, q.class = true, false, "warrior"
+  q.max_hp, q.hp = model.hp_for_class("warrior"), model.hp_for_class("warrior")
+  -- genau EIN Autohit je Messung: Ziel zuruecksetzen, Schlagtimer auf 0,
+  -- ein Tick — sonst vergleicht man unterschiedlich viele Treffer
+  local function hit_boar(with_shout)
+    local target
+    for id = world.NPC_ID_BASE, 250 do
+      local n = st2.npcs[id]
+      if n and n.kind == "boar" then target = n break end
+    end
+    target.hp = 999
+    target.state = "idle"
+    q.x, q.y = target.x + 10, target.y
+    q.target = target.id
+    q.next_auto = 0
+    q.shout_until = with_shout and (st2.time + 10) or 0
+    local before_hp = target.hp
+    local face = input.facing_towards(q.x, q.y, target.x, target.y)
+    step.step(st2, { [pid2] = { mask = 0, facing = face } })
+    return before_hp - target.hp
+  end
+  -- Krits wuerden den Vergleich verrauschen: fuer die Messung abschalten
+  local crit_backup = model.params.crit_chance_player.wert
+  model.params.crit_chance_player.wert = 0
+  local ohne = hit_boar(false)
+  local mit = hit_boar(true)
+  model.params.crit_chance_player.wert = crit_backup
+  T.ok(ohne > 0, "Schlachtruf-Vergleich: ohne Buff trifft er (" .. ohne .. ")")
+  T.ok(mit > ohne, "Schlachtruf wirkt auch gegen Mobs (" .. mit .. " > " .. ohne .. ")")
+
+  -- Tod raeumt Buffs und Debuffs ab
+  local st3 = world.new(33)
+  local pid3 = world.add_player(st3, "opfer2", { quest_done = true })
+  world.begin_try(st3, {})
+  local r = st3.players[pid3]
+  r.alive, r.ghost, r.class = true, false, "warrior"
+  r.max_hp, r.hp = model.hp_for_class("warrior"), 1
+  r.shout_until = st3.time + 30
+  r.bleed_t, r.bleed_next = 6, 1
+  r.stealth, r.frost_armor, r.seal_hits, r.cp = true, true, 3, 4
+  r.x, r.y = map.hill.x, map.hill.y
+  local guard = 0
+  while r.alive and guard < 60 * 60 do
+    step.step(st3, { [pid3] = { mask = 0, facing = 128 } })
+    guard = guard + 1
+  end
+  T.ok(not r.alive, "Tod: gefallen")
+  T.ok(r.shout_until <= st3.time, "Tod: Schlachtruf ist weg")
+  T.eq(r.bleed_t, 0, "Tod: Blutung ist weg")
+  T.eq(r.stealth, false, "Tod: Verstohlenheit ist weg")
+  T.eq(r.frost_armor, false, "Tod: Frostruestung ist weg")
+  T.eq(r.seal_hits, 0, "Tod: Siegel-Ladungen sind weg")
+  T.eq(r.cp, 0, "Tod: Combopunkte sind weg")
+end
