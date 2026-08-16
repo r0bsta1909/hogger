@@ -116,6 +116,102 @@ do
     "step: Wichtel zieht kurz Aggro")
 end
 
+-- M3-2: Mob-Spawns folgen den GDD-7.2-Platzierungsregeln --------------------
+for i, sp in ipairs(map.MOB_SPAWNS) do
+  T.ok(map.dist_to_path(sp.x, sp.y) > 250,
+    "map: Spawn " .. i .. " nicht auf der Friedhof-Huegel-Achse")
+  T.ok(world.dist(sp.x, sp.y, map.hill.x, map.hill.y) > model.p("hogger_leash_radius"),
+    "map: Spawn " .. i .. " ausserhalb der Leash-Zone")
+  T.ok(sp.x > 0 and sp.x < map.WIDTH and sp.y > 0 and sp.y < map.HEIGHT,
+    "map: Spawn " .. i .. " in Weltgrenzen")
+  if sp.typ == "murloc" then
+    T.ok(sp.y > map.RIVER_Y - 120, "map: Murloc " .. i .. " am Fluss")
+  end
+end
+
+-- M3-2: Mob toeten -> XP + Loot; Aufheben -> Zaehler (GDD 7.3) --------------
+do
+  local st = world.new(9)
+  world.add_player(st, "jaeger")
+  world.begin_try(st, {})
+  local mobs = 0
+  for id = 100, 250 do
+    if st.npcs[id] and st.npcs[id].slot then mobs = mobs + 1 end
+  end
+  T.eq(mobs, model.mob_slots(1), "step: aktive Mob-Slots nach Formel 7.2")
+
+  local p = st.players[1]
+  local ix, iy = world.class_icon_pos(1) -- Krieger
+  p.x, p.y = ix, iy
+  for _ = 1, math.ceil(2.2 / model.TICK_DT) do step.step(st, {}) end
+  T.ok(p.alive, "step: Testspieler lebt")
+  T.eq(st.npcs[st.mob_by_slot[1]].kind, "boar", "step: Slot 1 ist ein Wildschwein")
+  -- Kill-Test am passiven Kobold (Slot 3) — das Wildschwein wuerde fliehen
+  local kob_id = st.mob_by_slot[3]
+  local kob = st.npcs[kob_id]
+  T.ok(kob ~= nil and kob.kind == "kobold", "step: Slot 3 ist ein Kobold")
+  p.x, p.y = kob.x + 20, kob.y
+  world.set_target(st, 1, kob_id, {})
+  local xp_before = p.xp
+  local evs = {}
+  for _ = 1, math.ceil(60 / model.TICK_DT) do
+    local e = step.step(st, {})
+    for _, x in ipairs(e) do evs[#evs + 1] = x end
+    if not st.npcs[kob_id] then break end
+  end
+  T.ok(st.npcs[kob_id] == nil, "step: Kobold besiegt")
+  T.eq(p.xp, xp_before + model.p("xp_per_mob"), "step: 1 XP pro Mob-Todesstoss")
+  T.ok(st.mob_respawn[3] ~= nil, "step: Respawn-Timer laeuft (120 s)")
+  local saw_kill, saw_xp = false, false
+  for _, e in ipairs(evs) do
+    if e.ev == "mob_kill" and e.dst == "kobold" then saw_kill = true end
+    if e.ev == "xp_gain" then saw_xp = true end
+  end
+  T.ok(saw_kill and saw_xp, "step: mob_kill- und xp_gain-Events")
+  -- Loot: der Killer steht auf der Leiche (Nahkampf 40 > Aufheben 30) und
+  -- sammelt im Folgetick automatisch ein — Zaehler statt Inventar (GDD 7.3)
+  step.step(st, {})
+  local saw_pickup = false
+  for _, e in ipairs(evs) do
+    if e.ev == "loot_pickup" then saw_pickup = true end
+  end
+  local loot_left = false
+  for id = 1, 60 do if st.loot[id] then loot_left = true end end
+  T.ok(not loot_left, "step: Loot sofort eingesammelt")
+  T.eq(p.kupfer, model.mobs.kobold.kupfer, "step: Kupfer nach festem Typwert (7.3)")
+  T.eq(p.plunder, 1, "step: Plunder-Zaehler")
+  T.ok(saw_pickup, "step: loot_pickup-Event")
+end
+
+-- M3-2: Gnoll-Welpen am Huegelfuss (floor(N/8), GDD 9.3) --------------------
+do
+  local st = world.new(11)
+  for i = 1, 8 do world.add_player(st, "b" .. i) end
+  world.begin_try(st, {})
+  local adds = 0
+  for id = 100, 250 do
+    if st.npcs[id] and st.npcs[id].kind == "add" then adds = adds + 1 end
+  end
+  T.eq(adds, model.adds(8), "step: Add-Anzahl nach Formel")
+end
+
+-- M3-2: JSON-Roundtrip fuer session.json ------------------------------------
+do
+  local json = require("game.json")
+  local data = { try_nr = 4711, chars = { rob = { xp = 42, kupfer = 7,
+    plunder = 3, ding = false }, ["gast 2"] = { xp = 0 } }, liste = { 1, 2.5, "x" } }
+  local enc = json.encode(data)
+  local dec, err = json.decode(enc)
+  T.ok(dec ~= nil, "json: dekodierbar (" .. tostring(err) .. ")")
+  T.eq(dec.try_nr, 4711, "json: Zahl")
+  T.eq(dec.chars.rob.xp, 42, "json: verschachtelt")
+  T.eq(dec.chars["gast 2"].xp, 0, "json: Schluessel mit Leerzeichen")
+  T.eq(dec.liste[2], 2.5, "json: Liste")
+  T.eq(json.encode(dec), enc, "json: kanonisch (Encode stabil)")
+  local bad = json.decode('{"a": [1, 2')
+  T.ok(bad == nil, "json: kaputte Datei faellt sauber durch")
+end
+
 -- Bot-Volllauf: Invarianten ueber 90 Simulationssekunden --------------------
 local state2 = world.new(7)
 for i = 1, 5 do world.add_player(state2, "bot" .. i) end

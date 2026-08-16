@@ -28,6 +28,12 @@ return {
 
   -- NPCs
   icon_imp      = { form = "raute",  groesse = 20, farbe = { 0.75, 0.35, 0.85 }, kuerzel = "w",  datei = "icon_imp.png" },
+  icon_add      = { form = "kreis",  groesse = 24, farbe = { 0.80, 0.45, 0.30 }, kuerzel = "g",  datei = "icon_add.png" },
+  icon_boar     = { form = "kreis",  groesse = 22, farbe = { 0.60, 0.45, 0.35 }, kuerzel = "eb", datei = "icon_boar.png" },
+  icon_wolf     = { form = "kreis",  groesse = 22, farbe = { 0.50, 0.50, 0.55 }, kuerzel = "wo", datei = "icon_wolf.png" },
+  icon_kobold   = { form = "kreis",  groesse = 22, farbe = { 0.70, 0.60, 0.30 }, kuerzel = "ko", datei = "icon_kobold.png" },
+  icon_murloc   = { form = "kreis",  groesse = 22, farbe = { 0.35, 0.70, 0.55 }, kuerzel = "mu", datei = "icon_murloc.png" },
+  icon_loot     = { form = "raute",  groesse = 16, farbe = { 0.95, 0.85, 0.35 }, kuerzel = "",   datei = "icon_loot.png" },
 
   -- Hogger (groesser, GDD 4.1) und Welt
   icon_hogger   = { form = "kreis",  groesse = 48, farbe = { 0.85, 0.25, 0.20 }, kuerzel = "HO", datei = "icon_hogger.png" },

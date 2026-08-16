@@ -18,7 +18,7 @@ W.EV = {
   damage = 1, heal = 2, death = 3, charge = 4,
   eat_start = 5, eat_drag = 6, eat_tick = 7, eat_interrupt = 8,
   eat_complete = 9, crit_kill = 10, try_start = 11, try_end = 12,
-  revive = 13,
+  revive = 13, loot_pickup = 14, mob_kill = 15, mob_death_by = 16, ding = 17,
 }
 W.EV_NAMES = {}
 for name, id in pairs(W.EV) do W.EV_NAMES[id] = name end
@@ -29,7 +29,7 @@ local CLASS_IDX = {}
 for i, name in ipairs(CLASS_NAMES) do CLASS_IDX[name] = i end
 W.CLASS_IDX, W.CLASS_NAMES = CLASS_IDX, CLASS_NAMES
 
-W.NPC_KINDS = { "imp" } -- Index = Wire-ID
+W.NPC_KINDS = { "imp", "add", "boar", "wolf", "kobold", "murloc" } -- Index = Wire-ID
 local NPC_KIND_IDX = {}
 for i, name in ipairs(W.NPC_KINDS) do NPC_KIND_IDX[name] = i end
 
@@ -216,11 +216,13 @@ function W.snapshot_body(state)
     for i, r in ipairs(model.RACES) do
       if r == p.race then race_idx = i end
     end
-    parts[#parts + 1] = pack("<BBBBBBI2I2I2BBBB",
+    parts[#parts + 1] = pack("<BBBBBBI2I2I2BBBBI2I2I2",
       p.id, flags, CLASS_IDX[p.class] or 0, race_idx, flags2, p.cp or 0,
       q16(p.x), q16(p.y), math.max(0, math.floor(p.hp + 0.5)),
       q8((p.resource or 0) / 100), p.facing or 0,
-      p.target or 255, prog)
+      p.target or 255, prog,
+      math.min(65535, p.xp or 0), math.min(65535, p.kupfer or 0),
+      math.min(65535, p.plunder or 0))
   end
   -- NPCs (Wichtel; ab M3-2 Mobs/Adds)
   local npc_ids = {}
@@ -232,6 +234,16 @@ function W.snapshot_body(state)
     local npc = state.npcs[id]
     parts[#parts + 1] = pack("<BBI2I2B", id, NPC_KIND_IDX[npc.kind] or 0,
       q16(npc.x), q16(npc.y), math.max(0, math.min(255, math.floor(npc.hp + 0.5))))
+  end
+  -- Bodenbeute
+  local loot_ids = {}
+  for id = 1, 60 do
+    if state.loot and state.loot[id] then loot_ids[#loot_ids + 1] = id end
+  end
+  parts[#parts + 1] = pack("<B", #loot_ids)
+  for _, id in ipairs(loot_ids) do
+    local l = state.loot[id]
+    parts[#parts + 1] = pack("<BI2I2", id, q16(l.x), q16(l.y))
   end
   return table.concat(parts)
 end
@@ -273,9 +285,9 @@ function W.read_snapshot(data, off)
   pcount, off = love.data.unpack("<B", data, off)
   s.players = {}
   for _ = 1, pcount do
-    local pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog
-    pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, off =
-      love.data.unpack("<BBBBBBI2I2I2BBBB", data, off)
+    local pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, pxp, pku, ppl
+    pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, pxp, pku, ppl, off =
+      love.data.unpack("<BBBBBBI2I2I2BBBBI2I2I2", data, off)
     s.players[pid] = {
       id = pid,
       alive = flags % 2 >= 1,
@@ -292,6 +304,7 @@ function W.read_snapshot(data, off)
       cp = cp,
       x = px, y = py, hp = php, resource = pres / 255 * 100,
       facing = pfacing, target = ptarget, progress = pprog / 255,
+      xp = pxp, kupfer = pku, plunder = ppl,
     }
   end
   local ncount
@@ -301,6 +314,14 @@ function W.read_snapshot(data, off)
     local nid, nkind, nx, ny, nhp
     nid, nkind, nx, ny, nhp, off = love.data.unpack("<BBI2I2B", data, off)
     s.npcs[nid] = { id = nid, kind = W.NPC_KINDS[nkind], x = nx, y = ny, hp = nhp }
+  end
+  local lcount
+  lcount, off = love.data.unpack("<B", data, off)
+  s.loot = {}
+  for _ = 1, lcount do
+    local lid, lx, ly
+    lid, lx, ly, off = love.data.unpack("<BI2I2", data, off)
+    s.loot[lid] = { id = lid, x = lx, y = ly }
   end
   return ack, s
 end

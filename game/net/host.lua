@@ -23,11 +23,19 @@ function H.new(opts)
   self.host = enet.host_create("*:" .. H.PORT, 32, 2)
   assert(self.host, "ENet-Port " .. H.PORT .. " nicht bindbar")
   self.state = world.new(opts.seed)
+  -- session.json: einzige rundenuebergreifende Persistenz (GDD 17.3)
+  self.use_session = opts.session ~= false
+  self.session = self.use_session and require("game.session").load() or nil
+  -- Try-Zaehler: allererster Host-Start beginnt vierstellig (GDD 6)
+  local try_base = (self.session and self.session.try_nr)
+                   or (1000 + (opts.seed or 0) % 9000)
+  self.state.try_nr = try_base - 1
   self.clients = {}      -- peer -> { pid, queue = {ctick->mask}, next_ctick,
                           --           last_mask, ack, facing }
   self.by_pid = {}
   self.log = opts.log     -- function(jsonl_line) oder nil
   self.local_pid = world.add_player(self.state, opts.name)
+  self:_restore_char(self.local_pid)
   self.cosmetics = {}     -- Ereignisse fuer die eigene Darstellung
   -- Debug-Bots (Solo-Test): eigene Eingabequelle je Bot (ADR-002)
   self.bot_pids = {}
@@ -39,6 +47,30 @@ function H.new(opts)
   self:_after_step(ev)
   self.accumulator = 0
   return self
+end
+
+-- XP/Kupfer/Plunder haengen am Charakternamen (GDD 7.3 / Kap. 5)
+function H:_restore_char(pid)
+  local p = self.state.players[pid]
+  if not (p and self.session and self.session.chars) then return end
+  local saved = self.session.chars[p.name]
+  if saved then
+    p.xp = saved.xp or 0
+    p.kupfer = saved.kupfer or 0
+    p.plunder = saved.plunder or 0
+    p.ding_done = saved.ding or false
+  end
+end
+
+function H:_save_session()
+  if not self.use_session then return end
+  local chars = (self.session and self.session.chars) or {}
+  for _, p in ipairs(self.state.players) do
+    chars[p.name] = { xp = p.xp, kupfer = p.kupfer, plunder = p.plunder,
+                     ding = p.ding_done or false }
+  end
+  self.session = { try_nr = self.state.try_nr, chars = chars }
+  require("game.session").save(self.session)
 end
 
 function H:_log_events(evlist)
@@ -54,6 +86,7 @@ function H:_after_step(evlist)
   for _, e in ipairs(evlist) do
     if NET_EVS[e.ev] then net[#net + 1] = e end
     self.cosmetics[#self.cosmetics + 1] = e
+    if e.ev == "try_end" then self:_save_session() end
   end
   if #net > 0 and next(self.clients) then
     self.host:broadcast(wire.events(net), CH_RELIABLE, "reliable")
@@ -83,6 +116,7 @@ function H:_handle(peer, data)
         end
       end
       pid = world.add_player(self.state, name)
+      self:_restore_char(pid)
     end
     self.clients[peer] = { pid = pid, queue = {}, last_mask = 0,
                            ack = 0, next_ctick = nil, facing = 0 }
@@ -199,6 +233,7 @@ function H:update(dt, local_input)
 end
 
 function H:destroy()
+  self:_save_session()
   if self.host then self.host:destroy() end
 end
 

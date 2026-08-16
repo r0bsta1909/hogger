@@ -39,6 +39,47 @@ M.patrol = {
   { x = M.hill.x + 140, y = M.hill.y + 80 },
 }
 
+-- Fluss-Linie am Suedrand (GDD 7.1); Murlocs spawnen nur hier
+M.RIVER_Y = 1900
+
+-- Mob-Spawn-Punkte (GDD 7.2): weit verstreut, ausserhalb der Leash-Zone,
+-- nie auf der Friedhof-Huegel-Achse; Reihenfolge = Slot-Aktivierung
+-- (model.mob_slots(N) aktiviert die ersten k). Ein Unit-Test erzwingt
+-- die Platzierungsregeln.
+M.MOB_SPAWNS = {
+  { x = 300,  y = 900,  typ = "boar" },
+  { x = 700,  y = 600,  typ = "wolf" },
+  { x = 900,  y = 1000, typ = "kobold" },
+  { x = 1200, y = 300,  typ = "boar" },
+  { x = 1400, y = 1900, typ = "murloc" },
+  { x = 1050, y = 1850, typ = "wolf" },
+  { x = 1500, y = 1600, typ = "boar" },
+  { x = 1800, y = 150,  typ = "kobold" },
+  { x = 2000, y = 1400, typ = "wolf" },
+  { x = 2400, y = 1000, typ = "boar" },
+  { x = 2600, y = 1500, typ = "kobold" },
+  { x = 2200, y = 1880, typ = "murloc" },
+}
+
+-- Abstand eines Punkts zur Friedhof-Huegel-Achse (fuer den Platzierungstest)
+function M.dist_to_path(x, y)
+  local vx, vy = x - M.hill.x, y - M.hill.y
+  return math.abs(vx * M.path_dir.y - vy * M.path_dir.x)
+end
+
+-- Add-Positionen am Huegelfuss (GDD 9.2), Richtung Pfad
+function M.add_positions(count)
+  local list = {}
+  for i = 1, count do
+    local side = (i % 2 == 0) and 1 or -1
+    local dist = 220 + (math.ceil(i / 2) - 1) * 60
+    local px = M.hill.x + M.path_dir.x * dist - M.path_dir.y * side * 80
+    local py = M.hill.y + M.path_dir.y * dist + M.path_dir.x * side * 80
+    list[i] = { x = px, y = py }
+  end
+  return list
+end
+
 -- Deko-Schaedel (GDD Kap. 2: ~10-12, um Huegel und letztes Wegstueck)
 function M.deco_skulls()
   local list = {}

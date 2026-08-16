@@ -37,8 +37,12 @@ function M.new(seed)
     n_scale = 0,        -- N beim Try-Start (GDD 6)
     players = {},       -- Array; Index == Spieler-ID (1..40)
     corpses = {},       -- { x, y, drag = nil|{t_left} }
-    npcs = {},          -- Wichtel (M3-1), spaeter Mobs/Adds; id -> npc
+    npcs = {},          -- Wichtel, Mobs, Adds; id -> npc
     next_npc_id = M.NPC_ID_BASE,
+    loot = {},          -- Bodenbeute; id -> { x, y, kupfer, item_idx, t }
+    next_loot_id = 1,
+    mob_by_slot = {},   -- Spawn-Slot -> npc-id
+    mob_respawn = {},   -- Spawn-Slot -> Restzeit bis Respawn (GDD 7.2: 120 s)
     hogger = nil,
     rng = nil,
   }
@@ -47,11 +51,53 @@ end
 
 function M.add_npc(state, kind, x, y, hp, owner)
   local id = state.next_npc_id
-  state.next_npc_id = state.next_npc_id + 1
-  if state.next_npc_id > 250 then state.next_npc_id = M.NPC_ID_BASE end
+  local tries = 0
+  while state.npcs[id] and tries < 150 do
+    id = (id >= 250) and M.NPC_ID_BASE or id + 1
+    tries = tries + 1
+  end
+  state.next_npc_id = (id >= 250) and M.NPC_ID_BASE or id + 1
   state.npcs[id] = { id = id, kind = kind, x = x, y = y, hp = hp,
                      max_hp = hp, owner = owner, next_auto = 0 }
   return state.npcs[id]
+end
+
+-- Ambient-Mob in einem Spawn-Slot erzeugen (GDD 7.2)
+function M.spawn_mob(state, slot)
+  local sp = map.MOB_SPAWNS[slot]
+  if not sp then return end
+  local hp = model.p(sp.typ .. "_hp")
+  local npc = M.add_npc(state, sp.typ, sp.x, sp.y, hp)
+  npc.slot = slot
+  npc.spawn_x, npc.spawn_y = sp.x, sp.y
+  npc.state = "idle"
+  npc.target_pid = nil
+  state.mob_by_slot[slot] = npc.id
+  return npc
+end
+
+-- aktive Slots sicherstellen (Slot-Formel 7.2); Respawn-Timer tickt in step
+function M.ensure_mob_slots(state)
+  local active = model.mob_slots(math.max(1, state.n_scale))
+  for slot = 1, math.min(active, #map.MOB_SPAWNS) do
+    local id = state.mob_by_slot[slot]
+    if not (id and state.npcs[id]) and not state.mob_respawn[slot] then
+      M.spawn_mob(state, slot)
+    end
+  end
+end
+
+function M.add_loot(state, x, y, kupfer, item_idx)
+  local id = state.next_loot_id
+  local tries = 0
+  while state.loot[id] and tries < 60 do
+    id = (id >= 60) and 1 or id + 1
+    tries = tries + 1
+  end
+  state.next_loot_id = (id >= 60) and 1 or id + 1
+  state.loot[id] = { id = id, x = x, y = y, kupfer = kupfer,
+                     item_idx = item_idx, t = 60 }
+  return state.loot[id]
 end
 
 function M.add_player(state, name)
@@ -79,6 +125,7 @@ function M.add_player(state, name)
     prev_mask = 0,
     jump_t = 0, jumps = 0,
     dmg_done = 0, heal_done = 0, deaths = 0,
+    xp = 0, kupfer = 0, plunder = 0, ding_done = false, -- GDD 7.3
   }
   return id
 end
@@ -116,6 +163,19 @@ function M.begin_try(state, evlist)
   for _, p in ipairs(state.players) do
     p.jumps = 0
   end
+  -- Gnoll-Welpen: floor(N/8) am Huegelfuss, kein Respawn im Try (GDD 9.2)
+  for id = M.NPC_ID_BASE, 250 do
+    local npc = state.npcs[id]
+    if npc and npc.kind == "add" then state.npcs[id] = nil end
+  end
+  local addpos = map.add_positions(model.adds(math.max(1, state.n_scale)))
+  for _, pos in ipairs(addpos) do
+    local npc = M.add_npc(state, "add", pos.x, pos.y, model.p("add_hp"))
+    npc.state = "idle"
+    npc.spawn_x, npc.spawn_y = pos.x, pos.y
+  end
+  -- Ambient-Mobs bestehen ueber Trys fort; fehlende Slots auffuellen
+  M.ensure_mob_slots(state)
   if evlist then
     events.push(evlist, state.tick, "try_start", "host", tostring(state.try_nr),
                 state.n_scale, nil)
@@ -134,7 +194,8 @@ end
 function M.set_target(state, pid, target_id, evlist)
   local p = state.players[pid]
   if not p then return end
-  if target_id ~= M.HOGGER_ID and not state.players[target_id] then return end
+  if target_id ~= M.HOGGER_ID and not state.players[target_id]
+     and not state.npcs[target_id] then return end
   if p.target ~= target_id then
     p.target = target_id
     if evlist then

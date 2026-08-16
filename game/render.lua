@@ -34,7 +34,13 @@ function R.new()
   self.banner_t = 0
   self.banner_text = nil
   self.shake = 0
+  self.toasts = {} -- Loot-Toasts am Kreisrand (GDD 7.3)
   return self
+end
+
+function R:toast(text)
+  table.insert(self.toasts, 1, { text = text, t = 4 })
+  if #self.toasts > 5 then table.remove(self.toasts) end
 end
 
 function R:zoom_radius()
@@ -57,6 +63,10 @@ end
 function R:update(dt)
   if self.banner_t > 0 then self.banner_t = self.banner_t - dt end
   if self.shake > 0 then self.shake = math.max(0, self.shake - dt * 30) end
+  for i = #self.toasts, 1, -1 do
+    self.toasts[i].t = self.toasts[i].t - dt
+    if self.toasts[i].t <= 0 then table.remove(self.toasts, i) end
+  end
 end
 
 -- Welt -> Bildschirm um (cx, cy) zentriert
@@ -162,11 +172,33 @@ function R:draw(view, ui)
     end
   end
 
-  -- NPCs (Wichtel; ab M3-2 Mobs/Adds)
+  -- Fluss-Linie am Suedrand (GDD 7.1)
+  do
+    local _, ry = to_screen(0, map.RIVER_Y)
+    love.graphics.setColor(0.25, 0.45, 0.65, 0.8)
+    love.graphics.setLineWidth(10 * scale)
+    love.graphics.line(0, ry, w, ry)
+    love.graphics.setLineWidth(1)
+  end
+
+  -- Bodenbeute
+  if view.loot then
+    for _, l in pairs(view.loot) do
+      local x, y = to_screen(l.x, l.y)
+      assets.draw("icon_loot", x, y, scale * 1.6)
+    end
+  end
+
+  -- NPCs: Wichtel, Gnoll-Welpen, Ambient-Mobs (mit Mini-HP-Balken)
   if view.npcs then
     for _, npc in pairs(view.npcs) do
       local x, y = to_screen(npc.x, npc.y)
       assets.draw("icon_" .. npc.kind, x, y, scale * 1.8)
+      if npc.kind ~= "imp" then
+        local maxhp = npc.kind == "add" and model.p("add_hp")
+                      or model.p(npc.kind .. "_hp")
+        hp_bar(x, y + 12, 10, npc.hp / maxhp, 0.85, 0.75, 0.2)
+      end
     end
   end
 
@@ -287,10 +319,20 @@ function R:draw(view, ui)
       love.graphics.setColor(0.95, 0.35, 0.35, 1)
       love.graphics.print("CP " .. me.cp, 142, 36)
     end
+    -- XP/Kupfer/Plunder-Zaehler (XP-Bogen folgt in M3-4)
+    love.graphics.setColor(0.6, 0.56, 0.45, 1)
+    love.graphics.print(string.format("XP %d/%d   Kupfer %d   Plunder %d",
+      me.xp or 0, model.p("xp_level2"), me.kupfer or 0, me.plunder or 0), 16, 52)
     -- Cast-/Wiederbelebungsbalken
     if me.casting or me.reviving then
       hp_bar(ox, oy + 40, 50, me.progress, 0.9, 0.8, 0.3)
     end
+  end
+
+  -- Loot-Toasts am linken Kreisrand (GDD 7.3)
+  for i, t in ipairs(self.toasts) do
+    love.graphics.setColor(0.95, 0.85, 0.35, math.min(1, t.t))
+    love.graphics.print(t.text, ox - radius * 0.72, oy + radius * 0.45 + (i - 1) * 18)
   end
 
   -- Ansage-Banner (Try-Ende, Sieg)

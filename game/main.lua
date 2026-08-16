@@ -156,6 +156,12 @@ local function process_cosmetics(view)
       end
     elseif e.ev == "try_start" then
       app.render:announce("Try " .. tostring(e.dst or ""), 2.5)
+    elseif e.ev == "loot_pickup" and tonumber(e.src) == view.me then
+      local pool = require("game.gamesim.loot")
+      local item = pool[tonumber(e.dst) or 0] or "Plunder"
+      app.render:toast(item .. "  (+" .. tostring(math.floor(e.val or 0)) .. " Kupfer)")
+    elseif e.ev == "ding" then
+      app.render:announce("DING! ... das ist nicht moeglich.", 6)
     end
   end
   for i = #list, 1, -1 do list[i] = nil end
@@ -271,6 +277,13 @@ function love.mousepressed(mx, my)
       local x, y = to_screen(p.x, p.y)
       local d = math.sqrt((x - mx) ^ 2 + (y - my) ^ 2)
       if d < best_d then best, best_d = pid, d end
+    end
+  end
+  for nid, npc in pairs(app.view.npcs or {}) do
+    if npc.kind ~= "imp" then
+      local x, y = to_screen(npc.x, npc.y)
+      local d = math.sqrt((x - mx) ^ 2 + (y - my) ^ 2)
+      if d < best_d then best, best_d = nid, d end
     end
   end
   do
