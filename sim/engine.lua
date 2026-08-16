@@ -116,6 +116,9 @@ end
 function E.player_damage_hogger(run, p, amount, kind)
   local h = run.hogger
   if h.hp <= 0 then return end
+  -- EXPERIMENT noise (nur Sim, Beleg fuer Vorschlags-Issue): Skill-Streuung
+  -- je Spieler glaettet die deterministische Siegquoten-Klippe zu einem Band.
+  if p.skill then amount = amount * p.skill end
   local crit = crit_roll(run, "player", kind)
   if crit then amount = amount * model.p("crit_mult_player") end
   if p.shout_until > run.t then amount = amount * (1 + model.p("warrior_shout_bonus")) end
@@ -450,8 +453,9 @@ local function hogger_tick(run, dt)
     E.hogger_damage_player(run, target, model.p("hogger_autohit_dmg"), "autohit")
     -- EXPERIMENT cleave (nur Sim, Beleg fuer Vorschlags-Issue): der Autohit
     -- trifft zusaetzlich bis zu ceil(N/10)-1 weitere Ziele im Nahkampf.
-    if run.cfg.exp and (run.cfg.exp.cleave or run.cfg.exp.cleave8) then
-      local extra = math.ceil(run.cfg.n / (run.cfg.exp.cleave8 and 8 or 10)) - 1
+    if run.cfg.exp and (run.cfg.exp.cleave or run.cfg.exp.cleave8 or run.cfg.exp.cleave5) then
+      local divisor = run.cfg.exp.cleave5 and 5 or run.cfg.exp.cleave8 and 8 or 10
+      local extra = math.ceil(run.cfg.n / divisor) - 1
       if extra > 0 then
         local melee_r = model.p("melee_range")
         for _, q in ipairs(run.players) do
@@ -614,6 +618,12 @@ function E.run_try(cfg)
   end
   -- Leeroy: zusaetzlicher Krieger, immer unkoordiniert, zaehlt nicht in N (GDD 17.2)
   run.players[cfg.n + 1] = make_player(run, "leeroy", "warrior", true)
+
+  if cfg.exp and cfg.exp.noise then
+    for _, p in ipairs(run.players) do
+      p.skill = 0.7 + 0.6 * run.rng:next() -- gleichverteilt 0,7-1,3
+    end
+  end
 
   log_ev(run, 0, "try_start", "sim", tostring(cfg.seed), cfg.n, nil)
 
