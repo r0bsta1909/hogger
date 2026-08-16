@@ -39,6 +39,33 @@ M.patrol = {
   { x = M.hill.x + 140, y = M.hill.y + 80 },
 }
 
+-- Deko-Schaedel (GDD Kap. 2: ~10-12, um Huegel und letztes Wegstueck)
+function M.deco_skulls()
+  local list = {}
+  local function add(dist, side)
+    local px = M.hill.x + M.path_dir.x * dist - M.path_dir.y * side
+    local py = M.hill.y + M.path_dir.y * dist + M.path_dir.x * side
+    list[#list + 1] = { x = px, y = py }
+  end
+  add(60, 90); add(120, -110); add(200, 40); add(90, -60); add(260, -30)
+  add(420, 70); add(520, -90); add(640, 50); add(760, -40); add(880, 80)
+  add(150, 160); add(300, -150)
+  return list
+end
+
+-- Baum-Icons als Sichtblocker-Andeutung entlang des Pfads (GDD 7.1)
+function M.trees()
+  local list = {}
+  local function add(dist, side)
+    local px = M.hill.x + M.path_dir.x * dist - M.path_dir.y * side
+    local py = M.hill.y + M.path_dir.y * dist + M.path_dir.x * side
+    list[#list + 1] = { x = px, y = py }
+  end
+  add(1100, 220); add(1350, -260); add(1600, 240); add(1850, -220)
+  add(2100, 260); add(1250, 300); add(1750, -300)
+  return list
+end
+
 -- Unterzonen fuer das Zonenbanner (GDD 4.1); Reihenfolge = Pruefreihenfolge
 function M.zone_at(x, y)
   local g = M.graveyard()
