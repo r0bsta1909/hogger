@@ -51,16 +51,34 @@ local function make_placeholder(spec)
   return canvas
 end
 
+-- Echte Datei laden. Im gebauten Spiel (.love) liegt assets/ an der Wurzel und
+-- love.filesystem findet sie. Beim Entwicklungsstart (`love game`) liegt sie
+-- eine Ebene ueber der Quelle und ist fuer love.filesystem unerreichbar — dann
+-- lesen wir sie ueber io und reichen die Bytes an LOEVE weiter. Ohne das
+-- saehe man Finaldateien erst im Release (GDD 17.5: Final ohne Codeaenderung).
+local function load_image(datei)
+  if love.filesystem.getInfo and love.filesystem.getInfo("assets/" .. datei) then
+    return love.graphics.newImage("assets/" .. datei)
+  end
+  local src = love.filesystem.getSource and love.filesystem.getSource()
+  if not src then return nil end
+  local f = io.open(src .. "/../assets/" .. datei, "rb")
+  if not f then return nil end
+  local data = f:read("*a")
+  f:close()
+  local ok, img = pcall(function()
+    return love.graphics.newImage(love.filesystem.newFileData(data, datei))
+  end)
+  return ok and img or nil
+end
+
 function A.get(id)
   if cache[id] then return cache[id] end
   local spec = manifest[id]
   assert(spec, "unbekannte Asset-ID: " .. tostring(id))
   assert(not spec.art, "Sound-ID im Grafikpfad: " .. tostring(id))
-  local drawable
-  if spec.datei and love.filesystem.getInfo
-     and love.filesystem.getInfo("assets/" .. spec.datei) then
-    drawable = love.graphics.newImage("assets/" .. spec.datei)
-  else
+  local drawable = spec.datei and load_image(spec.datei) or nil
+  if not drawable then
     drawable = make_placeholder(spec)
   end
   cache[id] = drawable

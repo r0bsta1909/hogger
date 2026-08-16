@@ -43,14 +43,35 @@ local function gen_noise(dur, gain)
   return sd
 end
 
+-- Wie bei den Grafiken (game/assets.lua): im Entwicklungsstart liegt assets/
+-- ausserhalb der love.filesystem-Wurzel und wird ueber io nachgeladen.
+local function load_sound(datei, loop)
+  local mode = loop and "stream" or "static"
+  if love.filesystem.getInfo("assets/" .. datei) then
+    return love.audio.newSource("assets/" .. datei, mode)
+  end
+  local src = love.filesystem.getSource and love.filesystem.getSource()
+  if not src then return nil end
+  local f = io.open(src .. "/../assets/" .. datei, "rb")
+  if not f then return nil end
+  local data = f:read("*a")
+  f:close()
+  local ok, snd = pcall(function()
+    -- Streams brauchen eine Datei; aus Bytes wird daher immer "static"
+    return love.audio.newSource(
+      love.sound.newSoundData(love.filesystem.newFileData(data, datei)), "static")
+  end)
+  return ok and snd or nil
+end
+
 local function get_template(id)
   local t = templates[id]
   if t ~= nil then return t end
   local spec = manifest[id]
   assert(spec and spec.art, "unbekannte Sound-ID: " .. tostring(id))
-  if spec.datei and love.filesystem.getInfo("assets/" .. spec.datei) then
-    t = love.audio.newSource("assets/" .. spec.datei,
-                             spec.loop and "stream" or "static")
+  local src_file = spec.datei and load_sound(spec.datei, spec.loop) or nil
+  if src_file then
+    t = src_file
   elseif spec.art == "stille" then
     t = false -- Slot spielt Stille bis eine Datei liegt (17.5)
   elseif spec.art == "rauschen" then
