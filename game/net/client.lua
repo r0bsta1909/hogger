@@ -69,6 +69,8 @@ function C:_handle(data)
     end
   elseif msg == wire.MSG.RENAME_RESULT then
     self.rename_result = wire.read_rename_result(data, off) -- Intro holt ab
+  elseif msg == wire.MSG.STATS then
+    self.stats_board = wire.read_stats(data, off) -- main zeigt die Tafel
   elseif msg == wire.MSG.SNAPSHOT then
     local ack, snap = wire.read_snapshot(data, off)
     -- unsequenced Kanal: veraltete Snapshots verwerfen

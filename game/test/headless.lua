@@ -126,6 +126,20 @@ function T.run()
         "Rename: Roster-Broadcast bei allen angekommen")
     end
 
+    -- Statistik-Tafel (GDD 11): nach dem ersten Try-Ende (90 s) bei allen
+    if iter == math.floor(95 / DT) then
+      ok(clients[1].stats_board ~= nil, "Statistik-Tafel beim Client angekommen")
+      if clients[1].stats_board then
+        ok(#clients[1].stats_board.hogger == 8,
+          "Statistik-Tafel: acht Hogger-Zeilen")
+        -- Bots koennen den ersten Try auch gewinnen: Wipe hat die grosse
+        -- Rest-HP-Pointe, ein Sieg nicht (GDD 11)
+        ok(clients[1].stats_board.big ~= nil
+           or clients[1].stats_board.header:find("SIEG") ~= nil,
+          "Statistik-Tafel: Wipe-Pointe oder Siegkopf")
+      end
+    end
+
     -- Invarianten je Tick (GDD 17.7 Stufe 4)
     local st = host.state
     for _, p in ipairs(st.players) do

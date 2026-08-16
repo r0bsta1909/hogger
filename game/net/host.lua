@@ -60,6 +60,7 @@ function H:_restore_char(pid)
     p.kupfer = saved.kupfer or 0
     p.plunder = saved.plunder or 0
     p.ding_done = saved.ding or false
+    p.titel = saved.titel -- Statistik-Titel (GDD 11 / 17.3)
   end
 end
 
@@ -70,7 +71,7 @@ function H:_save_session()
     -- provisorische Intro-Namen ("gastNNNN") nicht persistieren (Kap. 5)
     if not p.name:find("^gast%d") then
       chars[p.name] = { xp = p.xp, kupfer = p.kupfer, plunder = p.plunder,
-                       ding = p.ding_done or false }
+                       ding = p.ding_done or false, titel = p.titel }
     end
   end
   self.session = { try_nr = self.state.try_nr, chars = chars }
@@ -90,7 +91,16 @@ function H:_after_step(evlist)
   for _, e in ipairs(evlist) do
     if NET_EVS[e.ev] then net[#net + 1] = e end
     self.cosmetics[#self.cosmetics + 1] = e
-    if e.ev == "try_end" then self:_save_session() end
+    if e.ev == "try_end" then
+      self:_save_session()
+      -- Statistik-Tafel (GDD 11): an alle, lokal anzeigen
+      if e.board then
+        self.stats_board = e.board
+        if next(self.clients) then
+          self.host:broadcast(wire.stats(e.board), CH_RELIABLE, "reliable")
+        end
+      end
+    end
   end
   if #net > 0 and next(self.clients) then
     self.host:broadcast(wire.events(net), CH_RELIABLE, "reliable")
