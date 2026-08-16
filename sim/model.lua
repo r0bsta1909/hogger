@@ -306,8 +306,12 @@ local function clamp(x, lo, hi)
   return x
 end
 
+-- Untergrenze 120 x N: unterhalb der Design-Spanne (N < ~3, z. B. Host
+-- wartet allein auf Mitspieler) wuerde die affine Formel degenerieren
+-- (N=1: 430-950 -> 1 HP, Hogger stirbt an einem Schlag)
 function M.hogger_hp(n)
-  return math.max(1, M.p("hogger_hp_slope") * n - M.p("hogger_hp_offset"))
+  return math.max(120 * n,
+    M.p("hogger_hp_slope") * n - M.p("hogger_hp_offset"))
 end
 
 function M.eat_heal_per_second(n)

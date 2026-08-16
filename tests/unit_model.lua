@@ -24,6 +24,11 @@ for _, row in ipairs(table93) do
   T.near(M.respawn_timer(n), row[7], "9.3 Respawn N=" .. n)
 end
 
+-- GDD 9.3: HP-Untergrenze 120 x N unterhalb der Design-Spanne --------------
+T.eq(M.hogger_hp(1), 120, "9.3 HP-Untergrenze N=1 (Solo-Wartelobby)")
+T.eq(M.hogger_hp(2), 240, "9.3 HP-Untergrenze N=2")
+T.eq(M.hogger_hp(4), 770, "9.3 affine Formel greift ab N=4")
+
 -- GDD 7.2: Mob-Slots -------------------------------------------------------
 T.eq(M.mob_slots(5), 5, "7.2 Mob-Slots N=5")
 T.eq(M.mob_slots(40), 12, "7.2 Mob-Slots N=40")
