@@ -354,3 +354,39 @@ do
   step.step(st, { [1] = { mask = 0, facing = 0 } })
   T.eq(q.cast, nil, "facing: Wegdrehen bricht den laufenden Cast ab")
 end
+
+-- Leeroy wartet mit dem ersten Anmarsch auf den ersten echten Spieler
+-- (GDD 10.3, Issue #33): waehrend des Intros bleibt er stehen
+do
+  local leeroy = require("game.gamesim.leeroy")
+  local st = world.new(3)
+  world.add_leeroy(st)
+  world.add_player(st, "mensch")
+  world.begin_try(st, {})
+  local lee = st.players[st.leeroy_pid]
+  for _ = 1, 60 * 20 do -- 20 s: ohne die Regel waere er laengst unterwegs
+    step.step(st, {})
+  end
+  T.eq(st.leeroy_started, false, "Leeroy: Try-Start-Bedingung noch offen")
+  -- Er belebt sich am Feld wieder (das gehoert zum Loop), nimmt aber den
+  -- Pfad zum Huegel nicht auf
+  T.ok(lee.ai.phase ~= "march", "Leeroy: kein Anmarsch waehrend des Intros")
+  T.ok(world.dist(lee.x, lee.y, map.hill.x, map.hill.y)
+       > model.p("field_to_hill_dist") * 0.9,
+    "Leeroy: bleibt hinter dem Wiederbelebungsfeld")
+  -- Spieler belebt sich -> Leeroy darf los
+  local q = st.players[2]
+  q.alive, q.ghost, q.class = true, false, "warrior"
+  T.ok(leeroy.may_march(st), "Leeroy: erster Wiederbelebter gibt ihn frei")
+  for _ = 1, 60 * 10 do step.step(st, {}) end
+  T.ok(world.dist(lee.x, lee.y, map.hill.x, map.hill.y)
+       < model.p("field_to_hill_dist") * 0.9, "Leeroy: marschiert danach los")
+
+  -- Notbremse: niemand belebt sich, trotzdem geht es irgendwann los
+  local st2 = world.new(4)
+  world.add_leeroy(st2)
+  world.add_player(st2, "mensch")
+  world.begin_try(st2, {})
+  st2.time = model.p("leeroy_first_march_wait")
+  T.ok(leeroy.may_march(st2), "Leeroy: Notbremse nach der Wartezeit")
+end
