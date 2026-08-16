@@ -75,3 +75,41 @@ local errs = check.check({
   kaputt = { form = "kreis", groesse = 16, datei = "Bad Name.png" },
 }, ".")
 T.ok(#errs >= 2, "Grossbuchstabe und Leerzeichen werden beanstandet")
+
+-- Icon-Kontrakt v2.7 (17.5): quadratisch, mindestens Rastermasse; groessere
+-- Exporte werden beim Zeichnen normalisiert. Der Validator muss beides
+-- erkennen — sonst faellt ein schiefes Final-Asset erst auf der LAN auf.
+-- (Testdateien liegen kurz in assets/ und heissen tmp_*, damit kein
+-- Verzeichnis angelegt werden muss.)
+do
+  local function be32(n)
+    return string.char(math.floor(n / 16777216) % 256,
+      math.floor(n / 65536) % 256, math.floor(n / 256) % 256, n % 256)
+  end
+  local function png(name, w, h)
+    local f = assert(io.open("assets/" .. name, "wb"))
+    local sig = string.char(137, 80, 78, 71, 13, 10, 26, 10)
+    f:write(sig .. string.char(0, 0, 0, 13) .. "IHDR" .. be32(w)
+            .. be32(h) .. string.char(8, 6, 0, 0, 0))
+    f:close()
+  end
+  local mani = {
+    tmp_gut    = { form = "kreis", groesse = 32, farbe = { 1, 1, 1 }, datei = "tmp_gut.png" },
+    tmp_schief = { form = "kreis", groesse = 32, farbe = { 1, 1, 1 }, datei = "tmp_schief.png" },
+    tmp_klein  = { form = "kreis", groesse = 32, farbe = { 1, 1, 1 }, datei = "tmp_klein.png" },
+  }
+  png("tmp_gut.png", 500, 500)
+  png("tmp_schief.png", 696, 225)
+  png("tmp_klein.png", 16, 16)
+  png("tmp_gut.png.png", 500, 500) -- Windows-Falle: Endung doppelt
+  local errs = check.check(mani, ".")
+  local joined = table.concat(errs, " | ")
+  T.eq(#errs, 3, "Validator: drei Befunde (" .. joined .. ")")
+  T.ok(joined:find("nicht quadratisch") ~= nil, "Validator: schiefes Icon faellt auf")
+  T.ok(joined:find("kleiner als das Raster") ~= nil, "Validator: zu kleines Icon faellt auf")
+  T.ok(joined:find("Endung doppelt") ~= nil, "Validator: doppelte Endung faellt auf")
+  for _, n in ipairs({ "tmp_gut.png", "tmp_schief.png", "tmp_klein.png",
+                       "tmp_gut.png.png" }) do
+    os.remove("assets/" .. n)
+  end
+end
