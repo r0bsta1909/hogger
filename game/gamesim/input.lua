@@ -41,4 +41,26 @@ function M.valid(mask)
          and mask == math.floor(mask)
 end
 
+-- ---------------------------------------------------------------------------
+-- Blickrichtung: 1 Byte, 0 = Norden, im Uhrzeigersinn (GDD 4.1). Maus,
+-- Bot, Leeroy und die Sim rechnen ueber DIESE Funktionen — eine Wahrheit,
+-- sonst zielt jede Quelle ein bisschen anders.
+-- ---------------------------------------------------------------------------
+function M.facing_from_angle(angle)
+  return math.floor((angle % (2 * math.pi)) / (2 * math.pi) * 256) % 256
+end
+
+function M.facing_towards(px, py, tx, ty)
+  return M.facing_from_angle(math.atan2(ty - py, tx - px) + math.pi / 2)
+end
+
+-- Liegt (tx, ty) im Frontbogen? arc_deg = voller Oeffnungswinkel;
+-- >= 360 schaltet die Regel ab (Tuning-Panel, GDD 8.1)
+function M.facing_ok(facing, px, py, tx, ty, arc_deg)
+  if not arc_deg or arc_deg >= 360 then return true end
+  local want = M.facing_towards(px, py, tx, ty)
+  local d = ((facing or 0) - want + 128) % 256 - 128
+  return math.abs(d) <= arc_deg * 256 / 360 / 2
+end
+
 return M

@@ -27,11 +27,6 @@ local function mask_towards(px, py, tx, ty, slack)
   return mask
 end
 
-local function facing_towards(px, py, tx, ty)
-  local angle = math.atan2(ty - py, tx - px) + math.pi / 2
-  return math.floor((angle % (2 * math.pi)) / (2 * math.pi) * 256) % 256
-end
-
 local function allies_near(state, p, radius)
   local k = 0
   for _, q in ipairs(state.players) do
@@ -153,7 +148,7 @@ function L.decide(state, ev)
   end
 
   local h = state.hogger
-  local facing = facing_towards(p.x, p.y, h.x, h.y)
+  local facing = input.facing_towards(p.x, p.y, h.x, h.y)
   return { mask = mask, facing = facing }
 end
 

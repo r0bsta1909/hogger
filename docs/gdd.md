@@ -178,6 +178,7 @@ Alle acht Vanilla-Allianz-Klassen sind im Spiel, mit ihren gültigen Rassen-Komb
 | Autohit Zauberstab | 2 Schaden alle 2,0 s, Reichweite 120 px | Priester, Magier, Hexenmeister — OOM-Caster stochern auf Distanz weiter, müssen aber näher ran als der Jäger und bleiben Charge-gefährdet |
 | Nahkampf-Reichweite | 40 px | v2.6 festgeschrieben (Issue #2); Panel-Parameter |
 | Global Cooldown | 1,5 s | drosselt Input-Spam |
+| Frontbogen | 180° (Panel-Parameter `facing_arc_deg`) | Vanilla-authentisch: Angriffe gehen nur durch, wenn das Ziel **vor** einem liegt; Wegdrehen bricht einen laufenden Zauber ab (wie Bewegung). Die Blickrichtung folgt der Maus (4.1) und war bis zum Playtest 2026-08-16 rein kosmetisch. 360° schaltet die Regel ab. Die UI sagt „Ziel ist nicht vor dir.", sonst sucht man den Fehler bei sich |
 | Kritchance | 5 %, ×2 | beide Seiten, fester Multiplikator |
 
 **HP nach Rüstungsklasse:** Platte (Krieger, Paladin) 80 · Leder/Schwer (Jäger, Schurke, Druide) 65 · Stoff (Priester, Magier, Hexenmeister) 50.
@@ -499,6 +500,7 @@ Menschen erst bei grüner Pyramide. Übergabe: Validierungsbericht + eine Ein-Sa
 | 2026-08-16 | Sim-Gruppenfaktor 0,85–1,15 → 0,75–1,25 (17.2) | F4 (Krit-Delta 6–11 pp: zu schmale Ergebnisverteilung macht Ausgang krit-sensitiv) | F4-Deltas 4,3/1,0/4,5/3,7 pp — 5-%-Krit bleibt unangetastet |
 | 2026-08-16 | Koordinierte Zielkomposition: Heiler/Schurken absolut „2/2" → max(2; N/8)/max(2; N/10) | F6-Analyse (Support-Overhead-Schieflage kleiner Raids) | Effekt neutral (Heil-Nutzen ≈ DPS-Verlust); als realistischeres Modell beibehalten |
 | 2026-08-16 | **Endstand-Verifikation** (600 Läufe/Zelle): koordiniert 72,8/68,7/74,2/74,2 %, Median-Siegtry 9,7–12,1 min, F4 ≤4,5 pp, F6-Spread 5,5 pp, unkoordiniert 0–1,3 %, Turtle 0 % Siege | M1-Gate | **F1–F6 + Turtle-Gate bestanden**; finale 1000er-Matrix: `reports/2026-08-16-m1-final.md` |
+| 2026-08-16 | Frontbogen-Regel eingefuehrt (`facing_arc_deg` = 180°): Angriff nur auf Ziele vor einem, Wegdrehen bricht Casts ab | Playtest (Rob, Issue #32): „wenn ich mich wegdrehe, sollten Attacken nicht durchgehen" | Uptime-relevant nur bei Fehlbedienung; die Balancing-Sim (17.2) modelliert keine Blickrichtung und bleibt gueltig (ihre Agenten sehen ihr Ziel per Definition an). Bots und Leeroy drehen sich jetzt zu ihrem Ziel |
 | 2026-08-16 | **M3-Stresstest (17.4):** 40 echte ENet-Clients, 10 min, Zufallsbewegung + Fähigkeits-Spam; ENet-Peer-Limit 32 → 48 | M3-Gate | **BESTANDEN:** 40/40 verbunden, Host-Tick Mittel 0,44 ms · p95 0,60 ms · p99 0,77 ms · max 11,9 ms (Gate 16,6 ms), Upstream 20,7 Mbit/s, Lua-Heap stabil ~12 MB. **Delta-Kompression nicht nötig** (ADR-001-Revisionsauslöser geprüft, nicht ausgelöst) |
 
 ---
