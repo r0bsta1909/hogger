@@ -19,6 +19,7 @@ W.EV = {
   eat_start = 5, eat_drag = 6, eat_tick = 7, eat_interrupt = 8,
   eat_complete = 9, crit_kill = 10, try_start = 11, try_end = 12,
   revive = 13, loot_pickup = 14, mob_kill = 15, mob_death_by = 16, ding = 17,
+  leeroy_line = 18,
 }
 W.EV_NAMES = {}
 for name, id in pairs(W.EV) do W.EV_NAMES[id] = name end
@@ -154,7 +155,8 @@ local function q8(frac)
   return v
 end
 
-local PFLAG = { alive = 1, ghost = 2, casting = 4, jumping = 8, reviving = 16 }
+local PFLAG = { alive = 1, ghost = 2, casting = 4, jumping = 8, reviving = 16,
+                leeroy = 32 }
 W.PFLAG = PFLAG
 
 local model = require("sim.model")
@@ -200,6 +202,7 @@ function W.snapshot_body(state)
     if p.cast then flags = flags + PFLAG.casting end
     if p.jump_t and p.jump_t > 0 then flags = flags + PFLAG.jumping end
     if p.revive then flags = flags + PFLAG.reviving end
+    if p.is_leeroy then flags = flags + PFLAG.leeroy end
     -- Buffs/Zustaende fuer die Buff-Leiste (GDD 4.3)
     local flags2 = 0
     if p.stealth then flags2 = flags2 + 1 end
@@ -295,6 +298,7 @@ function W.read_snapshot(data, off)
       casting = flags % 8 >= 4,
       jumping = flags % 16 >= 8,
       reviving = flags % 32 >= 16,
+      is_leeroy = flags % 64 >= 32,
       class = CLASS_NAMES[cls],
       race = model.RACES[race],
       stealth = flags2 % 2 >= 1,

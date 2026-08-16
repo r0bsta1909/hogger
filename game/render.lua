@@ -159,6 +159,13 @@ function R:draw(view, ui)
           if icon then
             assets.draw(icon, x, y - (p.jumping and 4 or 0),
               scale * 1.8 * jump, alpha)
+            if p.is_leeroy then -- markiertes Krieger-Icon (GDD 4.1)
+              love.graphics.setColor(0.95, 0.78, 0.2, alpha)
+              love.graphics.setLineWidth(2)
+              love.graphics.circle("line", x, y, 34 * scale)
+              love.graphics.setLineWidth(1)
+              love.graphics.print("Leeroy", x - 20, y + 16)
+            end
           else
             love.graphics.setColor(0.7, 0.8, 1.0, 0.35)
             love.graphics.circle("fill", x, y, 8 * scale * 1.8)
