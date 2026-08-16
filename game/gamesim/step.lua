@@ -60,10 +60,15 @@ local function kill_player(state, p, ev, was_crit, cause)
   p.hp = 0
   p.cast = nil
   p.revive = nil
+  -- mit dem Tod ist jede Aura weg, Buff wie Debuff (Issue #71) — sonst
+  -- laeuft Hoggers Blutung im Geist weiter und steht in der Leiste
   p.stealth = false
   p.cp = 0
   p.seal_hits = 0
   p.frost_armor = false
+  p.shout_until = 0
+  p.bleed_t = 0
+  p.bleed_next = 0
   if p.imp_id and state.npcs[p.imp_id] then -- Wichtel stirbt mit dem Meister
     state.hogger.threat[p.imp_id] = nil
     state.npcs[p.imp_id] = nil
@@ -231,6 +236,10 @@ local function player_damage_npc(state, p, npc, amount, kind, ev)
     crit = crit_roll(state, "player", MOB_TYPES[npc.kind] and "mob" or "add")
   end
   if crit then amount = amount * model.p("crit_mult_player") end
+  -- Schlachtruf wirkt auf jedes Ziel, nicht nur auf Hogger (GDD 8.2)
+  if p.shout_until > state.time then
+    amount = amount * (1 + model.p("warrior_shout_bonus"))
+  end
   npc.hp = npc.hp - amount
   p.dmg_done = p.dmg_done + amount
   local sp = stat_p(state, p.id)
@@ -242,6 +251,11 @@ local function player_damage_npc(state, p, npc, amount, kind, ev)
   elseif npc.kind == "add" then
     npc.state = "combat"
     npc.target_pid = npc.target_pid or p.id
+  end
+  -- Wut entsteht am Ziel, nicht am Gegnertyp (GDD 8.1, Issue #72)
+  if kind == "autohit" and p.class == "warrior" then
+    p.resource = math.min(model.p("rage_max"),
+      p.resource + model.p("rage_per_hit_dealt"))
   end
   events.push(ev, state.tick, "damage", p.id, npc.id, amount, crit, kind)
   if npc.hp <= 0 then mob_died(state, npc, p, ev) end
@@ -607,6 +621,10 @@ local function npc_damage_player(state, npc, p, ev)
   local crit = crit_roll(state, "hogger", kind)
   if crit then dmg = dmg * model.p("crit_mult_hogger") end
   p.hp = p.hp - dmg
+  if p.class == "warrior" then -- auch ein Wolfsbiss macht wuetend (8.1)
+    p.resource = math.min(model.p("rage_max"),
+      p.resource + model.p("rage_per_hit_taken"))
+  end
   events.push(ev, state.tick, "damage", npc.id, p.id, dmg, crit, kind)
   if p.hp <= 0 then
     kill_player(state, p, ev, crit, CAUSE[npc.kind])
