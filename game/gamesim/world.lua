@@ -44,6 +44,9 @@ function M.new(seed)
     mob_by_slot = {},   -- Spawn-Slot -> npc-id
     mob_respawn = {},   -- Spawn-Slot -> Restzeit bis Respawn (GDD 7.2: 120 s)
     hogger = nil,
+    -- Leeroys allererster Anmarsch wartet auf den ersten wiederbelebten
+    -- Spieler (GDD 10.3, Issue #33); danach laeuft er jeden Try normal los
+    leeroy_started = false,
     rng = nil,
     stats = nil,        -- je Try, gesetzt in begin_try (GDD 11)
   }

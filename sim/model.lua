@@ -176,6 +176,11 @@ M.params = {
   leeroy_threat_factor   = p(0.5, 0.1, 1.0, 0.05, "10"),
   leeroy_kragen_trys     = p(3, 1, 10, 1, "10"),
   leeroy_stuck_timeout   = p(5, 1, 15, 1, "10"),
+  -- Try-Start-Bedingung (GDD 10.3): Leeroys allererster Anmarsch wartet, bis
+  -- sich der erste echte Spieler wiederbelebt hat — sonst rennt er mitten im
+  -- Intro los, das er selbst haelt (Playtest 2026-08-16). Notbremse, falls
+  -- niemand auf ein Klassenicon tritt:
+  leeroy_first_march_wait = p(120, 10, 600, 10, "10.3"),
 
   -- Sim-Streuungsmodell (GDD 17.2 Punkt 5b, v2.6) — Agentenmodell, kein Spielverhalten
   sim_skill_min          = p(0.7, 0.3, 1.0, 0.05, "17.2"),

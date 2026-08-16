@@ -37,6 +37,27 @@ local function allies_near(state, p, radius)
   return k
 end
 
+-- Try-Start-Bedingung (GDD 10.3): Leeroy nimmt seinen Pfad erst auf, wenn
+-- der erste echte Spieler im Spiel steht. Beim Spielbeitritt erzaehlt er das
+-- Intro (Kap. 5) — losrennen, waehrend er noch redet, zerreisst die Szene
+-- (Playtest 2026-08-16, Issue #33). Danach gilt fuer alle weiteren Trys
+-- wieder die normale Wartezeit.
+function L.may_march(state)
+  if state.leeroy_started then return true end
+  for _, q in ipairs(state.players) do
+    if q.alive and not q.is_leeroy then
+      state.leeroy_started = true
+      return true
+    end
+  end
+  -- Notbremse: niemand belebt sich (alle im Menue, alle weg)
+  if state.time >= model.p("leeroy_first_march_wait") then
+    state.leeroy_started = true
+    return true
+  end
+  return false
+end
+
 function L.decide(state, ev)
   local p = state.players[state.leeroy_pid]
   if not p then return { mask = 0, facing = 0 } end
@@ -76,7 +97,7 @@ function L.decide(state, ev)
     end
   elseif ai.phase == "wait" then
     ai.wait_t = ai.wait_t - DT
-    if ai.wait_t <= 0 then
+    if ai.wait_t <= 0 and L.may_march(state) then
       ai.phase = "march"
       ai.path = grid.path(p.x, p.y,
         map.hill.x + map.path_dir.x * 80, map.hill.y + map.path_dir.y * 80)
