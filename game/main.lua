@@ -459,13 +459,17 @@ function love.update(dt)
     end
     local me = view.players[view.me]
     audio.set_ghost(me ~= nil and not me.alive) -- Tiefpass-Naeherung (Nr. 3)
-    -- Grundteppich: Elwynn-Tag lebend, Geister-Wind tot (Nr. 2/3);
-    -- beide Slots spielen Stille, bis echte Dateien liegen (17.5)
+    -- Grundteppich: Elwynn-Tag lebend, Geister-Wind ERST als Geist (Nr. 2/3).
+    -- Wer tot daliegt und auf die Freigabe wartet, hoert die gedaempfte
+    -- Welt — der Wind gehoert zum Friedhof (GDD Kap. 11, Issue #55)
     if me and me.alive then
       audio.loop_start("snd_ambience_elwynn")
       audio.loop_stop("snd_ghost_wind")
-    else
+    elseif me and me.ghost then
       audio.loop_start("snd_ghost_wind")
+      audio.loop_stop("snd_ambience_elwynn")
+    else
+      audio.loop_stop("snd_ghost_wind")
       audio.loop_stop("snd_ambience_elwynn")
     end
     -- Schritte nur lebend — Geister sind lautlos (Nr. 4)
@@ -647,6 +651,13 @@ function love.draw()
     })
     app.floating:draw(to_screen)
     if app.quest then app.quest:draw(app.view, bw, bh) end
+    -- "Geist freilassen" zwischen Tod und Friedhof (GDD Kap. 11)
+    do
+      local rel = require("game.ui.release")
+      local me = app.view.players[app.view.me]
+      local mx, my = love.mouse.getPosition()
+      rel.draw(me, bw, bh, rel.hit(rel.layout(bw, bh).button, mx, my))
+    end
     if app.stats then app.stats:draw() end
     if app.victory then app.victory:draw(app.view, to_screen, bw, bh) end
     if app.panel then app.panel:draw() end
@@ -822,6 +833,23 @@ function love.mousepressed(mx, my)
     audio.play("snd_ui_click")
     app.render:set_zoom(app.render.zoom + 1) return
   end
+  -- "Geist freilassen" (GDD Kap. 11): der Knopf greift erst, wenn der
+  -- Respawn-Timer abgelaufen ist
+  do
+    local rel = require("game.ui.release")
+    local me = app.view.players[app.view.me]
+    if rel.visible(me) then
+      local L = rel.layout(love.graphics.getDimensions())
+      if rel.hit(L.button, mx, my) then
+        if rel.ready(me.dead_rest) then
+          app.net:release_spirit()
+          audio.play("snd_ui_click")
+        end
+        return
+      end
+    end
+  end
+
   -- Das Echo anklicken: Questfenster wieder oeffnen (GDD Kap. 5)
   if app.view.echo then
     local ex, ey = to_screen(app.view.echo.x, app.view.echo.y)

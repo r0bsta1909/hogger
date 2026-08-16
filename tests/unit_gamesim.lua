@@ -440,3 +440,47 @@ do
   T.eq(map.zone_at(sh.x, sh.y), "Friedhof von Elwynn",
     "Friedhof: Zonenbanner passt am Geistheiler")
 end
+
+-- Geist freilassen (GDD Kap. 11, Issue #54): tot heisst liegen, nicht Geist.
+-- Die Wartezeit bleibt die Todesstrafe (Kap. 6) und ist nicht wegklickbar.
+do
+  local st = world.new(21)
+  local pid = world.add_player(st, "opfer", { quest_done = true })
+  world.begin_try(st, {})
+  local p = st.players[pid]
+  p.alive, p.ghost, p.class = true, false, "warrior"
+  p.max_hp, p.hp = model.hp_for_class("warrior"), 1
+  p.x, p.y = map.hill.x, map.hill.y
+  -- Hogger erschlaegt ihn
+  local guard = 0
+  while p.alive and guard < 60 * 60 do
+    step.step(st, { [pid] = { mask = 0, facing = 128 } })
+    guard = guard + 1
+  end
+  T.ok(not p.alive, "Tod: der Spieler ist gefallen")
+  T.eq(p.ghost, false, "Tod: er liegt da, er ist noch kein Geist")
+  T.ok(p.dead_until > 0, "Tod: Respawn-Timer laeuft")
+  T.eq(step.release_spirit(st, pid), false,
+    "Freigabe: vor Ablauf des Timers nicht moeglich (Todesstrafe, Kap. 6)")
+
+  -- Timer ablaufen lassen: ohne Klick bleibt er liegen, bis die Nachfrist um ist
+  local ticks = math.ceil(p.dead_until / model.TICK_DT) + 1
+  for _ = 1, ticks do step.step(st, { [pid] = { mask = 0, facing = 0 } }) end
+  T.eq(p.ghost, false, "Freigabe: passiert nicht von allein bei 0")
+  T.eq(step.release_spirit(st, pid), true, "Freigabe: nach Ablauf moeglich")
+  step.step(st, { [pid] = { mask = 0, facing = 0 } })
+  T.eq(p.ghost, true, "Freigabe: der Geist steht danach am Friedhof")
+  local g = map.graveyard()
+  T.near(world.dist(p.x, p.y, g.x, g.y), 0, "Freigabe: Spawn genau am Friedhof")
+
+  -- Wer nicht klickt, wird nach der Nachfrist automatisch freigegeben
+  local st2 = world.new(22)
+  local pid2 = world.add_player(st2, "afk", { quest_done = true })
+  world.begin_try(st2, {})
+  local q = st2.players[pid2]
+  q.alive, q.ghost, q.class = false, false, "warrior"
+  q.dead_until = 0.5
+  local grace_ticks = math.ceil((0.5 + model.p("release_grace") + 0.1) / model.TICK_DT)
+  for _ = 1, grace_ticks do step.step(st2, { [pid2] = { mask = 0, facing = 0 } }) end
+  T.eq(q.ghost, true, "Freigabe: Nachfrist gibt AFK-Spieler automatisch frei")
+end

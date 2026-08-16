@@ -163,6 +163,8 @@ function H:_handle(peer, data)
     local wish = wire.read_rename(data, off)
     local ok = self:rename(c.pid, wish)
     self:_peer_send(peer, wire.rename_result(ok), CH_RELIABLE, "reliable")
+  elseif c and msg == wire.MSG.RELEASE_SPIRIT then
+    step.release_spirit(self.state, c.pid)
   elseif c and msg == wire.MSG.QUEST_ACCEPT then
     local ev = {}
     if step.accept_quest(self.state, c.pid, ev) then self:_after_step(ev) end
@@ -256,6 +258,11 @@ function H:accept_quest()
   return false
 end
 
+-- "Geist freilassen" des lokalen Spielers (GDD Kap. 11)
+function H:release_spirit()
+  return step.release_spirit(self.state, self.local_pid)
+end
+
 -- Admin (F12 [R]): Quest des lokalen Spielers zuruecksetzen — das Echo
 -- kommt danach noch einmal (Issue #36)
 function H:reset_quest()
@@ -310,6 +317,9 @@ function H:update(dt, local_input)
       local bot = require("game.gamesim.bot")
       for _, pid in ipairs(self.bot_pids) do
         inputs[pid] = bot.decide(self.state, pid)
+        -- Debug-Bots druecken ihren Knopf selbst (GDD Kap. 11); die Sim
+        -- laesst die Freigabe ohnehin erst nach Ablauf des Timers zu
+        step.release_spirit(self.state, pid)
       end
     end
     local ev = step.step(self.state, inputs)

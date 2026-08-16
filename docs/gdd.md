@@ -129,7 +129,7 @@ kurzer Anmarsch zum Hogger Hill → Kampf → Tod → Geisterlauf zum Feld (Klas
 
 - **Ein Try** beginnt mit Leeroys Signal (Kap. 10) und endet mit Hoggers Tod ODER nach **15:00 auf der hochzählenden Uhr** — dann leasht Hogger zurück, heilt voll, Leeroy sagt den Wipe an ("Okay. Das war nichts. Nächster Try."), die Statistik-Tafel erscheint kurz (Kap. 11), der Try-Zähler tickt hoch, weiter geht's. Kein Menü, keine Lobby zwischen Trys — der Fluch macht keine Pausen.
 - **Try-Zähler:** persistiert in session.json und startet beim allerersten Host-Start bei einer zufälligen vierstelligen Zahl (Leeroy zählt ja schon ewig). Angezeigt wird er nur in Leeroys Ansagen und auf der Statistik-Tafel.
-- **Sekundenloop des Spielers:** hinlaufen → 5–15 s Uptime am Boss → Tod → Geist → Wiederbelebung. **Die Gesamttodesstrafe bleibt die tragende Balancing-Konstante**, per M1-Sim-Sweep fixiert (Kap. 17, v2.6): Respawn-Timer (N-skalierend, 9.3) + 14 s Laufweg = 24,6 s bei N=5 bis 42,8 s bei N=40 — große Raids warten länger, damit die Welle dicht statt endlos wird. Nie nach Gefühl verändern.
+- **Sekundenloop des Spielers:** hinlaufen → 5–15 s Uptime am Boss → Tod → liegen bleiben bis zur Freigabe (Kap. 11) → Geist → Wiederbelebung. **Die Gesamttodesstrafe bleibt die tragende Balancing-Konstante**, per M1-Sim-Sweep fixiert (Kap. 17, v2.6): Respawn-Timer (N-skalierend, 9.3) + 14 s Laufweg = 24,6 s bei N=5 bis 42,8 s bei N=40 — große Raids warten länger, damit die Welle dicht statt endlos wird. Nie nach Gefühl verändern.
 - **N-Skalierung pro Try:** Hoggers Werte skalieren mit der Anzahl verbundener, wiederbelebbarer Spieler beim Try-Start. Wer mitten im Try joint, spielt sofort mit, zählt aber erst ab dem nächsten Try in die Skalierung. Leaver reduzieren nichts. Leeroy zählt nie mit.
 
 ---
@@ -290,7 +290,7 @@ Die Zeilen sind Text (Sprechblase + Einblendung), gesprochen vom Echo. Einzige V
 
 ## 11. Tod, Statistik, Fluchbruch
 
-- **Tod:** An der Sterbeposition bleibt ein Totenkopf-Icon als Leiche (Fress-Ressource) liegen; für andere kippt das eigene Klassenicon dorthin, man selbst sieht den eigenen Pfeil erblassen, der Totensicht-Filter legt sich über Bild und Audio. Nach dem Respawn-Timer steht der Geist am Friedhof. **Killcam-Zeile** (2 s, sarkastischer RECOUNT-9000-Ton, Pool ~30, kontextsensitiv): "Todesursache: Optimismus." / "Der Priester hat dich geheilt. Deshalb bist du tot."
+- **Tod (v2.7, Playtest-Runde 1):** An der Sterbeposition bleibt ein Totenkopf-Icon als Leiche (Fress-Ressource) liegen; für andere kippt das eigene Klassenicon dorthin, man selbst sieht den eigenen Pfeil erblassen, der Totensicht-Filter legt sich über Bild und Audio. **Man ist noch kein Geist — man liegt da.** Oben mittig erscheint das Original-Panel (Referenz `geist freilassen.png`): Überschrift mit Countdown ("12 Sekunden bis zur Freigabe"), darunter der rote Knopf **"Geist freilassen"**. Der Knopf wird erst mit Ablauf des Respawn-Timers scharf — **die Wartezeit IST die Todesstrafe (Kap. 6) und ist nicht wegklickbar**; wer nicht drückt, wird nach einer Nachfrist (`release_grace`, 5 s) automatisch freigegeben. Erst mit der Freigabe steht der Geist am Friedhof — und erst dann setzt der Geister-Wind ein (Kap. 12 Nr. 3). **Killcam-Zeile** (2 s, sarkastischer RECOUNT-9000-Ton, Pool ~30, kontextsensitiv): "Todesursache: Optimismus." / "Der Priester hat dich geheilt. Deshalb bist du tot."
 - **Sterbeposition ist eine Abwägung:** Im 200-px-Zugradius sterben = Futter; sich weit zurückziehen = sicher, aber doppelter Weg.
 - **Krit-Inszenierung:** Krits beider Seiten mit großem gelbem Floating Text, Screenshake, Punch-Sound. Ein 60er-Hogger-Krit, der volle Platte oneshottet, ist ein Ereignis und wird als solches gefeiert.
 - **Statistik-Tafel** (nach jedem Try-Ende und beim Sieg, WoW-Panel-Stil, ~10 s, wegklickbar), zweispaltig:
@@ -308,7 +308,7 @@ Vollständige Liste — jede Position hat einen Zweck, nichts weiter aufnehmen:
 |---|---|---|
 | 1 | Login-Musik-Anriss + Glitch-Static | Boot-Sequenz (Kap. 3) |
 | 2 | Elwynn-Tag-Ambience (Loop) | Grundteppich lebend — der friedlich dudelnde Wald über 40 Sterbenden ist der Witz; reagiert nie auf den Kampf |
-| 3 | Geister-Wind (Loop) + Audio-Tiefpassfilter | Totensicht-Zustand (Geist) |
+| 3 | Geister-Wind (Loop) + Audio-Tiefpassfilter | Totensicht-Zustand. Der Tiefpass liegt ab dem Tod über der Welt, **der Wind erst ab der Freigabe** (Kap. 11) — und er wird selbst nicht gedämpft, er ist ja die Welt des Geistes |
 | 4 | Schritte auf Gras (1 Loop) | lebende Bewegung; Geister sind lautlos |
 | 5 | Nahkampf-Hit (1×) | alle weißen Treffer + Heroischer Stoß/Finsterer Stoß |
 | 6 | Zauber-Cast-Loop (1×) + 4 Impacts (Feuer, Schatten, Heilig, Frost-Buff) | alle Casts der drei Casterklassen + Paladin |

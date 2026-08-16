@@ -186,6 +186,10 @@ M.params = {
   echo_charge_speed      = p(420, 100, 900, 20, "10.1"),
   echo_deliver_range     = p(70, 30, 200, 5, "10.1"),
   echo_deliver_pause     = p(1.5, 0.2, 10, 0.1, "10.1"),
+  -- Geist freilassen (GDD Kap. 11): Nachfrist, nach der die Freigabe von
+  -- selbst passiert. Der Respawn-Timer selbst bleibt die Todesstrafe —
+  -- freigeben kann man erst, wenn er abgelaufen ist (GDD Kap. 6).
+  release_grace          = p(5, 0, 60, 1, "11"),
 
   -- Sim-Streuungsmodell (GDD 17.2 Punkt 5b, v2.6) — Agentenmodell, kein Spielverhalten
   sim_skill_min          = p(0.7, 0.3, 1.0, 0.05, "17.2"),
