@@ -9,12 +9,23 @@ local cache = {}
 
 local function make_placeholder(spec)
   local s = spec.groesse
-  local canvas = love.graphics.newCanvas(s, s)
+  local cw, ch = spec.breite or s, spec.hoehe or s
+  local canvas = love.graphics.newCanvas(cw, ch)
   love.graphics.push("all")
   love.graphics.setCanvas(canvas)
   love.graphics.clear(0, 0, 0, 0)
   local r, g, b = spec.farbe[1], spec.farbe[2], spec.farbe[3]
   love.graphics.setColor(r, g, b, 1)
+  if spec.form == "splash" then
+    -- dunkle Flaeche mit Logo-Schriftzug mittig (Boot-Sequenz, GDD Kap. 3)
+    love.graphics.rectangle("fill", 0, 0, cw, ch)
+    love.graphics.setColor(0.85, 0.72, 0.3, 1)
+    local font = love.graphics.getFont()
+    local tw = font:getWidth(spec.kuerzel)
+    love.graphics.print(spec.kuerzel, cw / 2 - tw, ch / 3, 0, 2, 2)
+    love.graphics.pop()
+    return canvas
+  end
   local half = s / 2
   if spec.form == "kreis" then
     love.graphics.circle("fill", half, half, half - 1)
