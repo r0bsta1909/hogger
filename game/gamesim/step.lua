@@ -1,0 +1,603 @@
+-- game/gamesim/step.lua — DER Spielschritt: step(state, inputs) -> events.
+-- Einzige Stelle, die Spielzustand aendert (ADR-002, Skill Par. 2).
+-- Reines Lua, fixer Schritt 1/60 s; alle Zahlen aus sim/model.lua.
+-- inputs: pid -> { mask = 0..255, facing = 0..255 }
+
+local model = require("sim.model")
+local input = require("game.gamesim.input")
+local world = require("game.gamesim.world")
+local map = require("game.data.map")
+local events = require("game.gamesim.events")
+
+local S = {}
+local DT = model.TICK_DT
+local ICON_RADIUS = 60      -- Draufstellen-Radius der Klassenicons (GDD 5)
+local VICTORY_FREEZE = 10   -- s bis zum naechsten Try nach dem Sieg (M2)
+
+-- ---------------------------------------------------------------------------
+-- Kampfhelfer
+-- ---------------------------------------------------------------------------
+local function crit_roll(state, side, kind)
+  if not model.can_crit(kind) then return false end
+  local chance = (side == "player") and model.p("crit_chance_player")
+                                     or model.p("crit_chance_hogger")
+  return state.rng:roll(chance)
+end
+
+local function kill_player(state, p, ev, was_crit)
+  p.alive = false
+  p.ghost = false
+  p.hp = 0
+  p.cast = nil
+  p.revive = nil
+  p.deaths = p.deaths + 1
+  p.dead_until = model.respawn_timer(math.max(1, state.n_scale))
+  state.hogger.threat[p.id] = nil -- Bedrohung wird beim Tod geloescht (GDD 9.4)
+  state.corpses[#state.corpses + 1] = { x = p.x, y = p.y }
+  events.push(ev, state.tick, "death", p.id, nil, nil, nil)
+  if was_crit then
+    events.push(ev, state.tick, "crit_kill", "hogger", p.id, nil, true)
+  end
+end
+
+local function hogger_damage_player(state, p, amount, kind, ev)
+  if not p.alive then return end
+  local crit = crit_roll(state, "hogger", kind)
+  if crit then amount = amount * model.p("crit_mult_hogger") end
+  p.hp = p.hp - amount
+  if kind == "autohit" and p.class == "warrior" then
+    p.resource = math.min(model.p("rage_max"), p.resource + model.p("rage_per_hit_taken"))
+  end
+  events.push(ev, state.tick, "damage", "hogger", p.id, amount, crit)
+  if p.hp <= 0 then kill_player(state, p, ev, crit) end
+end
+
+local function player_damage_hogger(state, p, amount, kind, ev)
+  local h = state.hogger
+  if h.hp <= 0 or h.state == "reset" then return end
+  local crit = crit_roll(state, "player", kind)
+  if crit then amount = amount * model.p("crit_mult_player") end
+  if p.shout_until > state.time then
+    amount = amount * (1 + model.p("warrior_shout_bonus"))
+  end
+  h.hp = h.hp - amount
+  p.dmg_done = p.dmg_done + amount
+  h.threat[p.id] = (h.threat[p.id] or 0) + model.threat_for(amount, false)
+  if h.state == "idle" then h.state = "combat" end
+  -- Fress-Unterbrechung (GDD 9.2): verschiedene Spieler ODER Schadensschwelle
+  if h.eating and h.eating.phase == "channel" then
+    local e = h.eating
+    if not e.hitters[p.id] then
+      e.hitters[p.id] = true
+      e.hitter_count = e.hitter_count + 1
+    end
+    e.dmg_accum = e.dmg_accum + amount
+    if e.hitter_count >= model.eat_interrupters(state.n_scale)
+       or e.dmg_accum >= model.eat_dmg_threshold(state.n_scale) then
+      h.eating = nil
+      h.eat_cd = model.p("eat_cd")
+      events.push(ev, state.tick, "eat_interrupt", "hogger", nil, e.hitter_count, nil)
+    end
+  end
+  events.push(ev, state.tick, "damage", p.id, "hogger", amount, crit)
+  if kind == "autohit" and p.class == "warrior" then
+    p.resource = math.min(model.p("rage_max"), p.resource + model.p("rage_per_hit_dealt"))
+  end
+end
+
+local function heal_player(state, src, dst, amount, ev)
+  if not dst.alive then return end
+  local crit = crit_roll(state, "player", "heal")
+  if crit then amount = amount * model.p("crit_mult_player") end
+  local effective = math.min(amount, dst.max_hp - dst.hp)
+  dst.hp = dst.hp + effective
+  src.heal_done = src.heal_done + effective
+  local h = state.hogger
+  if h.state == "combat" or h.state == "eating" then
+    h.threat[src.id] = (h.threat[src.id] or 0) + model.threat_for(effective, true)
+  end
+  events.push(ev, state.tick, "heal", src.id, dst.id, effective, crit)
+end
+
+-- ---------------------------------------------------------------------------
+-- Faehigkeiten (M2: Krieger, Jaeger, Priester)
+-- ---------------------------------------------------------------------------
+local function enemy_in_range(state, p, range)
+  local h = state.hogger
+  return h.hp > 0 and h.state ~= "reset"
+         and world.dist(p.x, p.y, h.x, h.y) <= range
+end
+
+local function try_ability(state, p, slot, ev)
+  if p.gcd > 0 or p.cast then return end
+  local class = p.class
+  if class == "warrior" then
+    if slot == 1 then
+      if p.resource >= model.p("warrior_heroic_rage")
+         and enemy_in_range(state, p, model.p("melee_range")) then
+        p.resource = p.resource - model.p("warrior_heroic_rage")
+        player_damage_hogger(state, p, model.p("warrior_heroic_dmg"), "ability", ev)
+        p.gcd = model.p("gcd")
+      end
+    elseif slot == 2 then
+      if p.resource >= model.p("warrior_shout_rage") then
+        p.resource = p.resource - model.p("warrior_shout_rage")
+        local r = model.p("warrior_shout_radius")
+        for _, q in ipairs(state.players) do
+          if q.alive and world.dist(p.x, p.y, q.x, q.y) <= r then
+            q.shout_until = state.time + model.p("warrior_shout_duration")
+          end
+        end
+        p.gcd = model.p("gcd")
+      end
+    end
+  elseif class == "hunter" then
+    if slot == 1 then
+      if p.raptor_cd <= 0 and enemy_in_range(state, p, model.p("melee_range")) then
+        p.raptor_cd = model.p("hunter_raptor_cd")
+        player_damage_hogger(state, p, model.p("hunter_raptor_dmg"), "ability", ev)
+        p.gcd = model.p("gcd")
+      end
+    end
+  elseif class == "priest" then
+    if slot == 1 then
+      if p.resource >= model.p("priest_smite_mana")
+         and enemy_in_range(state, p, model.p("wand_range")) then
+        p.cast = { ability = "smite", t_left = model.p("priest_smite_cast") }
+        p.gcd = model.p("gcd")
+      end
+    elseif slot == 2 then
+      if p.resource >= model.p("priest_heal_mana") then
+        local target = state.players[p.target] or p
+        if not target.alive then target = p end
+        p.cast = { ability = "heal", t_left = model.p("priest_heal_cast"),
+                   target = target.id }
+        p.gcd = model.p("gcd")
+      end
+    end
+  end
+end
+
+local function finish_cast(state, p, ev)
+  local c = p.cast
+  p.cast = nil
+  if c.ability == "smite" then
+    if p.resource >= model.p("priest_smite_mana")
+       and enemy_in_range(state, p, model.p("wand_range")) then
+      p.resource = p.resource - model.p("priest_smite_mana")
+      p.last_cast_t = state.time
+      player_damage_hogger(state, p, model.p("priest_smite_dmg"), "ability", ev)
+    end
+  elseif c.ability == "heal" then
+    local target = state.players[c.target]
+    if target and target.alive and p.resource >= model.p("priest_heal_mana") then
+      p.resource = p.resource - model.p("priest_heal_mana")
+      p.last_cast_t = state.time
+      heal_player(state, p, target, model.p("priest_heal_amount"), ev)
+    end
+  end
+end
+
+-- ---------------------------------------------------------------------------
+-- Spieler-Tick
+-- ---------------------------------------------------------------------------
+local function player_tick(state, p, inp, ev)
+  local mask = (inp and input.valid(inp.mask)) and inp.mask or 0
+  if inp and inp.facing then p.facing = inp.facing % 256 end
+
+  -- tot: auf Respawn warten, dann als Geist am Friedhof erscheinen
+  if not p.alive and not p.ghost then
+    p.dead_until = p.dead_until - DT
+    if p.dead_until <= 0 then
+      local g = map.graveyard()
+      p.ghost = true
+      p.x, p.y = g.x, g.y
+      events.push(ev, state.tick, "spawn", p.id, nil, nil, nil)
+    end
+    p.prev_mask = mask
+    return
+  end
+
+  local dx, dy = input.move_vec(mask)
+  local moving = dx ~= 0 or dy ~= 0
+
+  -- Springen: reines Feel-Feature (GDD 4.1), Host zaehlt
+  if input.pressed(mask, p.prev_mask, input.JUMP) and p.jump_t <= 0 then
+    p.jump_t = 0.4
+    p.jumps = p.jumps + 1
+  end
+  if p.jump_t > 0 then p.jump_t = p.jump_t - DT end
+
+  if p.ghost then
+    local speed = model.p("move_speed_ghost")
+    p.x, p.y = map.clamp(p.x + dx * speed * DT, p.y + dy * speed * DT)
+    -- Wiederbelebung: auf Klassenicon stehen, 2-s-Channel (GDD 5)
+    if moving then p.revive = nil end
+    if not p.revive then
+      for slot = 1, #world.CLASSES_M2 do
+        local ix, iy = world.class_icon_pos(slot)
+        if world.dist(p.x, p.y, ix, iy) <= ICON_RADIUS then
+          p.revive = { slot = slot, t_left = model.p("revive_channel") }
+          break
+        end
+      end
+    else
+      p.revive.t_left = p.revive.t_left - DT
+      if p.revive.t_left <= 0 then
+        local class = world.CLASSES_M2[p.revive.slot]
+        if p.class ~= class then
+          events.push(ev, state.tick, "class_change", p.id, class, nil, nil)
+        end
+        p.class = class
+        p.max_hp = model.hp_for_class(class)
+        p.hp = p.max_hp
+        p.resource = (class == "warrior") and 0 or model.p("mana_max")
+        p.alive = true
+        p.ghost = false
+        p.revive = nil
+        p.last_cast_t = -1000
+        p.next_auto = 0
+        p.shout_until = 0
+        p.bleed_t = 0
+        events.push(ev, state.tick, "revive", p.id, class, 0, nil)
+      end
+    end
+    p.prev_mask = mask
+    return
+  end
+
+  -- lebend --------------------------------------------------------------
+  local speed = model.p("move_speed_alive")
+  if moving then
+    p.x, p.y = map.clamp(p.x + dx * speed * DT, p.y + dy * speed * DT)
+    if p.cast then p.cast = nil end -- Bewegung bricht den Cast
+  end
+
+  -- Blutung (Vicious Slice, kein Krit)
+  if p.bleed_t > 0 then
+    p.bleed_t = p.bleed_t - DT
+    p.bleed_next = p.bleed_next - DT
+    if p.bleed_next <= 0 then
+      p.bleed_next = p.bleed_next + model.p("hogger_slice_bleed_interval")
+      hogger_damage_player(state, p, model.p("hogger_slice_bleed_dmg"), "dot", ev)
+      if not p.alive then p.prev_mask = mask return end
+    end
+  end
+
+  -- Mana: Fuenf-Sekunden-Regel (GDD 8.1)
+  if p.class ~= "warrior" then
+    if state.time - p.last_cast_t >= model.p("five_sec_rule_wait") then
+      p.resource = math.min(model.p("mana_max"),
+        p.resource + model.p("mana_regen_rate") * DT)
+    end
+  end
+
+  if p.gcd > 0 then p.gcd = p.gcd - DT end
+  if p.raptor_cd > 0 then p.raptor_cd = p.raptor_cd - DT end
+
+  -- Cast abschliessen
+  if p.cast then
+    p.cast.t_left = p.cast.t_left - DT
+    if p.cast.t_left <= 0 then finish_cast(state, p, ev) end
+  end
+
+  -- Faehigkeiten per Flanke (ADR-002)
+  if input.pressed(mask, p.prev_mask, input.AB1) then try_ability(state, p, 1, ev) end
+  if input.pressed(mask, p.prev_mask, input.AB2) then try_ability(state, p, 2, ev) end
+
+  -- Autohit / Autoschuss / Zauberstab
+  p.next_auto = p.next_auto - DT
+  if p.next_auto <= 0 and not p.cast then
+    local range, dmg
+    if p.class == "hunter" then
+      range, dmg = model.p("autoshot_range"), model.p("autoshot_dmg")
+    elseif p.class == "priest" then
+      range, dmg = model.p("wand_range"), model.p("wand_dmg")
+    else
+      range, dmg = model.p("melee_range"), model.p("autohit_melee_dmg")
+    end
+    if p.target == world.HOGGER_ID and enemy_in_range(state, p, range) then
+      p.next_auto = model.p("autohit_interval")
+      player_damage_hogger(state, p, dmg, "autohit", ev)
+    end
+  end
+
+  p.prev_mask = mask
+end
+
+-- ---------------------------------------------------------------------------
+-- Hogger-Tick (GDD 9, v2.6 inkl. Cleave)
+-- ---------------------------------------------------------------------------
+local function pick_hogger_target(state)
+  local h = state.hogger
+  local melee_r = model.p("melee_range")
+  local best_melee, bm_threat, best_any, ba_threat = nil, -1, nil, -1
+  for _, p in ipairs(state.players) do
+    local th = h.threat[p.id]
+    if p.alive and th and th > 0 then
+      local d = world.dist(p.x, p.y, h.x, h.y)
+      if d <= melee_r and th > bm_threat then best_melee, bm_threat = p, th end
+      if th > ba_threat then best_any, ba_threat = p, th end
+    end
+  end
+  return best_melee or best_any, best_melee ~= nil
+end
+
+local function hogger_move_towards(state, tx, ty, speed)
+  local h = state.hogger
+  local d = world.dist(h.x, h.y, tx, ty)
+  if d < 1 then return end
+  local step = math.min(speed * DT, d)
+  local nx = h.x + (tx - h.x) / d * step
+  local ny = h.y + (ty - h.y) / d * step
+  if not map.in_graveyard(nx, ny) then -- unantastbare Zone (GDD 7.1)
+    h.x, h.y = nx, ny
+  end
+end
+
+local function hogger_try_eat(state, ev)
+  local h = state.hogger
+  if h.eating or h.eat_cd > 0 then return false end
+  if h.hp >= model.p("eat_hp_threshold") * h.max_hp then return false end
+  local radius = model.p("eat_corpse_radius")
+  for i, c in ipairs(state.corpses) do
+    if world.dist(c.x, c.y, h.x, h.y) <= radius then
+      h.eating = { phase = "drag", t_left = model.p("eat_drag_duration"),
+                   corpse = i, hitters = {}, hitter_count = 0, dmg_accum = 0,
+                   heal_tick = 1 }
+      events.push(ev, state.tick, "eat_start", "hogger", nil, nil, nil)
+      events.push(ev, state.tick, "eat_drag", "hogger", nil, nil, nil)
+      return true
+    end
+  end
+  return false
+end
+
+local function hogger_reset(state)
+  local h = state.hogger
+  h.state = "reset"
+  h.hp = h.max_hp -- Full Heal beim Leash-Reset (GDD 9.1)
+  h.threat = {}
+  h.eating = nil
+  h.charge = nil
+  h.out_of_leash_t = 0
+end
+
+local function hogger_tick(state, ev)
+  local h = state.hogger
+  if h.hp <= 0 then return end
+
+  if h.eat_cd > 0 then h.eat_cd = h.eat_cd - DT end
+  if h.slice_cd > 0 then h.slice_cd = h.slice_cd - DT end
+  if h.charge_cd > 0 then h.charge_cd = h.charge_cd - DT end
+  h.next_auto = h.next_auto - DT
+
+  -- Rueckweg nach Leash-Reset
+  if h.state == "reset" then
+    hogger_move_towards(state, map.hill.x, map.hill.y, model.p("hogger_speed"))
+    if world.dist(h.x, h.y, map.hill.x, map.hill.y) < 10 then
+      h.state = "idle"
+    end
+    return
+  end
+
+  -- Fressen
+  if h.eating then
+    local e = h.eating
+    local c = state.corpses[e.corpse]
+    if not c then
+      h.eating = nil
+    elseif e.phase == "drag" then
+      -- Leiche heranziehen (schliesst Safe-Death-Exploit, GDD 9.2)
+      c.x = h.x + (c.x - h.x) * (1 - DT / math.max(DT, e.t_left))
+      c.y = h.y + (c.y - h.y) * (1 - DT / math.max(DT, e.t_left))
+      e.t_left = e.t_left - DT
+      if e.t_left <= 0 then
+        e.phase = "channel"
+        e.t_left = model.p("eat_channel_duration")
+      end
+      return
+    else
+      h.hp = math.min(h.max_hp, h.hp + model.eat_heal_per_second(state.n_scale) * DT)
+      e.t_left = e.t_left - DT
+      -- eat_tick je voller Sekunde Kanal (GDD 17.3)
+      if model.p("eat_channel_duration") - e.t_left >= e.heal_tick then
+        e.heal_tick = e.heal_tick + 1
+        events.push(ev, state.tick, "eat_tick", "hogger", nil,
+                    model.eat_heal_per_second(state.n_scale), nil)
+      end
+      if e.t_left <= 0 then
+        table.remove(state.corpses, e.corpse)
+        h.eating = nil
+        h.eat_cd = model.p("eat_cd")
+        events.push(ev, state.tick, "eat_complete", "hogger", nil, nil, nil)
+      end
+      return
+    end
+  end
+
+  -- Charge-Anlauf laeuft (Leash-Pruefung waehrenddessen ausgesetzt, GDD 9.1)
+  if h.charge then
+    h.charge.t_left = h.charge.t_left - DT
+    local target = state.players[h.charge.target]
+    if not target or not target.alive then
+      h.charge = nil
+    elseif h.charge.t_left <= 0 then
+      local ox, oy = h.x, h.y
+      h.x, h.y = target.x, target.y
+      -- Knockback: vom Anlaufvektor weg (GDD 9.2), kein Krit
+      local d = math.max(1, world.dist(ox, oy, target.x, target.y))
+      local kx = (target.x - ox) / d * model.p("hogger_charge_knockback")
+      local ky = (target.y - oy) / d * model.p("hogger_charge_knockback")
+      target.x, target.y = map.clamp(target.x + kx, target.y + ky)
+      if target.cast then target.cast = nil end
+      events.push(ev, state.tick, "charge", "hogger", target.id, nil, nil)
+      hogger_damage_player(state, target, model.p("hogger_charge_dmg"), "charge", ev)
+      h.charge = nil
+      h.next_auto = math.max(h.next_auto, 0.5)
+    end
+    return
+  end
+
+  -- IDLE: Huegel-Patrouille, Aggro bei 250 px (GDD 9.1)
+  if h.state == "idle" then
+    local wp = map.patrol[h.patrol_i]
+    hogger_move_towards(state, wp.x, wp.y, model.p("hogger_speed") * 0.5)
+    if world.dist(h.x, h.y, wp.x, wp.y) < 12 then
+      h.patrol_i = (h.patrol_i % #map.patrol) + 1
+    end
+    for _, p in ipairs(state.players) do
+      if p.alive and world.dist(p.x, p.y, h.x, h.y) <= model.p("hogger_aggro_radius") then
+        h.state = "combat"
+        h.threat[p.id] = math.max(h.threat[p.id] or 0, 0.1)
+        break
+      end
+    end
+    if h.state == "idle" then
+      hogger_try_eat(state, ev)
+      return
+    end
+  end
+
+  -- KAMPF ----------------------------------------------------------------
+  -- Leash (Hysterese 2 s; GDD 9.1)
+  if world.dist(h.x, h.y, map.hill.x, map.hill.y) > model.p("hogger_leash_radius") then
+    h.out_of_leash_t = h.out_of_leash_t + DT
+    if h.out_of_leash_t >= model.p("hogger_leash_hysteresis") then
+      hogger_reset(state)
+      return
+    end
+  else
+    h.out_of_leash_t = 0
+  end
+
+  local target, in_melee = pick_hogger_target(state)
+  if not target then
+    if not hogger_try_eat(state, ev) then
+      h.state = "idle"
+    end
+    return
+  end
+
+  -- Charge: weitestes Ziel mit Bedrohung innerhalb des Leash-Radius (GDD 9.2)
+  if h.charge_cd <= 0 then
+    local far, far_d = nil, 0
+    for _, p in ipairs(state.players) do
+      local th = h.threat[p.id]
+      if p.alive and th and th > 0
+         and world.dist(p.x, p.y, map.hill.x, map.hill.y) <= model.p("hogger_leash_radius") then
+        local d = world.dist(p.x, p.y, h.x, h.y)
+        if d > far_d then far, far_d = p, d end
+      end
+    end
+    if far then
+      h.charge_cd = model.p("hogger_charge_cd")
+      h.charge = { target = far.id, t_left = model.p("hogger_charge_windup") }
+      return
+    end
+  end
+
+  -- Verfolgen / Zuschlagen
+  local d = world.dist(target.x, target.y, h.x, h.y)
+  if d > model.p("melee_range") then
+    local speed = model.p("hogger_speed")
+    if h.slow_until > state.time then
+      speed = speed * (1 - model.p("mage_frostarmor_slow"))
+    end
+    hogger_move_towards(state, target.x, target.y, speed)
+    hogger_try_eat(state, ev)
+    return
+  end
+
+  -- Vicious Slice (GDD 9.2)
+  if h.slice_cd <= 0 then
+    h.slice_cd = model.p("hogger_slice_cd")
+    hogger_damage_player(state, target, model.p("hogger_slice_dmg"), "slice", ev)
+    if target.alive then
+      target.bleed_t = model.p("hogger_slice_duration")
+      target.bleed_next = model.p("hogger_slice_bleed_interval")
+    end
+    return
+  end
+
+  -- Autohit + Rundumschlag (v2.6)
+  if h.next_auto <= 0 then
+    h.next_auto = model.p("hogger_autohit_interval")
+    hogger_damage_player(state, target, model.p("hogger_autohit_dmg"), "autohit", ev)
+    local extra = model.cleave_targets(math.max(1, state.n_scale)) - 1
+    if extra > 0 then
+      -- deterministische Reihenfolge: nach Bedrohung, dann ID
+      local cands = {}
+      for _, q in ipairs(state.players) do
+        if q.alive and q ~= target and (h.threat[q.id] or 0) > 0
+           and world.dist(q.x, q.y, h.x, h.y) <= model.p("melee_range") then
+          cands[#cands + 1] = q
+        end
+      end
+      table.sort(cands, function(a, b)
+        local ta, tb = h.threat[a.id] or 0, h.threat[b.id] or 0
+        if ta ~= tb then return ta > tb end
+        return a.id < b.id
+      end)
+      for i = 1, math.min(extra, #cands) do
+        hogger_damage_player(state, cands[i], model.p("hogger_autohit_dmg"), "autohit", ev)
+      end
+    end
+  end
+
+  hogger_try_eat(state, ev)
+end
+
+-- ---------------------------------------------------------------------------
+-- Try-Struktur (GDD 6)
+-- ---------------------------------------------------------------------------
+local function end_try(state, ev, won)
+  local e = events.push(ev, state.tick, "try_end", "host",
+    string.format("%.17g", math.max(0, state.hogger.hp)), won and 1 or 0, nil)
+  local jumps = {}
+  for _, p in ipairs(state.players) do
+    jumps[#jumps + 1] = { p.id, p.jumps }
+  end
+  e.jumps = jumps
+end
+
+-- ---------------------------------------------------------------------------
+function S.step(state, inputs)
+  local ev = {}
+  state.tick = state.tick + 1
+  state.time = state.tick * DT
+
+  if state.phase == "won" then
+    state.won_t = state.won_t - DT
+    if state.won_t <= 0 then
+      world.begin_try(state, ev)
+      for _, p in ipairs(state.players) do
+        p.alive = false
+        p.ghost = true
+        local g = map.graveyard()
+        p.x, p.y = g.x, g.y
+      end
+    end
+    return ev
+  end
+
+  state.clock = state.clock + DT
+
+  for _, p in ipairs(state.players) do
+    player_tick(state, p, inputs[p.id], ev)
+  end
+  hogger_tick(state, ev)
+
+  if state.hogger.hp <= 0 then
+    end_try(state, ev, true)
+    state.phase = "won"
+    state.won_t = VICTORY_FREEZE
+  elseif state.clock >= model.p("try_time_limit") then
+    end_try(state, ev, false)
+    world.begin_try(state, ev)
+  end
+
+  return ev
+end
+
+return S

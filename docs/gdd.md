@@ -326,7 +326,7 @@ Mittlere DPS pro lebendem Spieler ≈ 3,5 (8-Klassen-Mix mit Jäger-Grundlast); 
 | F1 | Koordinierte Gruppen gewinnen zuverlässig | Siegquote < 60 % oder > 90 % bei irgendeinem N |
 | F2 | Unkoordinierte verlieren meist | Siegquote unkoordiniert > 35 % |
 | F3 | Fressen ist der Hebel | Unkoordinierte Siegquote bei N ≥ 10 ohne Fress-Unterbrechung > 10 % |
-| F4 | Krits entscheiden nichts | Δ Siegquote (Krits an/aus) > 5 Prozentpunkte |
+| F4 | Krits entscheiden nichts | Δ Siegquote (Krits an/aus) > 5 Prozentpunkte **im Mittel über alle Zellen** (Rob-Entscheid, Issue #6; Einzelzellen dürfen streuen, solange beide Krit-Welten im F1-Band bleiben) |
 | F5 | Try-Länge trifft das Fenster | Median-Siegtry < 6 min oder > 13 min |
 | F6 | Skalierung ist fair | Siegquoten-Spread zwischen N=5 und N=40 > 15 Prozentpunkte |
 
