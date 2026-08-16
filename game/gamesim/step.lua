@@ -786,70 +786,19 @@ end
 
 -- ---------------------------------------------------------------------------
 -- Das Echo von Leeroy Jenkins (GDD 10.1): Questgeber am Friedhof.
--- Es greift nie in den Kampf ein — es redet, gibt die Quest und sieht zu,
+-- Es greift nie in den Kampf ein — es steht da, gibt die Quest und sieht zu,
 -- wie sein eigener Koerper jeden Try aufs Neue anstuermt und stirbt.
--- Zustaende: idle (am Friedhof) -> charge (rennt zum Neuankoemmling) ->
--- deliver (drueckt die Quest auf, wartet auf die Annahme) -> return.
+-- Es rennt niemandem hinterher: die Quest liegt mit dem Spielbeitritt an,
+-- die Annaeherung ist eine rein LOKALE Sequenz beim betroffenen Spieler
+-- (Issue #61) — sonst wuerde bei 40 Beitritten dauernd jemand ueber den
+-- Friedhof gechargt, auf dem ohnehin alle am selben Punkt stehen.
 -- ---------------------------------------------------------------------------
-local function echo_next_target(state)
-  -- kleinste Spieler-ID ohne Quest; nie Leeroy, nie Getrennte (deterministisch)
+local function echo_tick(state, ev)
+  if not state.echo then return end
   for _, p in ipairs(state.players) do
     if not p.is_leeroy and not p.disconnected and (p.quest or 0) == 0 then
-      return p.id
-    end
-  end
-  return nil
-end
-
-local function echo_move_towards(state, tx, ty)
-  local e = state.echo
-  local dx, dy = tx - e.x, ty - e.y
-  local d = math.sqrt(dx * dx + dy * dy)
-  local stepd = model.p("echo_charge_speed") * DT
-  if d <= stepd then
-    e.x, e.y = tx, ty
-    return true
-  end
-  e.x, e.y = map.clamp(e.x + dx / d * stepd, e.y + dy / d * stepd)
-  return false
-end
-
-local function echo_tick(state, ev)
-  local e = state.echo
-  if not e then return end
-  e.t = e.t + DT
-  local home = map.echo_home()
-  if e.state == "idle" then
-    local pid = echo_next_target(state)
-    if pid then
-      e.state, e.target, e.t = "charge", pid, 0
-    elseif world.dist(e.x, e.y, home.x, home.y) > 1 then
-      echo_move_towards(state, home.x, home.y)
-    end
-  elseif e.state == "charge" then
-    local p = state.players[e.target]
-    if not p or p.disconnected or (p.quest or 0) ~= 0 then
-      e.state, e.target, e.t = "return", nil, 0
-    else
-      echo_move_towards(state, p.x, p.y)
-      if world.dist(e.x, e.y, p.x, p.y) <= model.p("echo_deliver_range") then
-        p.quest = 1 -- aufgedrueckt; ablehnen kann man sie nicht (GDD Kap. 5)
-        events.push(ev, state.tick, "quest_offer", "echo", p.id, nil, nil)
-        e.state, e.t = "deliver", 0
-      end
-    end
-  elseif e.state == "deliver" then
-    -- kurz stehen bleiben, damit die Uebergabe sichtbar ist — danach sofort
-    -- zum naechsten Neuankoemmling. Wer sich Zeit laesst, haelt niemanden
-    -- auf: das Fenster steht ja schon auf seinem Schirm.
-    if e.t >= model.p("echo_deliver_pause") then
-      e.state, e.target, e.t = "return", nil, 0
-    end
-  elseif e.state == "return" then
-    if echo_move_towards(state, home.x, home.y) then
-      e.state, e.t = "idle", 0
-    elseif echo_next_target(state) then
-      e.state, e.t = "idle", 0 -- naechster Neuankoemmling geht vor
+      p.quest = 1 -- aufgedrueckt; ablehnen kann man sie nicht (GDD Kap. 5)
+      events.push(ev, state.tick, "quest_offer", "echo", p.id, nil, nil)
     end
   end
 end

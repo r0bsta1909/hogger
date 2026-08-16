@@ -41,9 +41,12 @@ local NAME_HINT = "2-12 Buchstaben"
 Q.TITLE, Q.GIVER, Q.BODY, Q.GOALS = TITLE, GIVER, BODY, GOALS
 Q.NAME_TAKEN, Q.NAME_PROMPT = NAME_TAKEN, NAME_PROMPT
 
+local APPROACH_T = 1.3 -- lokale Annaeherung des Echos (Issue #61)
+
 function Q.new(prefill)
   return setmetatable({
-    state = "open",     -- open | waiting | done
+    state = "approach", -- approach | open | waiting | done
+    mode = "quest",     -- quest | log (Questlog nach der Annahme, Taste L)
     t = 0,
     buffer = prefill or "",
     note = nil,
@@ -55,13 +58,39 @@ function Q.new(prefill)
   }, Q)
 end
 
--- Solange das Fenster offen ist, gehen Tasten ins Fenster (Namensfeld)
+-- Questlog (Taste L nach der Annahme): dieselbe Seite, ohne Namensfeld und
+-- ohne Knoepfe — man kann nichts mehr entscheiden (GDD Kap. 5)
+function Q.new_log()
+  local q = Q.new()
+  q.state = "open"
+  q.mode = "log"
+  return q
+end
+
+-- Solange das Fenster offen ist, gehen Tasten ins Fenster (Namensfeld).
+-- Das Questlog blockiert nichts: es ist nur eine Anzeige.
 function Q:blocking()
+  return self.mode == "quest" and self.state ~= "done" and not self.closed
+end
+
+-- sichtbar (auch das Log, das nichts blockiert)
+function Q:visible()
   return self.state ~= "done" and not self.closed
 end
 
 function Q:update(dt)
   self.t = self.t + dt
+  if self.state == "approach" and self.t >= APPROACH_T then
+    self.state = "open"
+    self.t = 0
+  end
+end
+
+-- Taste L: wegblenden und zurueckholen (Issue #62)
+function Q:toggle()
+  if self.state == "done" then return false end
+  self.closed = not self.closed
+  return true
 end
 
 -- Name: erster Buchstabe gross, Rest klein (GDD Kap. 5)
@@ -70,7 +99,7 @@ local function pretty(name)
 end
 
 function Q:can_accept()
-  return self.state == "open" and #self.buffer >= 2
+  return self.mode == "quest" and self.state == "open" and #self.buffer >= 2
 end
 
 function Q:accept()
@@ -88,7 +117,8 @@ end
 
 function Q:textinput(t)
   if not self:blocking() then return false end
-  if self.state == "open" and t:match("^%a$") and #self.buffer < 12 then
+  if self.state == "open" and self.mode == "quest"
+     and t:match("^%a$") and #self.buffer < 12 then
     self.buffer = self.buffer .. t
   end
   return true
@@ -167,8 +197,12 @@ local function inside(r, mx, my)
 end
 
 function Q:mousepressed(mx, my, w, h)
-  if not self:blocking() then return false end
+  if not self:visible() or self.state == "approach" then return false end
   local L = self:layout(w, h)
+  if self.mode == "log" then
+    if inside(L.close, mx, my) then self.closed = true end
+    return true
+  end
   if inside(L.close, mx, my) then
     self.closed = true
     return true
@@ -186,8 +220,36 @@ function Q:mousemoved(mx, my, w, h)
                or inside(L.close, mx, my) and "close" or nil
 end
 
-function Q:draw(view, w, h)
-  if not self:blocking() then return end
+-- Lokale Annaeherung (Issue #61): nur der betroffene Spieler sieht, wie das
+-- Echo von seiner Standposition auf ihn zugleitet. In der Welt bewegt sich
+-- dabei nichts — alle anderen sehen es unveraendert am Friedhof stehen.
+function Q:draw_approach(view, w, h, to_screen)
+  local assets = require("game.assets")
+  local k = math.min(1, self.t / APPROACH_T)
+  local ease = k * k * (3 - 2 * k)
+  local fx, fy = w / 2, h * 0.34
+  if view and view.echo and to_screen then
+    fx, fy = to_screen(view.echo.x, view.echo.y)
+  end
+  local tx, ty = w / 2, h * 0.34
+  local x, y = fx + (tx - fx) * ease, fy + (ty - fy) * ease
+  local scale = 1.6 + 1.4 * ease
+  love.graphics.setColor(0, 0, 0, 0.45 * ease)
+  love.graphics.rectangle("fill", 0, 0, w, h)
+  love.graphics.setColor(0.75, 0.85, 1.0, 0.25)
+  love.graphics.circle("fill", x, y, 22 * scale)
+  assets.draw("icon_warrior", x, y, scale, 0.55 + 0.4 * ease)
+  local font = love.graphics.getFont()
+  love.graphics.setColor(0.72, 0.86, 0.55, ease)
+  love.graphics.print(GIVER, x - font:getWidth(GIVER) / 2, y + 26 * scale)
+end
+
+function Q:draw(view, w, h, to_screen)
+  if not self:visible() then return end
+  if self.state == "approach" then
+    self:draw_approach(view, w, h, to_screen)
+    return
+  end
   local assets = require("game.assets")
   local font = love.graphics.getFont()
   local L = self:layout(w, h)
@@ -239,6 +301,14 @@ function Q:draw(view, w, h)
   for _, g in ipairs(GOALS) do
     love.graphics.printf("- " .. g, tx, ty, tw)
     ty = ty + font:getHeight() + 4
+  end
+
+  if self.mode == "log" then
+    -- Questlog: nichts zu entscheiden, nur nachlesen (Taste L)
+    love.graphics.setColor(0.35, 0.30, 0.22, 1)
+    local hint = "Angenommen.  [L] schliesst das Questlog."
+    love.graphics.print(hint, L.name[1], L.name[2] + 6)
+    return
   end
 
   -- Namensfeld

@@ -181,11 +181,6 @@ M.params = {
   -- sein Echo noch redet (Playtest 2026-08-16). Notbremse, falls niemand
   -- annimmt:
   leeroy_first_march_wait = p(120, 10, 600, 10, "10.3"),
-  -- Das Echo von Leeroy Jenkins (GDD 10.1): Questgeber am Friedhof. Es
-  -- chargt seine Quest persoenlich heran — Krieger bleibt Krieger.
-  echo_charge_speed      = p(420, 100, 900, 20, "10.1"),
-  echo_deliver_range     = p(70, 30, 200, 5, "10.1"),
-  echo_deliver_pause     = p(1.5, 0.2, 10, 0.1, "10.1"),
   -- Geist freilassen (GDD Kap. 11): Nachfrist, nach der die Freigabe von
   -- selbst passiert. Der Respawn-Timer selbst bleibt die Todesstrafe —
   -- freigeben kann man erst, wenn er abgelaufen ist (GDD Kap. 6).

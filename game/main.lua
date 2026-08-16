@@ -606,7 +606,9 @@ function love.update(dt)
       app.net:accept_quest()
       audio.play("snd_ui_click")
     end
-    if me_now and (me_now.quest or 2) >= 2 then app.quest = nil end
+    if me_now and (me_now.quest or 2) >= 2 and app.quest.mode == "quest" then
+      app.quest = nil -- angenommen; ab jetzt holt Taste L das Questlog
+    end
   end
 
   if app.shot_at then
@@ -650,7 +652,7 @@ function love.draw()
       mouse = { love.mouse.getPosition() },
     })
     app.floating:draw(to_screen)
-    if app.quest then app.quest:draw(app.view, bw, bh) end
+    if app.quest then app.quest:draw(app.view, bw, bh, to_screen) end
     -- "Geist freilassen" zwischen Tod und Friedhof (GDD Kap. 11)
     do
       local rel = require("game.ui.release")
@@ -731,6 +733,19 @@ function love.keypressed(key)
     return
   end
   if key == "f12" then app.debug:toggle() return end
+  -- Questlog wie im Original (Issue #62): wegblenden, zurueckholen, und
+  -- nach der Annahme die Quest nachlesen
+  if key == "l" and not (app.boot and app.boot:active()) then
+    if app.quest then
+      app.quest:toggle()
+    elseif app.view then
+      local me = app.view.players[app.view.me]
+      if me and (me.quest or 0) >= 2 then
+        app.quest = require("game.ui.quest").new_log()
+      end
+    end
+    return
+  end
   if app.boot and app.boot:active() then
     -- getarnte IP-Konsole im Glitch-Bild (GDD Kap. 3)
     local boot_action = app.boot:keypressed(key)
@@ -746,6 +761,10 @@ function love.keypressed(key)
   end
   if app.quest and app.quest:blocking() then
     app.quest:keypressed(key) -- das Questfenster schluckt alles
+    return
+  end
+  if app.quest and app.quest.mode == "log" and key == "escape" then
+    app.quest = nil
     return
   end
   if app.victory then
@@ -814,9 +833,14 @@ function love.mousepressed(mx, my)
     app.boot:mousepressed() -- ab dem zweiten Start ueberspringbar (GDD 3)
     return
   end
-  if app.quest and app.quest:blocking() then
-    app.quest:mousepressed(mx, my, love.graphics.getDimensions())
-    return
+  if app.quest and app.quest:visible() then
+    local w2, h2 = love.graphics.getDimensions()
+    local L = app.quest:layout(w2, h2)
+    if app.quest:blocking()
+       or (mx >= L.x and mx <= L.x + L.w and my >= L.y and my <= L.y + L.h) then
+      app.quest:mousepressed(mx, my, w2, h2)
+      return
+    end
   end
   if app.victory then
     if app.victory:mousepressed(mx, my) == "revanche" then

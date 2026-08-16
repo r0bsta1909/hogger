@@ -377,8 +377,9 @@ do
   end
   T.near(world.dist(p.x, p.y, x0, y0), 0, "Quest: keine Bewegung vor der Annahme")
 
-  -- Das Echo chargt heran und drueckt die Quest auf (es steht am Friedhof
-  -- und ist schnell da, deshalb zaehlen die Ereignisse von oben schon mit)
+  -- Das Echo drueckt die Quest mit dem Beitritt auf und bleibt dabei stehen:
+  -- die Annaeherung ist lokale Darstellung, kein Weltvorgang (Issue #61)
+  local ex0, ey0 = st.echo.x, st.echo.y
   local offered = false
   for _, ee in ipairs(evs) do
     if ee.ev == "quest_offer" then offered = true end
@@ -390,7 +391,9 @@ do
     end
     if offered then break end
   end
-  T.ok(offered, "Echo: drueckt die Quest persoenlich auf")
+  T.ok(offered, "Echo: drueckt die Quest auf")
+  T.near(world.dist(st.echo.x, st.echo.y, ex0, ey0), 0,
+    "Echo: bleibt dabei an seiner Standposition")
   T.eq(p.quest, 1, "Quest: aufgedrueckt, aber noch nicht angenommen")
   T.eq(st.leeroy_started, false, "Leeroy: wartet auf die Annahme")
   T.ok(lee.ai == nil or lee.ai.phase ~= "march", "Leeroy: kein Anmarsch vorher")
