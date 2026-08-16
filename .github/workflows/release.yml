@@ -3,6 +3,8 @@
 # Eine .love ist die Wahrheit (GDD Kap. 14): Zip-Wurzel enthaelt main.lua/
 # conf.lua (Kopien aus game/) plus die Baeume game/, sim/, assets/ — LOEVEs
 # Zip-Loader loest require("game.*")/require("sim.*") gegen die Archivwurzel.
+# Das Programm-Icon (assets/icon_app.png) wird zu .ico und .icns und ersetzt
+# das LOEVE-Icon in hogger.exe und hogger.app (Issue #37).
 name: release
 on:
   push:
@@ -10,10 +12,13 @@ on:
 permissions:
   contents: write
 jobs:
-  build:
+  love:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: LuaJIT einrichten (fuer den Icon-Bau)
+        run: sudo apt-get update && sudo apt-get install -y luajit
 
       - name: ".love bauen (eine Wahrheit)"
         run: |
@@ -25,15 +30,8 @@ jobs:
           unzip -l build/hogger.love | grep -q " main.lua" || exit 1
           unzip -l build/hogger.love | grep -q "sim/model.lua" || exit 1
 
-      - name: ".exe bauen (Windows, LOEVE 11.5 gepinnt)"
-        run: |
-          curl -sL -o love-win64.zip \
-            https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip
-          unzip -q love-win64.zip -d build/win
-          LOVEDIR=$(find build/win -maxdepth 1 -type d -name 'love-*')
-          cat "$LOVEDIR/love.exe" build/hogger.love > "$LOVEDIR/hogger.exe"
-          rm "$LOVEDIR/love.exe" "$LOVEDIR/lovec.exe"
-          (cd "$LOVEDIR" && zip -9 -q -r "$GITHUB_WORKSPACE/build/hogger-win64.zip" .)
+      - name: "Programm-Icon nach .ico/.icns wandeln"
+        run: luajit tools/png_to_icon.lua assets/icon_app.png build/hogger.ico build/hogger.icns
 
       - name: ".app bauen (macOS, LOEVE 11.5 gepinnt)"
         run: |
@@ -41,15 +39,82 @@ jobs:
             https://github.com/love2d/love/releases/download/11.5/love-11.5-macos.zip
           unzip -q love-macos.zip -d build/mac
           cp build/hogger.love build/mac/love.app/Contents/Resources/
+          # Icon ersetzen (LOEVEs Info.plist zeigt auf love.icns) und die
+          # Bundle-Angaben auf das Spiel setzen — sonst heisst die App im
+          # Dock weiterhin "LOVE"
+          cp build/hogger.icns build/mac/love.app/Contents/Resources/love.icns
+          rm -f build/mac/love.app/Contents/Resources/GameIcon.icns
+          cp build/hogger.icns build/mac/love.app/Contents/Resources/GameIcon.icns
+          python3 - <<'PY'
+          import plistlib
+          p = "build/mac/love.app/Contents/Info.plist"
+          with open(p, "rb") as f:
+              d = plistlib.load(f)
+          d["CFBundleName"] = "Hogger"
+          d["CFBundleDisplayName"] = "Hogger muss sterben"
+          d["CFBundleIdentifier"] = "de.lan.hogger"
+          d["CFBundleIconFile"] = "love.icns"
+          d.pop("UTExportedTypeDeclarations", None)
+          with open(p, "wb") as f:
+              plistlib.dump(d, f)
+          PY
           mv build/mac/love.app build/mac/hogger.app
           # -y erhaelt Symlinks der Frameworks — ohne das ist die App kaputt
           (cd build/mac && zip -9 -q -y -r "$GITHUB_WORKSPACE/build/hogger-macos.zip" hogger.app)
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: love-und-mac
+          path: |
+            build/hogger.love
+            build/hogger.ico
+            build/hogger-macos.zip
+
+  windows:
+    # Eigener Windows-Job, weil das Icon in der .exe nur mit rcedit ersetzt
+    # werden kann (und rcedit unter Linux Wine braeuchte).
+    needs: love
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: love-und-mac
+          path: build
+      - name: ".exe bauen (Windows, LOEVE 11.5 gepinnt, eigenes Icon)"
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip" -OutFile love-win64.zip
+          Expand-Archive love-win64.zip -DestinationPath build\win
+          $lovedir = (Get-ChildItem build\win -Directory | Where-Object { $_.Name -like 'love-*' }).FullName
+          Invoke-WebRequest -Uri "https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe" -OutFile rcedit.exe
+          # Icon VOR dem Anhaengen der .love setzen: rcedit schreibt die
+          # PE-Ressourcen neu und wuerde angehaengte Daten sonst verlieren
+          .\rcedit.exe "$lovedir\love.exe" --set-icon build\hogger.ico `
+            --set-version-string "FileDescription" "Hogger muss sterben" `
+            --set-version-string "ProductName" "Hogger muss sterben"
+          cmd /c copy /b "$lovedir\love.exe" + build\hogger.love "$lovedir\hogger.exe"
+          Remove-Item "$lovedir\love.exe","$lovedir\lovec.exe"
+          Compress-Archive -Path "$lovedir\*" -DestinationPath build\hogger-win64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: build/hogger-win64.zip
+
+  release:
+    needs: [love, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
       - name: "Release anlegen"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            build/hogger.love build/hogger-win64.zip build/hogger-macos.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            artifacts/love-und-mac/hogger.love \
+            artifacts/windows/hogger-win64.zip \
+            artifacts/love-und-mac/hogger-macos.zip \
             --title "Hogger muss sterben $GITHUB_REF_NAME" \
             --notes "LAN-Abend-Build: hogger.love (alle Plattformen mit installiertem LOEVE 11.5), hogger-win64.zip (hogger.exe, ohne Installation), hogger-macos.zip (hogger.app). Erster Start = Realm (GDD Kap. 3)."

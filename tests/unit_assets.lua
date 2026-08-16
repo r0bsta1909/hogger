@@ -113,3 +113,29 @@ do
     os.remove("assets/" .. n)
   end
 end
+
+-- Programm-Icon (Issue #37): aus einer PNG werden die Plattform-Icons.
+-- Beide Formate betten PNG-Daten ein — die Koepfe muessen exakt stimmen,
+-- sonst zeigt Windows still das Standardsymbol.
+do
+  local icon = require("tools.png_to_icon")
+  local png, w, h = icon.read_png("assets/icon_app.png")
+  T.eq(w, h, "Programm-Icon ist quadratisch")
+  T.ok(w >= 256, "Programm-Icon mindestens 256 px (" .. w .. ")")
+
+  local ico = icon.ico(png, w, h)
+  T.eq(ico:sub(1, 6), string.char(0, 0, 1, 0, 1, 0), "ICO-Kopf: ein Icon-Eintrag")
+  T.eq(ico:byte(7), 0, "ICO: Breite 0 steht fuer 256")
+  T.eq(ico:byte(13), 32, "ICO: 32 Bit Farbtiefe")
+  T.eq(ico:byte(19), 22, "ICO: Nutzdaten beginnen bei Offset 22")
+  T.eq(ico:sub(23, 26), "\137PNG", "ICO: eingebettete PNG-Daten")
+  T.eq(#ico, 22 + #png, "ICO: Groesse = Kopf + PNG")
+
+  local icns = icon.icns(png, w)
+  T.eq(icns:sub(1, 4), "icns", "ICNS-Magie")
+  T.eq(icns:sub(9, 12), "ic08", "ICNS: 256er-Slot")
+  T.eq(#icns, #png + 16, "ICNS: Groesse = zwei Koepfe + PNG")
+  local total = icns:byte(5) * 16777216 + icns:byte(6) * 65536
+                + icns:byte(7) * 256 + icns:byte(8)
+  T.eq(total, #icns, "ICNS: Groessenfeld stimmt")
+end

@@ -142,6 +142,12 @@ function love.load(args)
   app.floating = require("game.ui.floating").new()
   app.debug = require("game.ui.debug").new()
   audio.load()
+  -- Fenster- und Taskleisten-Icon (Issue #37); dieselbe Datei wird in der
+  -- Release-Pipeline zu .ico und .icns
+  if love.window and love.window.setIcon then
+    local data = require("game.assets").image_data("icon_app")
+    if data then pcall(love.window.setIcon, data) end
+  end
   -- Boot-Sequenz (GDD Kap. 3) im Normalstart; Debug-Laeufe starten direkt
   if not app.auto then
     app.boot = require("game.ui.boot").new()

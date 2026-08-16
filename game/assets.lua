@@ -56,9 +56,9 @@ end
 -- eine Ebene ueber der Quelle und ist fuer love.filesystem unerreichbar — dann
 -- lesen wir sie ueber io und reichen die Bytes an LOEVE weiter. Ohne das
 -- saehe man Finaldateien erst im Release (GDD 17.5: Final ohne Codeaenderung).
-local function load_image(datei)
+local function file_data(datei)
   if love.filesystem.getInfo and love.filesystem.getInfo("assets/" .. datei) then
-    return love.graphics.newImage("assets/" .. datei)
+    return "assets/" .. datei -- love.filesystem findet die Datei selbst
   end
   local src = love.filesystem.getSource and love.filesystem.getSource()
   if not src then return nil end
@@ -66,10 +66,24 @@ local function load_image(datei)
   if not f then return nil end
   local data = f:read("*a")
   f:close()
-  local ok, img = pcall(function()
-    return love.graphics.newImage(love.filesystem.newFileData(data, datei))
-  end)
+  return love.filesystem.newFileData(data, datei)
+end
+
+local function load_image(datei)
+  local fd = file_data(datei)
+  if not fd then return nil end
+  local ok, img = pcall(love.graphics.newImage, fd)
   return ok and img or nil
+end
+
+-- Rohbild fuer Zwecke ausserhalb des Zeichnens (Fenster-Icon, GDD 17.0)
+function A.image_data(id)
+  local spec = manifest[id]
+  if not (spec and spec.datei) then return nil end
+  local fd = file_data(spec.datei)
+  if not fd then return nil end
+  local ok, data = pcall(love.image.newImageData, fd)
+  return ok and data or nil
 end
 
 function A.get(id)
