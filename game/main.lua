@@ -571,6 +571,9 @@ function love.update(dt)
   if view and (not app.boot or not app.boot:active()) then
     if me_now and (me_now.quest or 2) == 1 and not app.quest then
       app.quest = require("game.ui.quest").new(app.name_given and app.name or nil)
+      -- Charge des Echos (GDD 12 Nr. 17) — nicht der Schrei, der gehoert
+      -- dem Raid-Leeroy (GDD 10.2, Issue #73)
+      audio.play("snd_echo_charge")
     elseif app.rejoin_known and not app.rejoin_greeted then
       app.rejoin_greeted = true
       local known = (app.mode == "host" and app.net.session
@@ -896,7 +899,9 @@ function love.mousepressed(mx, my)
       if math.sqrt((ex - mx) ^ 2 + (ey - my) ^ 2) < 28 then
         local quest = require("game.ui.quest")
         if (me.quest or 2) == 1 then
-          if app.quest then app.quest:reopen() else app.quest = quest.new() end
+          -- erneutes Anklicken chargt nicht noch einmal
+          if app.quest then app.quest:reopen()
+          else app.quest = quest.new(nil, true) end
         else
           app.quest = quest.new_lore()
         end

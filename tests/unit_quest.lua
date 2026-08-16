@@ -5,7 +5,7 @@
 local quest = require("game.ui.quest")
 
 local q = quest.new()
-T.eq(q.state, "approach", "das Echo naehert sich zuerst (lokale Sequenz)")
+T.eq(q.state, "approach", "das Echo chargt zuerst heran (lokale Sequenz)")
 T.ok(q:blocking(), "Questfenster blockiert die Eingaben")
 q:textinput("x")
 T.eq(q.buffer, "", "waehrend der Annaeherung tippt man noch nicht")
@@ -101,4 +101,25 @@ do
     T.ok(page.titel and #page.titel > 2, "Seite " .. i .. " hat einen Titel")
     T.ok(page.absaetze and #page.absaetze >= 1, "Seite " .. i .. " hat Text")
   end
+end
+
+-- Der Charge laeuft nur beim ersten Aufploppen; erneutes Anklicken oeffnet
+-- direkt (Issue #73)
+do
+  local direkt = quest.new(nil, true)
+  T.eq(direkt.state, "open", "erneutes Anklicken chargt nicht noch einmal")
+  local erst = quest.new()
+  T.eq(erst.state, "approach", "beim ersten Mal chargt es")
+  erst:update(0.2)
+  T.eq(erst.state, "approach", "und braucht dafuer einen Moment")
+  erst:update(1.2)
+  T.eq(erst.state, "open", "danach steht das Fenster")
+end
+
+-- Der Sound des Charges ist NICHT der Schrei (GDD 12 Nr. 16/17, Issue #73)
+do
+  local manifest = require("assets.manifest")
+  T.ok(manifest.snd_echo_charge ~= nil, "eigener Sound-Slot fuer den Charge")
+  T.ok(manifest.snd_echo_charge.datei:find("echo") ~= nil,
+    "und er heisst nach dem Echo, nicht nach Leeroy")
 end

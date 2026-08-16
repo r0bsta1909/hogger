@@ -327,7 +327,8 @@ Vollständige Liste — jede Position hat einen Zweck, nichts weiter aufnehmen:
 | 13 | Levelup-DING | Easter-Egg (Kap. 7.3) |
 | 14 | Loot-/Münzklimpern (1×), UI-Klick (1×) | Plunder-Feedback, Buttons |
 | 15 | Sieg-Fanfare, Wipe-Sting (kurz, Moll — lachen, nicht trauern) | Try-Enden |
-| 16 | Leeroy-Schrei (einzige Voice-Line) | Try-Start-Signal |
+| 16 | Leeroy-Schrei (einzige Voice-Line) | Try-Start-Signal — gehört ausschließlich dem **Raid-Leeroy** (10.2), wenn er auf Hogger losgeht |
+| 17 | Charge des Echos (Rüstungsrasseln/Ansturm, kurz) | Questübergabe (Kap. 5): das Echo chargt lokal an den Spielerpfeil heran. Bewusst unauffällig und ausdrücklich **nicht** der Schrei |
 
 Beschaffung: Original-Dateien (IP egal) oder Eigenbau/Suno; Entscheidung pro Position in M4. Platzhalter bis dahin: generierte Sinus-Blips (Kap. 17.5).
 
