@@ -37,6 +37,7 @@ local function parse_args(args)
     elseif a == "--bots" then i = i + 1; app.bots = tonumber(args[i]) or 0; app.mode = "host"
     elseif a == "--headless" then app.headless = true
     elseif a == "--test" then app.test = true
+    elseif a == "--stress" then app.stress = true
     elseif a == "--shot" then i = i + 1; app.shot_at = tonumber(args[i]) or 3
     elseif a == "--auto" then app.auto = true
     elseif a == "--panel" then app.open_panel = true
@@ -95,6 +96,11 @@ function love.load(args)
   parse_args(args or {})
   if app.headless and app.test then
     local exit = require("game.test.headless").run()
+    love.event.quit(exit)
+    return
+  end
+  if app.headless and app.stress then
+    local exit = require("game.test.stress").run()
     love.event.quit(exit)
     return
   end

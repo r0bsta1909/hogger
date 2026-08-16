@@ -20,7 +20,7 @@ for name in pairs(wire.EV) do NET_EVS[name] = true end
 
 function H.new(opts)
   local self = setmetatable({}, H)
-  self.host = enet.host_create("*:" .. H.PORT, 32, 2)
+  self.host = enet.host_create("*:" .. H.PORT, 48, 2) -- 40 Spieler + Reserve
   assert(self.host, "ENet-Port " .. H.PORT .. " nicht bindbar")
   self.state = world.new(opts.seed)
   -- session.json: einzige rundenuebergreifende Persistenz (GDD 17.3)
