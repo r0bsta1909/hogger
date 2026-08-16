@@ -61,6 +61,17 @@ function M.check(manifest, root)
         errors[#errors + 1] = id .. ": Umlaut/Leerzeichen im Namen: " .. name
       end
       local path = root .. "/assets/" .. name
+      -- Windows blendet bekannte Endungen aus: "icon_x.png" wird beim
+      -- Speichern zu "icon_x.png.png" und die Datei bleibt unsichtbar
+      local ext = name:match("%.(%w+)$")
+      if ext then
+        local dbl = io.open(path .. "." .. ext, "rb")
+        if dbl then
+          dbl:close()
+          errors[#errors + 1] = id .. ": Datei liegt als " .. name .. "." .. ext
+            .. " (Endung doppelt) — umbenennen nach " .. name
+        end
+      end
       local f = io.open(path, "rb")
       if f then
         f:close()
@@ -77,7 +88,19 @@ function M.check(manifest, root)
           else
             local want_w = spec.breite or spec.groesse
             local want_h = spec.hoehe or spec.groesse
-            if spec.masse == "mindestens" then
+            if spec.groesse then
+              -- Icons: quadratisch und mindestens Rastermasse; groessere
+              -- Exporte werden beim Zeichnen normalisiert (17.5)
+              if w ~= h then
+                errors[#errors + 1] = string.format(
+                  "%s: %dx%d ist nicht quadratisch (Icon-PNGs quadratisch "
+                  .. "exportieren, Rand egal)", id, w, h)
+              elseif w < want_w then
+                errors[#errors + 1] = string.format(
+                  "%s: %dx%d ist kleiner als das Raster %dx%d", id, w, h,
+                  want_w, want_h)
+              end
+            elseif spec.masse == "mindestens" then
               -- bildschirmfuellend gezeichnete Flaechen (Splash) werden
               -- cover-skaliert; hier zaehlt nur genug Aufloesung (17.5)
               if w < want_w or h < want_h then

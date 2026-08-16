@@ -71,12 +71,18 @@ function A.size(id)
   return manifest[id].groesse
 end
 
--- Icon zentriert an Weltbildschirmposition zeichnen
+-- Icon zentriert an Weltbildschirmposition zeichnen. Echte Dateien duerfen
+-- groesser sein als das Manifest-Raster (17.5): sie werden beim Zeichnen auf
+-- die Manifest-Masse normalisiert — 500-px-Exporte sehen damit sauber aus,
+-- ohne dass irgendwo im Spielcode eine Bildgroesse steht.
 function A.draw(id, x, y, scale, alpha)
   local img = A.get(id)
   local s = manifest[id].groesse
+  local iw, ih = img:getDimensions()
+  local norm = s / math.max(iw, ih)
+  local sc = (scale or 1) * norm
   love.graphics.setColor(1, 1, 1, alpha or 1)
-  love.graphics.draw(img, x, y, 0, scale or 1, scale or 1, s / 2, s / 2)
+  love.graphics.draw(img, x, y, 0, sc, sc, iw / 2, ih / 2)
 end
 
 return A
