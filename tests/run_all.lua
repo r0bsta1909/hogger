@@ -58,7 +58,7 @@ for i = 1, #arg do
 end
 
 local stages = {
-  unit = { "tests.unit_model", "tests.unit_rng" },
+  unit = { "tests.unit_model", "tests.unit_rng", "tests.unit_engine" },
   determinism = { "tests.determinism" },
 }
 

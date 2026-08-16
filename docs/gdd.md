@@ -482,7 +482,9 @@ Menschen erst bei grüner Pyramide. Übergabe: Validierungsbericht + eine Ein-Sa
 
 | Datum | Änderung | Auslöser (F-Kriterium/Playtest) | Ergebnis |
 |---|---|---|---|
-| — | — | — | — |
+| 2026-08-16 | M1-Basis-Sweep, 96 Zellen × 1000 Läufe, GDD-Werte unverändert | Erstvalidierung (17.2) | F1/F2/F5 verletzt (alle N ~100 % Siege; N=40 Median 1,2 min), F3 nur leer bestanden, Turtle-Gate bestanden. Strukturursache: Hoggers Tötungsrate skaliert nicht mit N → Issue #3, #4. Bericht: `reports/2026-08-16-m1-validierung.md` |
+| 2026-08-16 | HP-Koeffizient-Sweep 200–240 bei N=5 (nicht angewendet, Wert bleibt 120) | F1/F5 | Bei HP 220 erfüllt N=5 F1 (80 %), F5 (12,7 min), F2 (unkoordiniert 0 %); F4 an der Kante verletzt (Δ 9,7 pp). Anwendung erst nach Skalierungsentscheidung (#3) |
+| 2026-08-16 | Todesstrafe vorläufig auf 30 s fixiert (Respawn + Geisterlauf ~12 s + Anmarsch ~10 s) | M1-Gate | Straf-Dimension wirkt monoton, aber schwach gegenüber dem HP-Hebel; endgültige Fixierung nach #3 |
 
 ---
 
