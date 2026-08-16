@@ -44,6 +44,47 @@ local AUTO_DE = {
 }
 local RES_DE = { mana = "Mana", rage = "Wut", energy = "Energie" }
 
+-- Buffs und Debuffs mit Tooltip (GDD 4.3/8.2/9.2, Issue #65). Die Zahlen
+-- kommen aus model.lua, damit Anzeige und Wirkung nie auseinanderlaufen.
+local AURA = {
+  shout = { kuerzel = "SR", name = "Schlachtruf", debuff = false,
+    text = function()
+      return { string.format("+%d %% Schaden fuer Verbuendete im Umkreis",
+                 model.p("warrior_shout_bonus") * 100),
+               string.format("Haelt %d s, stapelt nicht",
+                 model.p("warrior_shout_duration")) }
+    end },
+  seal = { kuerzel = "SG", name = "Siegel der Rechtschaffenheit", debuff = false,
+    text = function()
+      return { string.format("Die naechsten %d Autohits verursachen",
+                 model.p("paladin_seal_hits")),
+               string.format("+%d Heiligschaden",
+                 model.p("paladin_seal_bonus_dmg")) }
+    end },
+  frost = { kuerzel = "FR", name = "Frostruestung", debuff = false,
+    text = function()
+      return { string.format("Trifft Hogger dich, ist er %d s",
+                 model.p("mage_frostarmor_slow_duration")),
+               string.format("um %d %% verlangsamt",
+                 model.p("mage_frostarmor_slow") * 100) }
+    end },
+  stealth = { kuerzel = "VS", name = "Verstohlenheit", debuff = false,
+    text = function()
+      return { string.format("Unsichtbar, %d %% Tempo",
+                 model.p("rogue_stealth_speed") * 100),
+               "Hogger ignoriert dich",
+               "Bricht beim Angriff" }
+    end },
+  bleed = { kuerzel = "BL", name = "Blutung", debuff = true,
+    text = function()
+      return { string.format("%d Schaden alle %.1f s",
+                 model.p("hogger_slice_bleed_dmg"),
+                 model.p("hogger_slice_bleed_interval")),
+               "Vicious Slice von Hogger",
+               "Kein Krit, keine Heilung dagegen" }
+    end },
+}
+
 function R.new()
   local self = setmetatable({}, R)
   self.zoom = 2 -- Stufe 1..3 (GDD 4.2)
@@ -243,6 +284,26 @@ local function hp_bar(x, y, w2, frac, r, g, b)
   love.graphics.rectangle("fill", x - w2, y, w2 * 2, 4)
   love.graphics.setColor(r, g, b, 1)
   love.graphics.rectangle("fill", x - w2, y, w2 * 2 * math.max(0, math.min(1, frac)), 4)
+end
+
+-- Tooltip im Original-Stil: erste Zeile gold (Name), Rest hell.
+-- Wird von Faehigkeits- und Buff-Tooltips benutzt (GDD 4.2/4.3)
+local function draw_tooltip(lines, mx, my, w, h)
+  local font = love.graphics.getFont()
+  local tw = 0
+  for _, l in ipairs(lines) do tw = math.max(tw, font:getWidth(l)) end
+  local th = #lines * 16 + 8
+  local tx = math.min(w - tw - 20, math.max(8, mx - tw / 2))
+  local ty = math.max(8, my - th - 16)
+  love.graphics.setColor(0.05, 0.05, 0.07, 0.94)
+  love.graphics.rectangle("fill", tx, ty, tw + 12, th, 3, 3)
+  love.graphics.setColor(0.45, 0.40, 0.28, 1)
+  love.graphics.rectangle("line", tx, ty, tw + 12, th, 3, 3)
+  for i, l in ipairs(lines) do
+    love.graphics.setColor(i == 1 and 1 or 0.8, i == 1 and 0.85 or 0.78,
+      i == 1 and 0.4 or 0.66, 1)
+    love.graphics.print(l, tx + 6, ty + 4 + (i - 1) * 16)
+  end
 end
 
 -- Balken der Eckfenster: links oben verankert, Beschriftung liegt IM Balken
@@ -637,6 +698,7 @@ function R:draw(view, ui)
   end
 
   -- Oben rechts: Zielfenster, Ziel des Ziels, Buff-Leiste (GDD 4.3)
+  local aura_tip = nil
   if me then
     local t = me.target
     local frame
@@ -679,20 +741,39 @@ function R:draw(view, ui)
         love.graphics.print("> " .. names[view.hogger.target], w - 220, 72)
       end
     end
-    -- Buff-Leiste: nur Buffs, die Level-1-Klassen haben (GDD 4.3)
-    local buffs = {}
-    if me.shout then buffs[#buffs + 1] = { "SR", me.shout_rest } end
-    if me.seal then buffs[#buffs + 1] = { "SG" } end
-    if me.frost_armor then buffs[#buffs + 1] = { "FR" } end
-    if me.stealth then buffs[#buffs + 1] = { "VS" } end
-    for i, b in ipairs(buffs) do
+    -- Buff-/Debuff-Leiste: nur was Level-1-Klassen haben (GDD 4.3), dazu
+    -- Hoggers Blutung als einziger Debuff (9.2). Tooltip bei Hover (#65)
+    local auras = {}
+    if me.shout then auras[#auras + 1] = { AURA.shout, me.shout_rest } end
+    if me.seal then auras[#auras + 1] = { AURA.seal } end
+    if me.frost_armor then auras[#auras + 1] = { AURA.frost } end
+    if me.stealth then auras[#auras + 1] = { AURA.stealth } end
+    if me.bleeding then auras[#auras + 1] = { AURA.bleed } end
+    for i, a in ipairs(auras) do
+      local def, rest = a[1], a[2]
       local bx, by = w - 226 + (i - 1) * 34, 96
-      love.graphics.setColor(0.2, 0.25, 0.4, 0.9)
+      if def.debuff then
+        love.graphics.setColor(0.32, 0.10, 0.10, 0.95)
+      else
+        love.graphics.setColor(0.2, 0.25, 0.4, 0.9)
+      end
       love.graphics.rectangle("fill", bx, by, 30, 30, 3, 3)
+      love.graphics.setColor(def.debuff and 0.85 or 0.45,
+        def.debuff and 0.25 or 0.42, def.debuff and 0.2 or 0.6, 1)
+      love.graphics.rectangle("line", bx, by, 30, 30, 3, 3)
       love.graphics.setColor(0.9, 0.9, 0.95, 1)
-      love.graphics.print(b[1], bx + 6, by + 2)
-      if b[2] and b[2] > 0 then
-        love.graphics.print(tostring(b[2]), bx + 8, by + 15)
+      love.graphics.print(def.kuerzel, bx + 6, by + 2)
+      if rest and rest > 0 then
+        love.graphics.print(tostring(rest), bx + 8, by + 15)
+      end
+      if ui.mouse and ui.mouse[1] >= bx and ui.mouse[1] <= bx + 30
+         and ui.mouse[2] >= by and ui.mouse[2] <= by + 30 then
+        local lines = { def.name }
+        for _, l in ipairs(def.text()) do lines[#lines + 1] = l end
+        if rest and rest > 0 then
+          lines[#lines + 1] = string.format("Noch %d s", rest)
+        end
+        aura_tip = { lines = lines }
       end
     end
   end
@@ -847,20 +928,12 @@ function R:draw(view, ui)
     end
     if spec.requires_cp then lines[#lines + 1] = "Braucht Combopunkte" end
     lines[#lines + 1] = "Taste " .. hover_tip.slot
-    local tw = 0
-    for _, l in ipairs(lines) do tw = math.max(tw, font:getWidth(l)) end
-    local th = #lines * 16 + 8
-    local tx = math.min(w - tw - 20, math.max(8, ui.mouse[1] - tw / 2))
-    local ty = math.max(8, ui.mouse[2] - th - 16)
-    love.graphics.setColor(0.05, 0.05, 0.07, 0.94)
-    love.graphics.rectangle("fill", tx, ty, tw + 12, th, 3, 3)
-    love.graphics.setColor(0.45, 0.40, 0.28, 1)
-    love.graphics.rectangle("line", tx, ty, tw + 12, th, 3, 3)
-    for i, l in ipairs(lines) do
-      love.graphics.setColor(i == 1 and 1 or 0.8, i == 1 and 0.85 or 0.78,
-        i == 1 and 0.4 or 0.66, 1)
-      love.graphics.print(l, tx + 6, ty + 4 + (i - 1) * 16)
-    end
+    draw_tooltip(lines, ui.mouse[1], ui.mouse[2], w, h)
+  end
+
+  -- Buff-/Debuff-Tooltip zuletzt, damit er ueber allem liegt (#65)
+  if aura_tip and ui.mouse then
+    draw_tooltip(aura_tip.lines, ui.mouse[1], ui.mouse[2], w, h)
   end
 
   -- Loot-Toasts am linken Kreisrand (GDD 7.3)

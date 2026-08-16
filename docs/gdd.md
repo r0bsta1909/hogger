@@ -92,7 +92,7 @@ Am Ring der Minimap sitzen ausschließlich funktionale Elemente im Add-on-Button
 
 - **Oben links: das eigene Einheitenfenster** nach Original-Vorbild (Referenz `spieleranzeige_und_ziel.png`): rundes Rassen-Portrait, Namensbalken, HP-Balken (grün), Ressourcenbalken (blau/rot/gelb je Klasse).
 - **Oben rechts: das Zielfenster** (angeklickter Spieler oder Gegner): Portrait, Namensbalken (rot = feindlich, gelb = neutral), Stufen-Medaillon (Spieler und Mobs: "1", Hogger: **"11" im goldenen Elite-Drachenrahmen** — das Original-Signal für "das wird nicht gut ausgehen"), HP/Ressource, darunter klein das **Ziel des Ziels** (bei Hogger als Ziel: wen er gerade verprügelt — taktisch nützlich und authentisch). Zielwahl per Klick auf ein Icon oder Tab-Durchschalten.
-- **Buff-Leiste** unterhalb des Zielfensters: nur Buffs, die Level-1-Klassen tatsächlich haben — Schlachtruf, Frostrüstung, Siegel der Rechtschaffenheit, Verstohlenheit, Mal der Wildnis existiert NICHT (Druiden lernen es erst später). Original-Buff-Icons mit Restdauer.
+- **Buff-/Debuff-Leiste** unterhalb des Zielfensters: nur Buffs, die Level-1-Klassen tatsächlich haben — Schlachtruf, Frostrüstung, Siegel der Rechtschaffenheit, Verstohlenheit; Mal der Wildnis existiert NICHT (Druiden lernen es erst später). Dazu der einzige Debuff auf Spielern: **Hoggers Blutung** (Vicious Slice, 9.2), rot umrandet. Original-Buff-Icons mit Restdauer, **Tooltip bei Hover** (Name, Wirkung, Restdauer) — die Zahlen darin kommen aus `model.lua`, damit Anzeige und Wirkung nie auseinanderlaufen.
 - **Unterbrechungszähler** erscheint nur während Hoggers Fressen als Balken am Hogger-Icon ("2/4") — Pflicht-UI, siehe 9.2.
 
 ### 4.4 Was es bewusst NICHT gibt
