@@ -5,7 +5,12 @@
 local quest = require("game.ui.quest")
 
 local q = quest.new()
+T.eq(q.state, "approach", "das Echo naehert sich zuerst (lokale Sequenz)")
 T.ok(q:blocking(), "Questfenster blockiert die Eingaben")
+q:textinput("x")
+T.eq(q.buffer, "", "waehrend der Annaeherung tippt man noch nicht")
+q:update(2.0)
+T.eq(q.state, "open", "danach steht das Fenster offen")
 T.eq(q:can_accept(), false, "Annehmen ist ohne Namen gesperrt")
 T.eq(q:accept(), false, "Annehmen ohne Namen prallt ab")
 
@@ -38,6 +43,7 @@ T.eq(q:blocking(), false, "danach gehen Eingaben wieder ins Spiel")
 -- Wegklicken und wieder oeffnen (das Echo bleibt anklickbar)
 do
   local w = quest.new("Rob")
+  w:update(2.0)
   T.eq(w.buffer, "Rob", "Vorbelegung mit dem gemerkten Namen")
   w:keypressed("escape")
   T.eq(w:blocking(), false, "weggeklickt schluckt keine Tasten mehr")
@@ -51,3 +57,26 @@ T.ok(#quest.BODY >= 4, "Questtext hat die Intro-Informationen")
 T.ok(#quest.GOALS >= 2, "Questziele sind benannt")
 local goals = table.concat(quest.GOALS, " ")
 T.ok(goals:find("Hogger") ~= nil, "Questziel nennt Hogger")
+
+-- Taste L: wegblenden und zurueckholen (Issue #62)
+do
+  local w = quest.new()
+  w:update(2.0)
+  T.eq(w:toggle(), true, "L blendet weg")
+  T.eq(w:visible(), false, "weggeblendet ist unsichtbar")
+  T.eq(w:blocking(), false, "und schluckt keine Tasten")
+  w:toggle()
+  T.ok(w:visible(), "L holt es zurueck")
+end
+
+-- Questlog nach der Annahme: nur Anzeige, blockiert nichts (Issue #62)
+do
+  local log = quest.new_log()
+  T.eq(log.mode, "log", "Log-Modus")
+  T.eq(log.state, "open", "Log braucht keine Annaeherung")
+  T.ok(log:visible(), "Log ist sichtbar")
+  T.eq(log:blocking(), false, "Log sperrt die Eingaben nicht")
+  T.eq(log:can_accept(), false, "im Log gibt es nichts anzunehmen")
+  log:toggle()
+  T.eq(log:visible(), false, "L schliesst das Log wieder")
+end

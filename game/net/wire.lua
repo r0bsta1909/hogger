@@ -312,11 +312,11 @@ function W.snapshot_body(state)
     q16(h.x), q16(h.y), math.max(0, math.floor(h.hp + 0.5)),
     math.floor(h.max_hp + 0.5), hstate, eatphase, eathit, eatneed, eatprog,
     ctarget, cprog, htarget)
-  -- Das Echo von Leeroy Jenkins (GDD 10.1): Position und Zustand
+  -- Das Echo von Leeroy Jenkins (GDD 10.1): Standposition. Es bewegt sich
+  -- nicht — die Annaeherung ist lokale Darstellung (Issue #61)
   do
-    local e = state.echo or { x = 0, y = 0, state = "idle" }
-    local est = ({ idle = 0, charge = 1, deliver = 2, ["return"] = 3 })[e.state] or 0
-    parts[#parts + 1] = pack("<I2I2B", q16(e.x), q16(e.y), est)
+    local e = state.echo or { x = 0, y = 0 }
+    parts[#parts + 1] = pack("<I2I2", q16(e.x), q16(e.y))
   end
   -- Leichen
   parts[#parts + 1] = pack("<B", math.min(255, #state.corpses))
@@ -420,10 +420,9 @@ function W.read_snapshot(data, off)
     target = htarget ~= 255 and htarget or nil,
   }
   do
-    local ex, ey, est
-    ex, ey, est, off = love.data.unpack("<I2I2B", data, off)
-    s.echo = { x = ex, y = ey,
-               state = ({ [0] = "idle", "charge", "deliver", "return" })[est] }
+    local ex, ey
+    ex, ey, off = love.data.unpack("<I2I2", data, off)
+    s.echo = { x = ex, y = ey }
   end
   local ccount
   ccount, off = love.data.unpack("<B", data, off)
