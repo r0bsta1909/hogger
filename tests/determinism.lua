@@ -22,6 +22,22 @@ T.eq(h1, h2, "Determinismus: gleicher Seed -> gleicher Hash")
 local h3 = draw_sequence(54321)
 T.ok(h1 ~= h3, "Determinismus: anderer Seed -> anderer Hash")
 
+-- Voller Sim-Lauf: zwei Laeufe, gleicher Seed -> identischer Log-Hash
+local engine = require("sim.engine")
+for _, agent in ipairs({ "unkoordiniert", "koordiniert", "turtle" }) do
+  local cfg = { n = 10, penalty = 30, crits = true, agent = agent, seed = 4711, log = true }
+  local a = engine.run_try(cfg)
+  local b = engine.run_try(cfg)
+  T.eq(a.log_hash, b.log_hash,
+    "Determinismus: Sim-Lauf reproduzierbar (" .. agent .. ")")
+  T.ok(a.log_hash ~= nil and #a.events > 10,
+    "Determinismus: Sim-Lauf erzeugt Events (" .. agent .. ")")
+  local c = engine.run_try({ n = 10, penalty = 30, crits = true, agent = agent,
+                             seed = 4712, log = true })
+  T.ok(a.log_hash ~= c.log_hash,
+    "Determinismus: anderer Seed -> anderer Sim-Lauf (" .. agent .. ")")
+end
+
 -- Rassenwurf ist eine reine Funktion desselben Wurfs
 local model = require("sim.model")
 local r = rng.new(99)

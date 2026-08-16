@@ -1,0 +1,664 @@
+-- sim/engine.lua — Headless-Balancing-Sim (GDD 17.2).
+-- Reines Lua 5.1: kein love.*, kein os.*, kein math.random (Tests vergiften das).
+-- Raeumliches Modell: 1D-Distanz zum Boss, Reichweiten als Schwellen, kein Pathing.
+-- Dokumentierte Vereinfachungen: siehe reports/ (M1-Validierungsbericht).
+
+local model = require("sim.model")
+local rngmod = require("sim.rng")
+local hashmod = require("sim.hash")
+
+local E = {}
+
+local HUGE = math.huge
+
+-- ---------------------------------------------------------------------------
+-- Hilfen
+-- ---------------------------------------------------------------------------
+local function desired_range(p)
+  local attack = model.classes[p.class].attack
+  if attack == "shot" then return model.p("autoshot_range") end
+  if attack == "wand" then return model.p("wand_range") end
+  return model.p("melee_range")
+end
+E.desired_range = desired_range
+
+local function log_ev(run, t, ev, src, dst, val, crit)
+  if not run.cfg.log then return end
+  run.events[#run.events + 1] = string.format(
+    '{"t":%d,"ev":"%s","src":"%s","dst":%s,"val":%s,"crit":%s}',
+    math.floor(t * 10 + 0.5), ev, tostring(src),
+    dst and ('"' .. tostring(dst) .. '"') or "null",
+    val and string.format("%.17g", val) or "null",
+    crit == nil and "null" or tostring(crit))
+end
+E.log_ev = log_ev
+
+-- ---------------------------------------------------------------------------
+-- Spieler anlegen
+-- ---------------------------------------------------------------------------
+local function make_player(run, id, class, is_leeroy)
+  local p = {
+    id = id, class = class, is_leeroy = is_leeroy or false,
+    alive = false, hp = 0, max_hp = model.hp_for_class(class),
+    resource = 0, cp = 0,
+    d = HUGE, state = "dead", dead_until = 0,
+    gcd_ready = 0, cast = nil, last_cast_t = -1000,
+    next_auto = 0, raptor_ready = 0,
+    threat = 0,
+    bleed_until = 0, bleed_next = HUGE,
+    shout_until = 0, seal_hits = 0, has_frost_armor = false,
+    imp_alive = false,
+    add_idx = nil,          -- gebundenes Add (1v1 beim Anmarsch)
+    combat_time = 0,
+    dmg_done = 0, heal_done = 0, deaths = 0,
+  }
+  return p
+end
+
+local function resource_max(p)
+  local r = model.classes[p.class].resource
+  if r == "mana" then return model.p("mana_max") end
+  if r == "energy" then return model.p("energy_max") end
+  return model.p("rage_max")
+end
+
+local function spawn_player(run, p, at_range)
+  -- Klassenwechsel bei Wiederbelebung (GDD 5; koordinierte Konvergenz 17.2)
+  if run.agent.choose_class then
+    local cl = run.agent.choose_class(run, p)
+    if cl and cl ~= p.class then
+      log_ev(run, run.t, "class_change", p.id, cl, nil, nil)
+      p.class = cl
+      p.max_hp = model.hp_for_class(cl)
+    end
+  end
+  p.alive = true
+  p.state = "combat"
+  p.hp = p.max_hp
+  local r = model.classes[p.class].resource
+  p.resource = (r == "rage") and 0 or resource_max(p)
+  p.cp = 0
+  p.d = at_range
+        or (run.agent.desired_range and run.agent.desired_range(run, p))
+        or desired_range(p)
+  p.cast = nil
+  p.gcd_ready = run.t
+  p.next_auto = run.t + 0.5
+  p.bleed_until = 0
+  p.bleed_next = HUGE
+  p.seal_hits = 0
+  p.has_frost_armor = (p.class == "mage")
+  p.imp_alive = false
+  p.add_idx = nil
+  -- Adds fangen fruehe Ankommende ab (1v1), solange welche leben
+  for ai = 1, #run.adds do
+    if run.adds[ai].hp > 0 and run.adds[ai].engaged_by == nil then
+      run.adds[ai].engaged_by = p.id
+      p.add_idx = ai
+      break
+    end
+  end
+  log_ev(run, run.t, "revive", p.id, p.class, 0, nil)
+end
+E.spawn_player = spawn_player
+
+-- ---------------------------------------------------------------------------
+-- Schaden & Heilung
+-- ---------------------------------------------------------------------------
+local function crit_roll(run, side, kind)
+  if not run.cfg.crits then return false end
+  if not model.can_crit(kind) then return false end
+  local chance = (side == "player") and model.p("crit_chance_player")
+                                     or model.p("crit_chance_hogger")
+  return run.rng:roll(chance)
+end
+
+function E.player_damage_hogger(run, p, amount, kind)
+  local h = run.hogger
+  if h.hp <= 0 then return end
+  local crit = crit_roll(run, "player", kind)
+  if crit then amount = amount * model.p("crit_mult_player") end
+  if p.shout_until > run.t then amount = amount * (1 + model.p("warrior_shout_bonus")) end
+  h.hp = h.hp - amount
+  p.dmg_done = p.dmg_done + amount
+  local tf = p.is_leeroy and model.p("leeroy_threat_factor") or 1
+  p.threat = p.threat + model.threat_for(amount, false) * tf
+  run.c.dmg_to_hogger = run.c.dmg_to_hogger + amount
+  -- Fress-Unterbrechung: verschiedene Spieler ODER Schadensschwelle (GDD 9.2)
+  if h.eating and h.eating.phase == "channel" then
+    local e = h.eating
+    if not e.hitters[p.id] then
+      e.hitters[p.id] = true
+      e.hitter_count = e.hitter_count + 1
+    end
+    e.dmg_accum = e.dmg_accum + amount
+    if e.hitter_count >= model.eat_interrupters(run.cfg.n)
+       or e.dmg_accum >= model.eat_dmg_threshold(run.cfg.n) then
+      E.interrupt_eat(run, e.hitter_count)
+    end
+  end
+  log_ev(run, run.t, "damage", p.id, "hogger", amount, crit)
+  -- Wut fuer ausgeteilte Autohits
+  if model.classes[p.class].resource == "rage" and kind == "autohit" then
+    p.resource = math.min(resource_max(p), p.resource + model.p("rage_per_hit_dealt"))
+  end
+end
+
+function E.kill_player(run, p)
+  p.alive = false
+  p.state = "dead"
+  p.hp = 0
+  p.threat = 0  -- Bedrohung wird beim Tod geloescht (GDD 9.4)
+  p.cast = nil
+  p.deaths = p.deaths + 1
+  p.imp_alive = false
+  if p.add_idx and run.adds[p.add_idx] then run.adds[p.add_idx].engaged_by = nil end
+  p.add_idx = nil
+  p.dead_until = run.t + run.cfg.penalty
+  -- Leiche als Fress-Ressource an der Sterbeposition
+  run.corpses[#run.corpses + 1] = { d = p.d }
+  run.c.deaths = run.c.deaths + 1
+  if run.hogger.target == p then run.hogger.target = nil end
+  log_ev(run, run.t, "death", p.id, nil, nil, nil)
+end
+
+function E.hogger_damage_player(run, p, amount, kind)
+  if not p.alive then return end
+  local crit = crit_roll(run, "hogger", kind)
+  if crit then
+    amount = amount * model.p("crit_mult_hogger")
+    run.c.crit_kills = run.c.crit_kills + (amount >= p.hp and 1 or 0)
+  end
+  p.hp = p.hp - amount
+  run.c.dmg_to_players = run.c.dmg_to_players + amount
+  -- Wut nur je erlittenem AUTOHIT (GDD 8.1), nicht fuer Charge/Slice/DoT
+  if kind == "autohit" and model.classes[p.class].resource == "rage" then
+    p.resource = math.min(resource_max(p), p.resource + model.p("rage_per_hit_taken"))
+  end
+  -- Frostruestung: Treffer auf den Magier verlangsamt Hogger (GDD 8.2)
+  if p.has_frost_armor then
+    run.hogger.slow_until = run.t + model.p("mage_frostarmor_slow_duration")
+  end
+  log_ev(run, run.t, "damage", "hogger", p.id, amount, crit)
+  if p.hp <= 0 then E.kill_player(run, p) end
+end
+
+function E.heal_player(run, src, dst, amount, kind)
+  if not dst.alive then return end
+  local crit = crit_roll(run, "player", kind or "heal")
+  if crit then amount = amount * model.p("crit_mult_player") end
+  local effective = math.min(amount, dst.max_hp - dst.hp)
+  dst.hp = dst.hp + effective
+  src.heal_done = src.heal_done + effective
+  local tf = src.is_leeroy and model.p("leeroy_threat_factor") or 1
+  src.threat = src.threat + model.threat_for(effective, true) * tf
+  run.c.healing = run.c.healing + effective
+  log_ev(run, run.t, "heal", src.id, dst.id, effective, crit)
+end
+
+-- ---------------------------------------------------------------------------
+-- Faehigkeiten: Kosten/GCD/Casts. Agenten rufen nur cast_ability.
+-- ---------------------------------------------------------------------------
+local function res_cost(p, cost)
+  if p.resource < cost then return false end
+  p.resource = p.resource - cost
+  return true
+end
+
+local INSTANT = {
+  heroic_strike = function(run, p)
+    if not res_cost(p, model.p("warrior_heroic_rage")) then return false end
+    E.player_damage_hogger(run, p, model.p("warrior_heroic_dmg"), "ability")
+    return true
+  end,
+  battle_shout = function(run, p)
+    if not res_cost(p, model.p("warrior_shout_rage")) then return false end
+    for _, q in ipairs(run.players) do
+      if q.alive then q.shout_until = run.t + model.p("warrior_shout_duration") end
+    end
+    return true
+  end,
+  seal_of_righteousness = function(run, p)
+    if not res_cost(p, model.p("paladin_seal_mana")) then return false end
+    p.seal_hits = model.p("paladin_seal_hits")
+    p.last_cast_t = run.t
+    return true
+  end,
+  raptor_strike = function(run, p)
+    if run.t < p.raptor_ready then return false end
+    p.raptor_ready = run.t + model.p("hunter_raptor_cd")
+    E.player_damage_hogger(run, p, model.p("hunter_raptor_dmg"), "ability")
+    return true
+  end,
+  sinister_strike = function(run, p)
+    if not res_cost(p, model.p("rogue_sinister_energy")) then return false end
+    E.player_damage_hogger(run, p, model.p("rogue_sinister_dmg"), "ability")
+    p.cp = math.min(5, p.cp + 1)
+    return true
+  end,
+  eviscerate = function(run, p)
+    if p.cp < 1 then return false end
+    if not res_cost(p, model.p("rogue_evis_energy")) then return false end
+    E.player_damage_hogger(run, p, model.p("rogue_evis_dmg_per_cp") * p.cp, "ability")
+    p.cp = 0
+    return true
+  end,
+}
+
+-- Casts: {dauer, mana, wirkung(run, p, ziel)}
+local CASTS = {
+  holy_light = { cast = "paladin_holylight_cast", mana = "paladin_holylight_mana",
+    effect = function(run, p, target)
+      E.heal_player(run, p, target or p, model.p("paladin_holylight_heal"), "heal")
+    end },
+  smite = { cast = "priest_smite_cast", mana = "priest_smite_mana",
+    effect = function(run, p) E.player_damage_hogger(run, p, model.p("priest_smite_dmg"), "ability") end },
+  lesser_heal = { cast = "priest_heal_cast", mana = "priest_heal_mana",
+    effect = function(run, p, target)
+      E.heal_player(run, p, target or p, model.p("priest_heal_amount"), "heal")
+    end },
+  fireball = { cast = "mage_fireball_cast", mana = "mage_fireball_mana",
+    effect = function(run, p) E.player_damage_hogger(run, p, model.p("mage_fireball_dmg"), "ability") end },
+  shadow_bolt = { cast = "warlock_bolt_cast", mana = "warlock_bolt_mana",
+    effect = function(run, p) E.player_damage_hogger(run, p, model.p("warlock_bolt_dmg"), "ability") end },
+  summon_imp = { cast = "warlock_imp_cast", mana = "warlock_imp_mana",
+    effect = function(run, p)
+      p.imp_alive = true
+      p.imp_next = run.t + model.p("imp_interval")
+    end },
+  wrath = { cast = "druid_wrath_cast", mana = "druid_wrath_mana",
+    effect = function(run, p) E.player_damage_hogger(run, p, model.p("druid_wrath_dmg"), "ability") end },
+  healing_touch = { cast = "druid_touch_cast", mana = "druid_touch_mana",
+    effect = function(run, p, target)
+      E.heal_player(run, p, target or p, model.p("druid_touch_heal"), "heal")
+    end },
+}
+E.CASTS = CASTS
+
+-- true, wenn die Faehigkeit gestartet wurde
+function E.cast_ability(run, p, id, target)
+  if run.t < p.gcd_ready or p.cast then return false end
+  local inst = INSTANT[id]
+  if inst then
+    if inst(run, p) then
+      p.gcd_ready = run.t + model.p("gcd")
+      return true
+    end
+    return false
+  end
+  local c = CASTS[id]
+  assert(c, "unbekannte Faehigkeit: " .. tostring(id))
+  if p.resource < model.p(c.mana) then return false end
+  p.cast = { id = id, ends_at = run.t + model.p(c.cast), target = target }
+  p.gcd_ready = run.t + model.p("gcd")
+  return true
+end
+
+-- ---------------------------------------------------------------------------
+-- Fressen
+-- ---------------------------------------------------------------------------
+function E.interrupt_eat(run, involved)
+  local h = run.hogger
+  if not h.eating then return end
+  h.eating = nil
+  h.eat_ready = run.t + model.p("eat_cd")
+  run.c.eat_interrupted = run.c.eat_interrupted + 1
+  log_ev(run, run.t, "eat_interrupt", "hogger", nil, involved, nil)
+end
+
+local function hogger_try_eat(run)
+  local h = run.hogger
+  if h.eating or run.t < h.eat_ready then return false end
+  if h.hp >= model.p("eat_hp_threshold") * h.max_hp then return false end
+  local radius = model.p("eat_corpse_radius")
+  for i = 1, #run.corpses do
+    if run.corpses[i].d <= radius then
+      table.remove(run.corpses, i)
+      h.eating = { phase = "drag", ends_at = run.t + model.p("eat_drag_duration"),
+                   hitters = {}, hitter_count = 0, dmg_accum = 0 }
+      run.c.eat_channels = run.c.eat_channels + 1
+      log_ev(run, run.t, "eat_start", "hogger", nil, nil, nil)
+      return true
+    end
+  end
+  return false
+end
+
+-- ---------------------------------------------------------------------------
+-- Hogger-Tick
+-- ---------------------------------------------------------------------------
+-- Hogger bewegt sich auf der 1D-Achse: alle Relativdistanzen (Spieler UND
+-- Leichen) verschieben sich um den Schritt — so landet er nach einem Charge
+-- mitten in der Fernkampf-Reihe, genau wie im echten Spiel.
+local function hogger_relocate(run, step)
+  for _, q in ipairs(run.players) do
+    if q.alive then q.d = math.abs(q.d - step) end
+  end
+  for _, c in ipairs(run.corpses) do
+    c.d = math.abs(c.d - step)
+  end
+end
+
+local function pick_hogger_target(run)
+  local h = run.hogger
+  local best_melee, best_melee_threat = nil, 0
+  local best_any, best_any_threat = nil, 0
+  local melee_r = model.p("melee_range")
+  for _, p in ipairs(run.players) do
+    if p.alive and p.threat > 0 then
+      if p.d <= melee_r and p.threat > best_melee_threat then
+        best_melee, best_melee_threat = p, p.threat
+      end
+      if p.threat > best_any_threat then
+        best_any, best_any_threat = p, p.threat
+      end
+    end
+  end
+  h.target = best_melee or best_any
+  return h.target, best_melee ~= nil
+end
+
+local function hogger_tick(run, dt)
+  local h = run.hogger
+  if h.hp <= 0 then return end
+
+  -- Fress-Zustandsmaschine
+  if h.eating then
+    local e = h.eating
+    if e.phase == "drag" and run.t >= e.ends_at then
+      e.phase = "channel"
+      e.ends_at = run.t + model.p("eat_channel_duration")
+      log_ev(run, run.t, "eat_tick", "hogger", nil, 0, nil)
+    elseif e.phase == "channel" then
+      local heal = model.eat_heal_per_second(run.cfg.n) * dt
+      h.hp = math.min(h.max_hp, h.hp + heal)
+      run.c.eat_healing = run.c.eat_healing + heal
+      if run.t >= e.ends_at then
+        h.eating = nil
+        h.eat_ready = run.t + model.p("eat_cd")
+        run.c.eat_completed = run.c.eat_completed + 1
+        log_ev(run, run.t, "eat_complete", "hogger", nil, nil, nil)
+      end
+    end
+    return -- waehrend Schleppen/Fressen keine Angriffe
+  end
+
+  local target, in_melee = pick_hogger_target(run)
+  if not target then
+    hogger_try_eat(run)
+    return
+  end
+
+  -- Charge: weitestes Ziel mit Bedrohung im Leash-Radius (GDD 9.2)
+  -- EXPERIMENT chargescale (nur Sim, Beleg fuer Vorschlags-Issue):
+  -- Charge-CD skaliert mit N, damit Hoggers Droh-Durchsatz mitwaechst.
+  local charge_cd = model.p("hogger_charge_cd")
+  if run.cfg.exp and run.cfg.exp.chargescale then
+    charge_cd = charge_cd / math.max(1, run.cfg.n / 10)
+  end
+  if run.t >= h.charge_ready then
+    local far, far_d = nil, 0
+    for _, p in ipairs(run.players) do
+      if p.alive and p.threat > 0 and p.d <= model.p("hogger_leash_radius") and p.d > far_d then
+        far, far_d = p, p.d
+      end
+    end
+    if far then
+      h.charge_ready = run.t + charge_cd
+      run.c.charges = run.c.charges + 1
+      local avoided = run.agent.avoid_charge and run.agent.avoid_charge(run, far)
+      if far.cast then far.cast = nil end
+      -- Hogger stuermt ZUM Ziel und bleibt dort — die bisherige Front ist
+      -- jetzt fern, die Fernkaempfer um ihn herum sind die neue Nahzone.
+      local travel = far.d
+      hogger_relocate(run, travel)
+      far.d = model.p("hogger_charge_knockback")
+      if not avoided then
+        E.hogger_damage_player(run, far, model.p("hogger_charge_dmg"), "charge")
+      end
+      h.next_auto = math.max(h.next_auto, run.t + model.p("hogger_charge_windup"))
+      log_ev(run, run.t, "charge", "hogger", far.id, nil, nil)
+      return
+    end
+  end
+
+  -- Fressen hat Prioritaet vor dem Verfolgen, nicht vor dem Nahkampf
+  if not in_melee then
+    if hogger_try_eat(run) then return end
+    -- Ziel verfolgen: Hogger bewegt sich, alle Distanzen verschieben sich
+    local speed = model.p("hogger_speed")
+    if h.slow_until > run.t then speed = speed * (1 - model.p("mage_frostarmor_slow")) end
+    local step = math.min(speed * dt, math.max(0, target.d - model.p("melee_range")))
+    hogger_relocate(run, step)
+    return
+  end
+
+  -- Vicious Slice (GDD 9.2), kein Krit
+  if run.t >= h.slice_ready then
+    h.slice_ready = run.t + model.p("hogger_slice_cd")
+    E.hogger_damage_player(run, target, model.p("hogger_slice_dmg"), "slice")
+    if target.alive then
+      target.bleed_until = run.t + model.p("hogger_slice_duration")
+      target.bleed_next = run.t + model.p("hogger_slice_bleed_interval")
+    end
+    return
+  end
+
+  -- Autohit
+  if run.t >= h.next_auto then
+    h.next_auto = run.t + model.p("hogger_autohit_interval")
+    E.hogger_damage_player(run, target, model.p("hogger_autohit_dmg"), "autohit")
+    -- EXPERIMENT cleave (nur Sim, Beleg fuer Vorschlags-Issue): der Autohit
+    -- trifft zusaetzlich bis zu ceil(N/10)-1 weitere Ziele im Nahkampf.
+    if run.cfg.exp and (run.cfg.exp.cleave or run.cfg.exp.cleave8) then
+      local extra = math.ceil(run.cfg.n / (run.cfg.exp.cleave8 and 8 or 10)) - 1
+      if extra > 0 then
+        local melee_r = model.p("melee_range")
+        for _, q in ipairs(run.players) do
+          if extra <= 0 then break end
+          if q.alive and q ~= target and q.threat > 0 and q.d <= melee_r then
+            E.hogger_damage_player(run, q, model.p("hogger_autohit_dmg"), "autohit")
+            extra = extra - 1
+          end
+        end
+      end
+    end
+  end
+
+  hogger_try_eat(run)
+end
+
+-- ---------------------------------------------------------------------------
+-- Spieler-Tick (Mechanik; Entscheidungen liegen in agents.lua)
+-- ---------------------------------------------------------------------------
+local function player_tick(run, p, dt)
+  if not p.alive then
+    if p.state == "dead" and run.t >= p.dead_until then
+      spawn_player(run, p)
+    end
+    return
+  end
+
+  p.combat_time = p.combat_time + dt
+
+  -- Blutung (DoT, kein Krit)
+  if p.bleed_until > run.t and run.t >= p.bleed_next then
+    p.bleed_next = p.bleed_next + model.p("hogger_slice_bleed_interval")
+    E.hogger_damage_player(run, p, model.p("hogger_slice_bleed_dmg"), "dot")
+    if not p.alive then return end
+  end
+
+  -- Ressourcen-Regeneration
+  local res = model.classes[p.class].resource
+  if res == "mana" then
+    if run.t - p.last_cast_t >= model.p("five_sec_rule_wait") then
+      p.resource = math.min(resource_max(p), p.resource + model.p("mana_regen_rate") * dt)
+    end
+  elseif res == "energy" then
+    p.resource = math.min(resource_max(p), p.resource + model.p("energy_regen_rate") * dt)
+  end
+
+  -- Add-Duell blockiert Boss-Beitrag (1v1 beim Anmarsch)
+  if p.add_idx then
+    local add = run.adds[p.add_idx]
+    if not add or add.hp <= 0 then
+      if add then add.engaged_by = nil end
+      p.add_idx = nil
+    else
+      if run.t >= p.next_auto then
+        p.next_auto = run.t + model.p("autohit_interval")
+        local dmg = (model.classes[p.class].attack == "shot")
+          and model.p("autoshot_dmg") or model.p("autohit_melee_dmg")
+        add.hp = add.hp - dmg
+        if add.hp <= 0 then
+          add.engaged_by = nil
+          p.add_idx = nil
+          run.c.add_deaths = run.c.add_deaths + 1
+          log_ev(run, run.t, "add_death", p.id, nil, nil, nil)
+        end
+      end
+      if run.t >= add.next_auto then
+        add.next_auto = run.t + model.p("add_attack_interval")
+        p.hp = p.hp - model.p("add_dmg")
+        if p.hp <= 0 then E.kill_player(run, p) end
+      end
+      return
+    end
+  end
+
+  -- Bewegung auf Wunschreichweite (Agent darf abweichen, z. B. Turtle)
+  local want = run.agent.desired_range and run.agent.desired_range(run, p)
+               or desired_range(p)
+  if p.d > want then
+    p.d = math.max(want, p.d - model.p("move_speed_alive") * dt)
+    if p.d > want then return end -- noch unterwegs
+  end
+
+  -- Cast abschliessen
+  if p.cast and run.t >= p.cast.ends_at then
+    local c = CASTS[p.cast.id]
+    local target = p.cast.target
+    p.cast = nil
+    if res_cost(p, model.p(c.mana)) then
+      p.last_cast_t = run.t
+      c.effect(run, p, target)
+      if not p.alive then return end
+    end
+  end
+
+  -- Agent entscheidet (Faehigkeiten, Heilziele)
+  run.agent.act(run, p)
+  if not p.alive then return end
+
+  -- Autohit / Autoschuss / Zauberstab (Agent darf unterdruecken, z. B. Turtle)
+  if not p.cast and run.t >= p.next_auto
+     and not (run.agent.no_auto and run.agent.no_auto(run, p)) then
+    local attack = model.classes[p.class].attack
+    p.next_auto = run.t + model.p("autohit_interval")
+    if attack == "shot" then
+      E.player_damage_hogger(run, p, model.p("autoshot_dmg"), "autohit")
+    elseif attack == "wand" then
+      E.player_damage_hogger(run, p, model.p("wand_dmg"), "autohit")
+    else
+      local dmg = model.p("autohit_melee_dmg")
+      if p.seal_hits > 0 then
+        dmg = dmg + model.p("paladin_seal_bonus_dmg")
+        p.seal_hits = p.seal_hits - 1
+      end
+      E.player_damage_hogger(run, p, dmg, "autohit")
+    end
+  end
+
+  -- Wichtel-Beitrag (GDD 8.2: 2 Schaden / 2 s solange er lebt)
+  if p.imp_alive and run.t >= (p.imp_next or 0) then
+    p.imp_next = run.t + model.p("imp_interval")
+    E.player_damage_hogger(run, p, model.p("imp_dmg"), "ability")
+  end
+end
+
+-- ---------------------------------------------------------------------------
+-- Lauf
+-- ---------------------------------------------------------------------------
+-- cfg: { n, penalty, crits, agent="unkoordiniert"|"koordiniert"|"turtle",
+--        seed, log=false }
+function E.run_try(cfg)
+  local agents = require("sim.agents")
+  local run = {
+    cfg = cfg,
+    rng = rngmod.new(cfg.seed),
+    t = 0,
+    events = {},
+    corpses = {},
+    players = {},
+    adds = {},
+    c = { deaths = 0, dmg_to_hogger = 0, dmg_to_players = 0, healing = 0,
+          crit_kills = 0, eat_channels = 0, eat_interrupted = 0,
+          eat_completed = 0, eat_healing = 0, charges = 0, add_deaths = 0 },
+  }
+  run.agent = agents.make(cfg.agent, run)
+
+  run.hogger = {
+    hp = model.hogger_hp(cfg.n), max_hp = model.hogger_hp(cfg.n),
+    next_auto = 0, slice_ready = 0,
+    charge_ready = model.p("hogger_charge_cd"),
+    eat_ready = 0, eating = nil, target = nil, slow_until = 0,
+  }
+
+  for i = 1, model.adds(cfg.n) do
+    run.adds[i] = { hp = model.p("add_hp"), engaged_by = nil, next_auto = 0 }
+  end
+
+  for i = 1, cfg.n do
+    local class = run.agent.initial_class(run, i)
+    run.players[i] = make_player(run, "p" .. i, class, false)
+  end
+  -- Leeroy: zusaetzlicher Krieger, immer unkoordiniert, zaehlt nicht in N (GDD 17.2)
+  run.players[cfg.n + 1] = make_player(run, "leeroy", "warrior", true)
+
+  log_ev(run, 0, "try_start", "sim", tostring(cfg.seed), cfg.n, nil)
+
+  -- Try-Start: gestaffelter Anmarsch (Leeroy voran, GDD 10)
+  for i, p in ipairs(run.players) do
+    p.state = "dead"
+    p.dead_until = p.is_leeroy and 0 or (10 + (i % 5) * 0.8)
+  end
+
+  local dt = model.SIM_TICK_DT
+  local limit = model.p("try_time_limit")
+  while run.t < limit do
+    run.t = run.t + dt
+    if run.agent.tick then run.agent.tick(run) end
+    for _, p in ipairs(run.players) do
+      player_tick(run, p, dt)
+    end
+    hogger_tick(run, dt)
+    if run.hogger.hp <= 0 then break end
+  end
+
+  local win = run.hogger.hp <= 0
+  log_ev(run, run.t, "try_end", "sim", string.format("%.17g", math.max(0, run.hogger.hp)),
+         win and 1 or 0, nil)
+
+  -- Uptime: Anteil Kampfzeit lebender Spieler an N x Trydauer (GDD 13.1)
+  local combat_sum = 0
+  for i = 1, cfg.n do combat_sum = combat_sum + run.players[i].combat_time end
+
+  local class_counts = {}
+  for i = 1, cfg.n do
+    local cl = run.players[i].class
+    class_counts[cl] = (class_counts[cl] or 0) + 1
+  end
+
+  return {
+    win = win,
+    duration = run.t,
+    rest_hp_pct = math.max(0, run.hogger.hp) / run.hogger.max_hp,
+    uptime = combat_sum / (cfg.n * run.t),
+    c = run.c,
+    class_counts = class_counts,
+    log_hash = cfg.log and hashmod.djb2(table.concat(run.events, "\n")) or nil,
+    events = cfg.log and run.events or nil,
+  }
+end
+
+return E
