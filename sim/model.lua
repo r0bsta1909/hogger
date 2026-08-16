@@ -134,13 +134,13 @@ M.params = {
 
   -- Loop / Todesstrafe (GDD 6, 7.1, 9.3)
   respawn_base           = p(8, 0, 30, 1, "9.3"),
-  respawn_factor         = p(0.5, 0, 1.0, 0.05, "9.3"),
+  respawn_factor         = p(0.52, 0, 1.0, 0.01, "9.3"),
   respawn_min            = p(10, 0, 30, 1, "9.3"),
-  respawn_max            = p(28, 5, 60, 1, "9.3"),
+  respawn_max            = p(30, 5, 60, 1, "9.3"),
   try_time_limit         = p(900, 300, 1800, 60, "6"),
   -- Feldposition = Feinsteller der Todesstrafe (GDD 7.1); Laufweg-Anteil
-  -- 15 s gesamt (M1-Sweep): Geisterlauf 9 s + Restanmarsch 6 s
-  graveyard_to_field_dist= p(1890, 500, 6000, 50, "7.1"),
+  -- 14 s gesamt (M1-Sweep): Geisterlauf 8 s + Restanmarsch 6 s
+  graveyard_to_field_dist= p(1680, 500, 6000, 50, "7.1"),
   field_to_hill_dist     = p(840, 300, 4000, 50, "7.1"),
 
   -- Ambient-Mobs (GDD 7.2 / 7.3)
@@ -176,8 +176,8 @@ M.params = {
   -- Sim-Streuungsmodell (GDD 17.2 Punkt 5b, v2.6) — Agentenmodell, kein Spielverhalten
   sim_skill_min          = p(0.7, 0.3, 1.0, 0.05, "17.2"),
   sim_skill_max          = p(1.3, 1.0, 2.0, 0.05, "17.2"),
-  sim_group_factor_min   = p(0.85, 0.5, 1.0, 0.05, "17.2"),
-  sim_group_factor_max   = p(1.15, 1.0, 1.5, 0.05, "17.2"),
+  sim_group_factor_min   = p(0.75, 0.5, 1.0, 0.05, "17.2"),
+  sim_group_factor_max   = p(1.25, 1.0, 1.5, 0.05, "17.2"),
 
   -- UI (GDD 4.1 / 4.2)
   zoom_radius_1          = p(300, 150, 600, 25, "4.2"),

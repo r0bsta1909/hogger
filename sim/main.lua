@@ -88,7 +88,7 @@ end
 -- Sweep: Matrix N x Todesstrafe x Krits x Agent (GDD 17.2 Punkt 6)
 -- ---------------------------------------------------------------------------
 local NS = { 5, 10, 20, 40 }
-local WALKS = { 10, 15, 20, 25 }
+local WALKS = { 10, 14, 18, 22 }
 local AGENTS = { "unkoordiniert", "koordiniert", "turtle" }
 
 local cells = {}

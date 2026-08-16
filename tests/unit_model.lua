@@ -8,11 +8,11 @@ local T = _G.T
 -- GDD 9.3: Skalierungstabelle als harte Testfaelle -------------------------
 local table93 = {
   --  N, HP,    Fressheilung, Unterbrecher, Cleave, Adds, Respawn (GDD 9.3, v2.6)
-  -- HP = 430 x N - 950; Cleave = ceil(N/5); Respawn = clamp(8+0,5N; 10; 28)
-  { 5,   1200,  144,  3, 1, 0, 10.5 },
-  { 10,  3350,  402,  3, 2, 1, 13 },
-  { 20,  7650,  918,  4, 4, 2, 18 },
-  { 40, 16250, 1950,  6, 8, 5, 28 },
+  -- HP = 430 x N - 950; Cleave = ceil(N/5); Respawn = clamp(8+0,52N; 10; 30)
+  { 5,   1200,  144,  3, 1, 0, 10.6 },
+  { 10,  3350,  402,  3, 2, 1, 13.2 },
+  { 20,  7650,  918,  4, 4, 2, 18.4 },
+  { 40, 16250, 1950,  6, 8, 5, 28.8 },
 }
 for _, row in ipairs(table93) do
   local n = row[1]
@@ -21,7 +21,7 @@ for _, row in ipairs(table93) do
   T.eq(M.eat_interrupters(n), row[4], "9.3 Unterbrecher N=" .. n)
   T.eq(M.cleave_targets(n), row[5], "9.3 Cleave-Ziele N=" .. n)
   T.eq(M.adds(n), row[6], "9.3 Adds N=" .. n)
-  T.eq(M.respawn_timer(n), row[7], "9.3 Respawn N=" .. n)
+  T.near(M.respawn_timer(n), row[7], "9.3 Respawn N=" .. n)
 end
 
 -- GDD 7.2: Mob-Slots -------------------------------------------------------
@@ -126,9 +126,9 @@ for _, n in ipairs({ 5, 10, 20, 40 }) do
 end
 T.ok(M.max_mob_kills_per_try(40) <= 120, "7.3 Richtwert ~100 Mob-Kills pro Try haelt")
 
--- GDD 6: Todesstrafe im fixierten Korridor (M1: 25,5 s bei N=5 bis 43 s bei N=40)
-T.near(M.death_penalty(5), 25.5, "6 Todesstrafe N=5")
-T.near(M.death_penalty(40), 43, "6 Todesstrafe N=40")
+-- GDD 6: Todesstrafe im fixierten Korridor (M1: 24,6 s bei N=5 bis 42,8 s bei N=40)
+T.near(M.death_penalty(5), 24.6, "6 Todesstrafe N=5")
+T.near(M.death_penalty(40), 42.8, "6 Todesstrafe N=40")
 for _, n in ipairs({ 5, 10, 20, 40 }) do
   local pen = M.death_penalty(n)
   T.ok(pen >= 24 and pen <= 45,

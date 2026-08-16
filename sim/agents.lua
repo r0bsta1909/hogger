@@ -97,12 +97,15 @@ function A.make(name, run)
     local agent = {}
     agent.initial_class = function(r) return uniform_class(r) end
 
-    -- Zielkomposition (GDD 17.2: 50 % Jaeger, 2 Heiler, 2 Schurken, Rest gemischt)
+    -- Zielkomposition (GDD 17.2): 50 % Jaeger; Heiler und Schurken skalieren
+    -- mit N (max(2, N/8) bzw. max(2, N/10)) — die Startannahme "2/2" liess
+    -- kleine Raids proportional mehr Support-Overhead tragen (F6-Schieflage)
     agent.choose_class = function(r, p)
       if p.is_leeroy or r.t < 180 then return nil end
       local want = {
         hunter = math.floor(0.5 * r.cfg.n + 0.5),
-        priest = 2, rogue = 2,
+        priest = math.max(2, math.floor(r.cfg.n / 8 + 0.5)),
+        rogue = math.max(2, math.floor(r.cfg.n / 10 + 0.5)),
       }
       local have = { hunter = 0, priest = 0, rogue = 0 }
       for i = 1, r.cfg.n do
