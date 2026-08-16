@@ -97,6 +97,33 @@ for class_id, races in pairs(expected_races) do
   end
 end
 
+-- GDD 8.2: die Kits vollstaendig und in Reihenfolge (Issue #28 — die
+-- Playtest-Frage "Jaeger hat nur RS?" wird hier maschinell beantwortet:
+-- sein Autoschuss IST Faehigkeit 1 und laeuft automatisch, GDD 8.1)
+local expected_kits = {
+  warrior = { "Heroischer Stoss", "Schlachtruf" },
+  paladin = { "Heiliges Licht", "Siegel der Rechtschaffenheit" },
+  hunter  = { "Raptorstoss" },
+  rogue   = { "Finsterer Stoss", "Ausweiden", "Verstohlenheit" },
+  priest  = { "Goettliche Pein", "Geringes Heilen" },
+  mage    = { "Feuerball", "Frostruestung" },
+  warlock = { "Schattenblitz", "Wichtel beschwoeren" },
+  druid   = { "Zorn", "Heilende Beruehrung" },
+}
+local expected_attack = {
+  warrior = "melee", paladin = "melee", hunter = "shot", rogue = "melee",
+  priest = "wand", mage = "wand", warlock = "wand", druid = "melee",
+}
+for class_id, kit in pairs(expected_kits) do
+  local c = M.classes[class_id]
+  T.eq(#c.abilities, #kit, "8.2 Anzahl Faehigkeiten " .. class_id)
+  for i, name in ipairs(kit) do
+    T.eq(c.abilities[i] and c.abilities[i].name_de, name,
+      "8.2 Faehigkeit " .. class_id .. "/" .. i)
+  end
+  T.eq(c.attack, expected_attack[class_id], "8.1 Autoangriff " .. class_id)
+end
+
 -- GDD 5: Rassenwurf — Druide immer Nachtelf, Jaeger nie Mensch,
 -- 2/3-Mensch-Regel, jeder Wurf liefert eine gueltige Rasse ------------------
 for i = 0, 99 do

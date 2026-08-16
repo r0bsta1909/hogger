@@ -314,6 +314,9 @@ function W.snapshot_body(state)
     if (p.shout_until or 0) > state.time then flags2 = flags2 + 2 end
     if (p.seal_hits or 0) > 0 then flags2 = flags2 + 4 end
     if p.frost_armor then flags2 = flags2 + 8 end
+    -- Bits 5/6: laufender Cast-Slot (1..3) — der Castbalken kann die
+    -- Faehigkeit damit beim Namen nennen (GDD 4.2)
+    if p.cast and p.cast.slot then flags2 = flags2 + 16 * (p.cast.slot % 4) end
     local prog = 0
     if p.cast and p.cast.total then
       prog = q8(1 - p.cast.t_left / p.cast.total)
@@ -413,6 +416,7 @@ function W.read_snapshot(data, off)
       shout = flags2 % 4 >= 2,
       seal = flags2 % 8 >= 4,
       frost_armor = flags2 % 16 >= 8,
+      cast_slot = math.floor(flags2 / 16) % 4, -- 0 = kein Cast
       cp = cp,
       x = px, y = py, hp = php, resource = pres / 255 * 100,
       facing = pfacing, target = ptarget, progress = pprog / 255,
