@@ -80,3 +80,25 @@ do
   log:toggle()
   T.eq(log:visible(), false, "L schliesst das Log wieder")
 end
+
+-- Easter Egg: das Echo erzaehlt (Issue #64). Blaettern, schliessen, und
+-- keinerlei Spielwirkung — es gibt nichts anzunehmen.
+do
+  local lore = quest.new_lore()
+  T.eq(lore.mode, "lore", "Lore-Modus")
+  T.eq(lore.page, 1, "beginnt auf Seite 1")
+  T.eq(lore:blocking(), false, "das Echo redet, es sperrt nichts")
+  T.eq(lore:can_accept(), false, "hier gibt es nichts anzunehmen")
+  T.eq(lore:lore_prev(), false, "vor Seite 1 gibt es nichts")
+  for i = 2, #quest.LORE do
+    lore:lore_next()
+    T.eq(lore.page, i, "blaettert auf Seite " .. i)
+  end
+  lore:lore_next()
+  T.eq(lore:visible(), false, "nach der letzten Seite ist Schluss")
+  T.ok(#quest.LORE >= 5, "die Geschichte hat mehrere Seiten")
+  for i, page in ipairs(quest.LORE) do
+    T.ok(page.titel and #page.titel > 2, "Seite " .. i .. " hat einen Titel")
+    T.ok(page.absaetze and #page.absaetze >= 1, "Seite " .. i .. " hat Text")
+  end
+end

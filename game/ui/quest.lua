@@ -35,6 +35,38 @@ local GOALS = {
   "Sucht euch am Ende des Wegs eine Leiche aus und belebt euch wieder.",
   "Ablehnen ist keine Option. Das ist keine Redewendung.",
 }
+-- Easter Egg (Issue #64): die ganze Geschichte, wenn man das Echo als Geist
+-- noch einmal anspricht. Null Spielwirkung, keine Belohnung, nur wer sucht.
+-- VORSCHLAG — Fiktion entscheidet Rob.
+local LORE_TITLE = "Was passiert ist"
+local LORE = {
+  { titel = "Der Raid", absaetze = {
+    "Wir standen vor dem Raum. Sie haben gerechnet. Wahrscheinlichkeiten, Prozente, wer wen zieht. Zweiunddreissig Minuten lang.",
+    "Ich war Huehnchen holen.",
+  } },
+  { titel = "Der Sturmangriff", absaetze = {
+    "Dann bin ich rein. Mit meinem eigenen Namen im Mund, weil ich dachte, das macht es besser.",
+    "Es machte es nicht besser. Es waren sehr viele Drachenwelpen. Es war ein sehr kurzer Kampf.",
+  } },
+  { titel = "Der Fluch", absaetze = {
+    "Der Hexenmeister hat nicht geschrien. Das war das Schlimme. Er hat nur gesagt, ich soll das machen, was ich am besten kann: anrennen.",
+    "Auf ewig. Als Stufe 1. Gegen etwas, das ich nie schaffe.",
+  } },
+  { titel = "Das Erwachen", absaetze = {
+    "Danach: hier. Alles flach, alles Symbole, alles klein. Ein Gnoll auf einem Huegel, ein Pfad, ein Friedhof.",
+    "Mein Raid war noch da. Eine Weile. Dann waren sie weg -- ausgeloggt, disconnected, wer weiss das schon. Keiner blieb.",
+  } },
+  { titel = "Die Teilung", absaetze = {
+    "Irgendwann war ich zweimal. Der da vorne rennt, schreit meinen Namen und stirbt. Und ich stehe hier und sehe ihm dabei zu.",
+    "Er hoert mich nicht. Ich habe es oft genug versucht.",
+  } },
+  { titel = "Warum ich dich frage", absaetze = {
+    "Ich kann nicht aufhoeren. Aber ihr koennt anfangen. Deshalb der Zettel, das Ausrufezeichen, der ganze Zirkus.",
+    "Der Knopf zum Ablehnen ist uebrigens echt. Er ist nur grau. So wie hier alles.",
+  } },
+}
+Q.LORE, Q.LORE_TITLE = LORE, LORE_TITLE
+
 local NAME_PROMPT = "Und wie sollen wir dich nennen?"
 local NAME_TAKEN = "Den gibt's schon. Streng dich an."
 local NAME_HINT = "2-12 Buchstaben"
@@ -65,6 +97,32 @@ function Q.new_log()
   q.state = "open"
   q.mode = "log"
   return q
+end
+
+-- Easter Egg: das Echo erzaehlt (Issue #64). Blockiert nichts, man kann
+-- jederzeit weggehen — es redet dann eben mit sich selbst.
+function Q.new_lore()
+  local q = Q.new()
+  q.state = "open"
+  q.mode = "lore"
+  q.page = 1
+  return q
+end
+
+function Q:lore_next()
+  if self.mode ~= "lore" then return false end
+  if self.page >= #LORE then
+    self.closed = true
+  else
+    self.page = self.page + 1
+  end
+  return true
+end
+
+function Q:lore_prev()
+  if self.mode ~= "lore" or self.page <= 1 then return false end
+  self.page = self.page - 1
+  return true
 end
 
 -- Solange das Fenster offen ist, gehen Tasten ins Fenster (Namensfeld).
@@ -125,6 +183,13 @@ function Q:textinput(t)
 end
 
 function Q:keypressed(key)
+  if self.mode == "lore" and self:visible() then
+    if key == "escape" then self.closed = true
+    elseif key == "return" or key == "space" or key == "kpenter" then
+      self:lore_next()
+    elseif key == "backspace" then self:lore_prev() end
+    return true
+  end
   if not self:blocking() then return false end
   if key == "backspace" then
     self.buffer = self.buffer:sub(1, -2)
@@ -203,6 +268,12 @@ function Q:mousepressed(mx, my, w, h)
     if inside(L.close, mx, my) then self.closed = true end
     return true
   end
+  if self.mode == "lore" then
+    if inside(L.close, mx, my) then self.closed = true
+    elseif inside(L.accept, mx, my) then self:lore_prev()
+    elseif inside(L.decline, mx, my) then self:lore_next() end
+    return true
+  end
   if inside(L.close, mx, my) then
     self.closed = true
     return true
@@ -217,6 +288,7 @@ end
 function Q:mousemoved(mx, my, w, h)
   local L = self:layout(w, h)
   self.hover = inside(L.accept, mx, my) and "accept"
+               or inside(L.decline, mx, my) and "decline"
                or inside(L.close, mx, my) and "close" or nil
 end
 
@@ -273,13 +345,43 @@ function Q:draw(view, w, h, to_screen)
   assets.draw("icon_warrior", px + 24, py + 20, 32 / assets.size("icon_warrior"), 0.7)
   love.graphics.setColor(0.72, 0.86, 0.55, 1) -- freundlicher NPC: gruen
   love.graphics.print(GIVER, px + 48, py + 12)
+  if self.mode == "lore" then
+    love.graphics.setColor(0.55, 0.52, 0.42, 1)
+    love.graphics.print("(kein Questziel, nur Reden)", px + 250, py + 12)
+  end
   love.graphics.setColor(0.75, 0.25, 0.2, 1)
   love.graphics.rectangle("line", L.close[1], L.close[2], L.close[3], L.close[4], 3, 3)
   love.graphics.setColor(0.9, 0.5, 0.45, 1)
   love.graphics.print("X", L.close[1] + 9, L.close[2] + 5)
 
-  -- Questtitel und Fliesstext
   local tx, ty, tw = px + 26, py + 60, pw - 52
+
+  if self.mode == "lore" then
+    -- Easter Egg: Seite fuer Seite, sonst nichts (Issue #64)
+    local page = LORE[self.page] or LORE[1]
+    love.graphics.setColor(PARCH_DARK[1], PARCH_DARK[2], PARCH_DARK[3], 1)
+    love.graphics.print(LORE_TITLE, tx, ty, 0, 1.5, 1.5)
+    ty = ty + 40
+    love.graphics.print(page.titel, tx, ty, 0, 1.2, 1.2)
+    ty = ty + 30
+    love.graphics.setColor(0.16, 0.12, 0.07, 1)
+    for _, para in ipairs(page.absaetze) do
+      local _, wrapped = font:getWrap(para, tw)
+      love.graphics.printf(para, tx, ty, tw)
+      ty = ty + #wrapped * font:getHeight() + 10
+    end
+    love.graphics.setColor(0.35, 0.30, 0.22, 1)
+    local pg = string.format("Seite %d von %d", self.page, #LORE)
+    love.graphics.print(pg, tx, py + ph - 128)
+    button(L.accept[1], L.accept[2], L.accept[3], L.accept[4], "Zurueck",
+      self.page > 1, self.hover == "accept")
+    button(L.decline[1], L.decline[2], L.decline[3], L.decline[4],
+      self.page < #LORE and "Weiter" or "Schliessen", true,
+      self.hover == "decline")
+    return
+  end
+
+  -- Questtitel und Fliesstext
   love.graphics.setColor(PARCH_DARK[1], PARCH_DARK[2], PARCH_DARK[3], 1)
   love.graphics.print(TITLE, tx, ty, 0, 1.5, 1.5)
   ty = ty + 34
