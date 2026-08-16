@@ -24,7 +24,7 @@ function D:keypressed(key)
   elseif key == "k" then
     return "kill"   -- Hogger sofort toeten (Issue #35)
   elseif key == "r" then
-    return "intro"  -- Boot + Leeroy-Intro noch einmal (Issue #36)
+    return "intro"  -- Boot + Quest des Echos noch einmal (Issue #36)
   elseif key == "z" then
     return "realm"  -- kompletter Neustart des Realms (Issue #36)
   elseif key == "+" or key == "kp+" then
@@ -65,8 +65,8 @@ function D:draw(info)
     "Logs: " .. (info.log_dir or "?"),
     "",
     "[H] Host erzwingen    [N] Neuer Abend (session.json loeschen)",
-    "[K] Hogger sofort toeten (Host)   [R] Intro noch einmal",
-    "[Z] Neuer Realm (frischer Abend, Intro, Leeroy wartet wieder)",
+    "[K] Hogger sofort toeten (Host)   [R] Quest des Echos noch einmal",
+    "[Z] Neuer Realm (frischer Abend, Quest, Leeroy wartet wieder)",
     "[+/-] Lautstaerke: " .. string.format("%d %%", (info.volume or 0) * 100),
     info.net or "Netz: keine Fehler",
     "IP eintippen + Enter verbindet: " .. self.ip_input .. "_",

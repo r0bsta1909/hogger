@@ -122,8 +122,8 @@ Dauer bis zur Questannahme: unter 60 Sekunden bei zügigem Lesen. Kein Wort der 
 ## 6. Kernloop & Try-Struktur
 
 ```
-Boot → Intro (einmalig) → Geisterlauf zum Wiederbelebungsfeld → Klassenicon → Wiederbelebung →
-kurzer Anmarsch zum Hogger Hill → Kampf → Tod → Geisterlauf zum Feld (Klassenwechsel möglich) →
+Boot → Quest des Echos (einmalig) → Geisterlauf zum Wiederbelebungsfeld → Klassenicon → Wiederbelebung →
+kurzer Anmarsch zum Hogger Hill → Kampf → Tod → Geist freilassen → Geisterlauf zum Feld (Klassenwechsel möglich) →
 ... → Hogger fällt (FLUCHBRUCH, Sieg) oder Try endet (Wipe-Ansage durch Leeroy) → nächster Try
 ```
 
@@ -359,7 +359,7 @@ Stellhebel: F1/F5 → HP-Koeffizient und DPS-Zahlen; F2/F3 → Fress-Heilrate/Un
 - **Rahmen-Beat zündet:** Beobachtbares "Das ist die MINIMAP?!" in den ersten zwei Minuten neuer Spieler.
 - Aha-Moment Fressen: unaufgefordert benannt innerhalb der ersten zwei Trys (Leeroys Kragen-Sicherheitsnetz greift erst ab Try 3).
 - Revanche: Die Gruppe spielt freiwillig weiter — beim Wipe UND nach dem Fluchbruch.
-- Klassen-Mikrorollen sichtbar (8.2), Intro < 60 s ohne Bedienungsfragen an den Raum.
+- Klassen-Mikrorollen sichtbar (8.2), Quest-Onboarding < 60 s ohne Bedienungsfragen an den Raum.
 - **Ablenkungs-Check:** Ab Try 2 im Schnitt < 10 % Lebenszeit mit Mob-Ziel (Event-Log, `target_switch`).
 - **Zoom wird benutzt:** Spieler wechseln die Zoomstufe situativ (Log-Event `zoom_change`); falls alle dauerhaft auf einer Stufe kleben, ist die Mechanik toter Ballast → dann eine Stufe streichen statt weiter aufblasen.
 
@@ -497,7 +497,7 @@ Presets speichern/laden (JSON), "Zurück auf GDD-Werte".
 | 1 — Unit | Lua-Asserts auf `model.lua` | Formeln gegen GDD-Tabellen (9.3 als harte Testfälle), Krit-Ausschlüsse, Threat-Löschung bei Tod, XP-Deckel pro Try < 400, 8-Klassen-Vollständigkeit inkl. gültiger Rassen-Kombinationen, Erreichbarkeits-Beweis auf dem Begehbarkeits-Grid (Friedhof → Wiederbelebungsfeld → Hügel → alle Mob-Spawns), Manifest-Validator | < 1 s, jeder Commit |
 | 2 — Sim | 17.2 komplett | F1–F6 Pass/Fail, Uptime-Korridor, Klassenverteilung | Minuten, bei Balancing-PRs |
 | 3 — Determinismus | Zwei Sim-Läufe, gleicher Seed | Identischer Log-Hash — findet versteckten Zufall und `pairs()`-Sünden vor jedem Netcode | Sekunden, jeder Commit |
-| 4 — Integration | Host + N Bot-Clients in-process (Loopback, `t.window = false`) | Voller Try inkl. Try-Übergang; Invarianten je Tick: keine negativen HP, kein Heilen über Max, kein Ziel gleichzeitig tot und am Boss, Snapshot-Budget, Rejoin mitten im Try, session.json konsistent nach Host-Neustart, Intro-Statemachine blockiert Eingaben korrekt, Leeroy vollendet seinen Loop (Anmarsch → Hogger → Tod → Geisterlauf zum Wiederbelebungsfeld → Wiederbelebung → Anmarsch) ohne `leeroy_stuck`-Event | ~1 min, vor Merge |
+| 4 — Integration | Host + N Bot-Clients in-process (Loopback, `t.window = false`) | Voller Try inkl. Try-Übergang; Invarianten je Tick: keine negativen HP, kein Heilen über Max, kein Ziel gleichzeitig tot und am Boss, Snapshot-Budget, Rejoin mitten im Try, session.json konsistent nach Host-Neustart, Quest-Onboarding blockiert Bewegung korrekt (Annahme über das Netz), Leeroy vollendet seinen Loop (Anmarsch → Hogger → Tod → Geisterlauf zum Wiederbelebungsfeld → Wiederbelebung → Anmarsch) ohne `leeroy_stuck`-Event | ~1 min, vor Merge |
 | 5 — Stress | 17.4 | Perf-Gates | auf Abruf, vor M3-Abschluss |
 
 Jeder volle Lauf erzeugt `reports/<datum>.md` (Metriken, Siegquoten-Matrix, Delta zum Vorlauf); Kernzahlen → PR-Kommentar und 17.9.
