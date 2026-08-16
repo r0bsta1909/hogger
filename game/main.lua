@@ -22,6 +22,7 @@ local app = {
   bots = 0, headless = false, test = false,
   net = nil, search = nil, beacon = nil,
   render = nil, panel = nil, floating = nil, debug = nil,
+  boot = nil, dialog = nil, auto_hosted = false, uptime = 0,
   cooldown_view = { 0, 0, 0 }, cooldown_max = { 1, 1, 1 },
   discover_t = 0,
 }
@@ -109,6 +110,10 @@ function love.load(args)
   app.render = require("game.render").new()
   app.floating = require("game.ui.floating").new()
   app.debug = require("game.ui.debug").new()
+  -- Boot-Sequenz (GDD Kap. 3) im Normalstart; Debug-Laeufe starten direkt
+  if not app.auto then
+    app.boot = require("game.ui.boot").new()
+  end
 
   if app.mode == "host" then start_host()
   elseif app.mode == "client" then start_client(app.join_ip)
@@ -215,15 +220,27 @@ end
 function love.update(dt)
   if app.headless then return end
 
+  app.uptime = app.uptime + dt
+  if app.boot and app.boot:active() then
+    app.boot:update(dt)
+    -- IP-Fallback als getarnte Konsole nach 5 s ohne gefundenen Realm
+    -- (GDD Kap. 3: verwaltete Switches blockieren gelegentlich Broadcasts)
+    app.boot.ip_visible = app.auto_hosted and app.uptime > 5
+  end
+
+  if app.mode == "disconnected" then return end -- wartet auf den OK-Klick
+
   if app.mode == "discover" then
     app.search:update(dt)
     app.discover_t = app.discover_t + dt
     local best = app.search:best()
     if best and app.discover_t > 0.5 then
       start_client(best.ip)
+      app.auto_hosted = false
     elseif app.discover_t > 3 then
       -- kein Realm gefunden: diese Instanz IST der Realm (GDD Kap. 3)
       start_host()
+      app.auto_hosted = true
     end
     return
   end
@@ -233,7 +250,8 @@ function love.update(dt)
   if app.auto and app.mode == "host" then
     inp = require("game.gamesim.bot").decide(app.net.state, app.net.local_pid)
   end
-  if (app.panel and app.panel.visible) or app.debug.visible then
+  if (app.panel and app.panel.visible) or app.debug.visible
+     or (app.boot and app.boot:active() and app.boot:covers_screen()) then
     inp = { mask = 0, facing = inp.facing }
   end
 
@@ -249,10 +267,11 @@ function love.update(dt)
       return
     end
   elseif app.mode == "client" and app.net.failed then
-    -- Disconnect: automatischer Reconnect ueber neue Discovery (GDD Kap. 3)
-    app.render:announce("Vom Server getrennt.", 3)
+    -- authentischer WoW-Disconnect-Dialog, danach Glitch-Schwarz und
+    -- automatischer Reconnect (GDD Kap. 3)
     teardown_net()
-    start_search()
+    app.dialog = require("game.ui.dialog").new("Vom Server getrennt.")
+    app.mode = "disconnected"
     return
   end
 
@@ -283,7 +302,14 @@ end
 
 function love.draw()
   if app.headless then return end
-  if app.mode == "discover" or not app.view then
+  local bw, bh = love.graphics.getDimensions()
+  if app.boot and app.boot:active() and app.boot:covers_screen() then
+    -- Boot-Sequenz verdeckt die Spielsicht komplett (GDD Kap. 3)
+    app.boot:draw(bw, bh)
+  elseif app.mode == "disconnected" then
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.rectangle("fill", 0, 0, bw, bh)
+  elseif app.mode == "discover" or not app.view then
     love.graphics.setColor(0.9, 0.88, 0.8, 1)
     local msg = app.mode == "discover"
       and "Realm wird gesucht ..." or (app.net and app.net.failed or "Verbinde ...")
@@ -304,6 +330,10 @@ function love.draw()
     app.floating:draw(to_screen)
     if app.panel then app.panel:draw() end
   end
+  if app.boot and app.boot:active() and not app.boot:covers_screen() then
+    app.boot:draw_overlay(bw, bh) -- langsame Aufblende in die Totensicht
+  end
+  if app.dialog and app.dialog.visible then app.dialog:draw() end
   local lobbies = 0
   if app.search then
     for _ in pairs(app.search.lobbies) do lobbies = lobbies + 1 end
@@ -318,6 +348,15 @@ end
 
 function love.keypressed(key)
   if app.headless then return end
+  if app.dialog and app.dialog.visible then
+    if app.dialog:keypressed(key) then
+      -- OK: Glitch-Schwarz + automatischer Reconnect (GDD Kap. 3)
+      app.dialog = nil
+      start_search()
+      if app.boot then app.boot:reenter() end
+    end
+    return
+  end
   local action = app.debug:keypressed(key)
   if action == "host" then
     teardown_net()
@@ -337,6 +376,19 @@ function love.keypressed(key)
     return
   end
   if key == "f12" then app.debug:toggle() return end
+  if app.boot and app.boot:active() then
+    -- getarnte IP-Konsole im Glitch-Bild (GDD Kap. 3)
+    local boot_action = app.boot:keypressed(key)
+    if type(boot_action) == "table" and boot_action.join then
+      teardown_net()
+      if app.search then app.search:close(); app.search = nil end
+      start_client(boot_action.join)
+      app.auto_hosted = false
+      return
+    elseif boot_action then
+      return
+    end
+  end
   if app.mode == "discover" then return end
   if app.panel and app.panel:keypressed(key) then return end
   if key == "f10" and app.panel then
@@ -364,10 +416,24 @@ end
 
 function love.textinput(t)
   if app.debug and app.debug:textinput(t) then return end
+  if app.boot and app.boot:active() and app.boot:textinput(t) then return end
 end
 
 function love.mousepressed(mx, my)
-  if app.headless or not app.view then return end
+  if app.headless then return end
+  if app.dialog and app.dialog.visible then
+    if app.dialog:mousepressed(mx, my) then
+      app.dialog = nil
+      start_search()
+      if app.boot then app.boot:reenter() end
+    end
+    return
+  end
+  if app.boot and app.boot:active() and app.boot:covers_screen() then
+    app.boot:mousepressed() -- ab dem zweiten Start ueberspringbar (GDD 3)
+    return
+  end
+  if not app.view then return end
   local w, h = love.graphics.getDimensions()
   local radius = h / 2 - 8
   local scale = radius / app.render:zoom_radius()
