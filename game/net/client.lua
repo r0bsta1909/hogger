@@ -60,12 +60,15 @@ function C:_handle(data)
   local msg, off = wire.read_header(data)
   if not msg then return end
   if msg == wire.MSG.WELCOME then
-    local pid, kv = wire.read_welcome(data, off)
+    local pid, rejoin, kv = wire.read_welcome(data, off)
     self.pid = pid
+    self.rejoin = rejoin -- Kap. 5: Rejoin -> kein Intro, nur "Ah. Wieder da."
     self.connected = true
     for k, v in pairs(kv) do
       if model.params[k] then model.params[k].wert = v end
     end
+  elseif msg == wire.MSG.RENAME_RESULT then
+    self.rename_result = wire.read_rename_result(data, off) -- Intro holt ab
   elseif msg == wire.MSG.SNAPSHOT then
     local ack, snap = wire.read_snapshot(data, off)
     -- unsequenced Kanal: veraltete Snapshots verwerfen
@@ -88,6 +91,13 @@ function C:_handle(data)
     if model.params[k] then model.params[k].wert = v end
   elseif msg == wire.MSG.ROSTER then
     self.names = wire.read_roster(data, off)
+  end
+end
+
+function C:send_rename(name)
+  if self.connected then
+    self.rename_result = nil
+    self.peer:send(wire.rename(name), CH_RELIABLE, "reliable")
   end
 end
 
