@@ -87,11 +87,41 @@ local function start_client(ip)
   app.panel = nil
 end
 
+-- Admin (GDD 4.4, Issue #36): das Onboarding noch einmal ansehen, ohne das
+-- Spiel zu verlassen. Der gemerkte Charaktername faellt weg, Boot-Sequenz
+-- und Leeroy-Intro laufen erneut; die Verbindung bleibt bestehen.
+local function replay_intro()
+  love.filesystem.remove("charname.dat")
+  app.name = "gast" .. tostring(math.floor(socket.gettime() * 1000) % 10000)
+  app.name_given = false
+  app.rejoin_known, app.rejoin_greeted = nil, nil
+  app.need_intro = true
+  app.intro = nil
+  app.stats, app.victory = nil, nil
+  app.boot = require("game.ui.boot").new()
+  app.debug.visible = false
+  app.debug.note = "Intro laeuft noch einmal."
+end
+
 local function teardown_net()
   if app.net and app.net.destroy then app.net:destroy() end
   app.net = nil
   if app.beacon then app.beacon:close(); app.beacon = nil end
   app.view = nil
+end
+
+-- Admin (Issue #36): kompletter Neustart — frischer Realm mit Try 1,
+-- Boot-Sequenz, Intro und wieder wartendem Leeroy. Der alte Realm endet
+-- dabei; verbundene Gaeste laufen ueber den Disconnect-Dialog automatisch
+-- wieder herein (GDD Kap. 3).
+local function restart_realm()
+  teardown_net()
+  if app.search then app.search:close(); app.search = nil end
+  require("game.session").wipe() -- Try-Zaehler und Charaktere zuruecksetzen
+  replay_intro()
+  start_host()
+  app.auto_hosted = true
+  app.debug.note = "Realm neu gestartet."
 end
 
 function love.load(args)
@@ -636,6 +666,22 @@ function love.keypressed(key)
   elseif action == "wipe" then
     require("game.session").wipe()
     app.debug.note = "session.json geloescht (wirkt beim naechsten Host-Start)"
+    return
+  elseif action == "kill" then
+    -- Hogger sofort toeten: Fluchbruch allein testbar (Issue #35)
+    if app.mode == "host" and app.net and app.net.kill_hogger then
+      app.debug.note = app.net:kill_hogger()
+        and "Hogger getoetet — Fluchbruch laeuft"
+        or "Hogger ist schon tot (oder der Try laeuft nicht)"
+    else
+      app.debug.note = "Nur der Host kann Hogger toeten."
+    end
+    return
+  elseif action == "intro" then
+    replay_intro()
+    return
+  elseif action == "realm" then
+    restart_realm()
     return
   elseif type(action) == "table" and action.join then
     teardown_net()

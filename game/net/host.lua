@@ -239,6 +239,11 @@ function H:revanche()
   end
 end
 
+-- Admin: Hogger sofort toeten (F12, host-seitig; Issue #35)
+function H:kill_hogger()
+  return step.admin_kill_hogger(self.state)
+end
+
 function H:set_local_target(target_id)
   local ev = {}
   world.set_target(self.state, self.local_pid, target_id, ev)
