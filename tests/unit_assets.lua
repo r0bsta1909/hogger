@@ -44,6 +44,15 @@ T.eq(manifest.snd_ghost_wind.art, "stille", "Geister-Wind-Slot ist stille")
 local errors = check.check(manifest, ".")
 T.eq(#errors, 0, "check_assets im Repo: " .. table.concat(errors, " | "))
 
+-- Masse-Regeln: exakt fuer Icons, "mindestens" nur fuer cover-skalierte
+-- Flaechen (Splash) — sonst waere jede Aufloesung ein Fehler
+T.eq(manifest.splash_login.masse, "mindestens", "Splash darf groesser sein")
+for id, spec in pairs(manifest) do
+  if not spec.art and id ~= "splash_login" then
+    T.eq(spec.masse, nil, id .. " haelt die exakte Manifest-Masse (17.5)")
+  end
+end
+
 -- PNG-Parser liest IHDR korrekt (kuenstlicher Mini-Header)
 local tmp = "tmp_check_assets_test.png"
 local f = assert(io.open(tmp, "wb"))

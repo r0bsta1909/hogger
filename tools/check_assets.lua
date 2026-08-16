@@ -77,7 +77,15 @@ function M.check(manifest, root)
           else
             local want_w = spec.breite or spec.groesse
             local want_h = spec.hoehe or spec.groesse
-            if w ~= want_w or h ~= want_h then
+            if spec.masse == "mindestens" then
+              -- bildschirmfuellend gezeichnete Flaechen (Splash) werden
+              -- cover-skaliert; hier zaehlt nur genug Aufloesung (17.5)
+              if w < want_w or h < want_h then
+                errors[#errors + 1] = string.format(
+                  "%s: Masse %dx%d, Manifest verlangt mindestens %dx%d",
+                  id, w, h, want_w, want_h)
+              end
+            elseif w ~= want_w or h ~= want_h then
               errors[#errors + 1] = string.format(
                 "%s: Masse %dx%d, Manifest verlangt %dx%d (17.5: exakt)",
                 id, w, h, want_w, want_h)

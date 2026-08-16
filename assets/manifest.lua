@@ -37,7 +37,9 @@ return {
 
   -- Boot-Sequenz (GDD Kap. 3): Vanilla-Splash; Platzhalter = dunkle Flaeche
   -- mit Logo-Schriftzug, finale Datei muss exakt breite x hoehe liefern
-  splash_login  = { form = "splash", breite = 1024, hoehe = 768, farbe = { 0.05, 0.08, 0.18 }, kuerzel = "World of Warcraft", datei = "splash_login.png" },
+  -- masse = "mindestens": der Splash wird bildschirmfuellend cover-skaliert,
+  -- exakte Masse waeren hier Willkuer; alles andere bleibt exakt (17.5)
+  splash_login  = { form = "splash", breite = 1024, hoehe = 768, masse = "mindestens", farbe = { 0.05, 0.08, 0.18 }, kuerzel = "World of Warcraft", datei = "splash_login.png" },
 
   -- Hogger (groesser, GDD 4.1) und Welt
   icon_hogger   = { form = "kreis",  groesse = 48, farbe = { 0.85, 0.25, 0.20 }, kuerzel = "HO", datei = "icon_hogger.png" },
