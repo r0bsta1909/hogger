@@ -260,7 +260,10 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 
 Was von Leeroy übrig ist, während sein Körper da vorne schon wieder losrennt. Das Echo steht am Friedhof, greift **nie** in den Kampf ein und muss zusehen, wie seine eigene physische Gestalt Try um Try anstürmt und abgeschlachtet wird. Es ist **Erzähler, Questgeber und Announcer**:
 
-- **Questgeber:** goldenes Ausrufezeichen, grüner NPC-Name, chargt neuen Spielern die Quest persönlich auf (Kap. 5). Nach der Übergabe geht es sofort zum nächsten Neuankömmling — wer sich mit dem Lesen Zeit lässt, hält niemanden auf. Parameter: `echo_charge_speed`, `echo_deliver_range`, `echo_deliver_pause`.
+- **Questgeber:** goldenes Ausrufezeichen, grüner NPC-Name. Die Quest liegt mit dem Spielbeitritt an; die Annäherung ist eine **rein lokale Sequenz** (1,3 s), die nur der betroffene Spieler sieht — in der Welt bewegt sich das Echo nie, sonst würde bei 40 Beitritten auf demselben Spawnpunkt dauernd jemand über den Friedhof gechargt (Playtest-Korrektur 2026-08-16).
+- **Nur Geister sehen es** (wie die acht Klassen-Bodenicons, 4.1): Lebende sehen und klicken es nicht.
+- **Easter Egg:** Wer es als Geist erneut anklickt, bekommt die ganze Geschichte — mehrere durchblätterbare Seiten (Raid, Sturmangriff, Fluch, Erwachen, Teilung, warum es fragt). Null Spielwirkung, keine Belohnung, kein Hinweis darauf. Nur wer es findet.
+- **Questlog:** Taste `L` blendet die Quest weg und zurück; nach der Annahme zeigt sie dieselbe Seite als Log (ohne Namensfeld, ohne Knöpfe).
 - **Erzähler:** die Quest, kurze Zwischen-Zeilen am Friedhof, "Ah. Wieder da." beim Rejoin.
 - **Announcer** (siehe 10.4): alle Kommentare gehören dem Echo — Fress-Alarm, HP-Meilensteine, Todeskommentare, Wipe-Ansage, der Kragen-Platzer. **Einzige Ausnahme: DER Schrei** beim Losrennen gehört dem Raid-Leeroy.
 - Der Sieg-Monolog (Kap. 11) gehört ebenfalls dem Echo: es sieht seinen eigenen Körper endlich zur Ruhe kommen.

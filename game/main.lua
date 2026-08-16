@@ -886,14 +886,20 @@ function love.mousepressed(mx, my)
     end
   end
 
-  -- Das Echo anklicken: Questfenster wieder oeffnen (GDD Kap. 5)
-  if app.view.echo then
-    local ex, ey = to_screen(app.view.echo.x, app.view.echo.y)
-    if math.sqrt((ex - mx) ^ 2 + (ey - my) ^ 2) < 28 then
-      local me = app.view.players[app.view.me]
-      if me and (me.quest or 2) == 1 then
-        if app.quest then app.quest:reopen()
-        else app.quest = require("game.ui.quest").new() end
+  -- Das Echo anklicken (nur als Geist, Issue #63): vor der Annahme holt es
+  -- das Questfenster zurueck, danach erzaehlt es die ganze Geschichte —
+  -- Easter Egg ohne jede Spielwirkung (Issue #64)
+  do
+    local me = app.view.players[app.view.me]
+    if app.view.echo and me and me.ghost then
+      local ex, ey = to_screen(app.view.echo.x, app.view.echo.y)
+      if math.sqrt((ex - mx) ^ 2 + (ey - my) ^ 2) < 28 then
+        local quest = require("game.ui.quest")
+        if (me.quest or 2) == 1 then
+          if app.quest then app.quest:reopen() else app.quest = quest.new() end
+        else
+          app.quest = quest.new_lore()
+        end
         audio.play("snd_ui_click")
         return
       end

@@ -356,7 +356,8 @@ function R:draw(view, ui)
   -- Das Echo von Leeroy Jenkins (GDD 10.1): blasses Krieger-Icon, gruener
   -- Name, goldenes Ausrufezeichen solange es eine Quest zu vergeben hat
   -- (Referenz questgeber-ausrufezeichen.jpg)
-  if view.echo then
+  -- nur Geister sehen es (Issue #63), wie die Klassen-Bodenicons (GDD 4.1)
+  if view.echo and me and me.ghost then
     local ex, ey = to_screen(view.echo.x, view.echo.y)
     local me_quest = me and (me.quest or 2) or 2
     local pulse = 0.7 + 0.3 * math.sin(love.timer.getTime() * 3)
