@@ -65,6 +65,9 @@ local function start_host()
     name = app.name,
     seed = app.seed or os.time(),
     bots = app.bots,
+    -- Debug-Laeufe (--auto/--name) und der Rejoin am selben Abend
+    -- ueberspringen die Quest (GDD Kap. 5, Punkt 4)
+    skip_quest = app.auto or app.name_given or app.rejoin_known or false,
     log = function(line)
       love.filesystem.append(logname, line .. "\n")
     end,
@@ -95,8 +98,10 @@ local function replay_intro()
   app.name = "gast" .. tostring(math.floor(socket.gettime() * 1000) % 10000)
   app.name_given = false
   app.rejoin_known, app.rejoin_greeted = nil, nil
-  app.need_intro = true
-  app.intro = nil
+  app.quest = nil
+  if app.mode == "host" and app.net and app.net.reset_quest then
+    app.net:reset_quest() -- das Echo kommt noch einmal
+  end
   app.stats, app.victory = nil, nil
   app.boot = require("game.ui.boot").new()
   app.debug.visible = false
@@ -164,7 +169,7 @@ function love.load(args)
       app.rejoin_known = true
     else
       app.name = "gast" .. tostring(math.floor(socket.gettime() * 1000) % 10000)
-      app.need_intro = not app.auto -- Debug-Autolaeufe starten ohne Intro
+      app.fresh_char = true -- neuer Charakter: das Echo bringt die Quest
     end
   end
 
@@ -347,10 +352,15 @@ local function process_cosmetics(view)
       local dp = view.players[tonumber(e.src)]
       if dp then app.render:add_ding(dp.x, dp.y) end
     elseif e.ev == "leeroy_line" then
+      -- Zeilen gehoeren dem ECHO (GDD 10.1): es sieht zu und kommentiert.
+      -- Einzige Ausnahme ist DER Schrei — der gehoert dem Raid-Leeroy,
+      -- der gerade losrennt (GDD 10.2, Issue #52)
       local lines = require("game.gamesim.lines")
       local lid = tonumber(e.dst) or 0
       local text = lines[lid]
-      if text then app.render:announce("Leeroy: " .. text, 4) end
+      if text then
+        app.render:announce((lid == 1 and "Leeroy: " or "Echo: ") .. text, 4)
+      end
       if lid == 1 then
         audio.play("snd_leeroy_scream") -- kartenweit: DAS Startsignal (Nr. 16)
       end
@@ -394,7 +404,7 @@ function love.update(dt)
   end
   if (app.panel and app.panel.visible) or app.debug.visible
      or (app.boot and app.boot:active() and app.boot:covers_screen())
-     or (app.intro and app.intro:blocking()) then
+     or (app.quest and app.quest:blocking()) then
     inp = { mask = 0, facing = inp.facing }
   end
 
@@ -550,42 +560,49 @@ function love.update(dt)
     if app.view and app.view.phase == "try" then app.victory = nil end
   end
 
-  -- Leeroy-Intro (GDD Kap. 5): startet nach der Aufblende (Boot fertig);
-  -- Rejoin bekommt statt des Intros nur "Ah. Wieder da." (GDD 5, Punkt 4)
+  -- Questfenster des Echos (GDD Kap. 5): das Echo drueckt die Quest auf,
+  -- der Snapshot sagt wann (quest == 1). Rejoin bekommt keine Quest, nur
+  -- "Ah. Wieder da." (GDD 5, Punkt 4)
+  local me_now = view and view.players[view.me]
   if view and (not app.boot or not app.boot:active()) then
-    if app.need_intro and not app.intro then
-      app.need_intro = nil
-      app.intro = require("game.ui.intro").new()
+    if me_now and (me_now.quest or 2) == 1 and not app.quest then
+      app.quest = require("game.ui.quest").new(app.name_given and app.name or nil)
     elseif app.rejoin_known and not app.rejoin_greeted then
       app.rejoin_greeted = true
       local known = (app.mode == "host" and app.net.session
                      and app.net.session.chars
                      and app.net.session.chars[app.name] ~= nil)
                     or (app.mode == "client" and app.net.rejoin)
-      if known then app.render:announce('Leeroy: "Ah. Wieder da."', 4) end
+      if known then app.render:announce('Echo: "Ah. Wieder da."', 4) end
     end
   end
-  if app.intro then
-    app.intro:update(dt)
-    local wish = app.intro:take_submit()
+  if app.quest then
+    app.quest:update(dt)
+    local wish = app.quest:take_submit()
     if wish then
       if app.mode == "host" then
-        app.intro:result(app.net:rename(app.net.local_pid, wish))
+        app.quest:result(app.net:rename(app.net.local_pid, wish))
       else
         app.net:send_rename(wish)
       end
     end
     if app.mode == "client" and app.net.rename_result ~= nil then
-      app.intro:result(app.net.rename_result)
+      app.quest:result(app.net.rename_result)
       app.net.rename_result = nil
     end
-    if app.intro.accepted and app.name ~= app.intro.accepted then
+    if app.quest.accepted and app.name ~= app.quest.accepted then
       -- bestaetigter Name: merken (Rejoin) und Charakter daran haengen
-      app.name = app.intro.accepted
+      app.name = app.quest.accepted
       love.filesystem.write("charname.dat",
         os.date("%Y-%m-%d") .. "\n" .. app.name)
     end
-    if not app.intro:blocking() then app.intro = nil end
+    if app.quest.state == "done" and not app.quest.sent then
+      -- Name steht: Quest annehmen; der Host gibt danach die Bewegung frei
+      app.quest.sent = true
+      app.net:accept_quest()
+      audio.play("snd_ui_click")
+    end
+    if me_now and (me_now.quest or 2) >= 2 then app.quest = nil end
   end
 
   if app.shot_at then
@@ -629,7 +646,7 @@ function love.draw()
       mouse = { love.mouse.getPosition() },
     })
     app.floating:draw(to_screen)
-    if app.intro then app.intro:draw(app.view, bw, bh) end
+    if app.quest then app.quest:draw(app.view, bw, bh) end
     if app.stats then app.stats:draw() end
     if app.victory then app.victory:draw(app.view, to_screen, bw, bh) end
     if app.panel then app.panel:draw() end
@@ -716,8 +733,8 @@ function love.keypressed(key)
       return
     end
   end
-  if app.intro and app.intro:blocking() then
-    app.intro:keypressed(key) -- Intro schluckt alles (Eingaben gesperrt)
+  if app.quest and app.quest:blocking() then
+    app.quest:keypressed(key) -- das Questfenster schluckt alles
     return
   end
   if app.victory then
@@ -757,7 +774,7 @@ end
 function love.textinput(t)
   if app.debug and app.debug:textinput(t) then return end
   if app.boot and app.boot:active() and app.boot:textinput(t) then return end
-  if app.intro and app.intro:blocking() then app.intro:textinput(t) end
+  if app.quest and app.quest:blocking() then app.quest:textinput(t) end
 end
 
 function love.mousepressed(mx, my)
@@ -774,8 +791,8 @@ function love.mousepressed(mx, my)
     app.boot:mousepressed() -- ab dem zweiten Start ueberspringbar (GDD 3)
     return
   end
-  if app.intro and app.intro:blocking() then
-    app.intro:mousepressed() -- Dialog-Panels weiterklicken (GDD 5)
+  if app.quest and app.quest:blocking() then
+    app.quest:mousepressed(mx, my, love.graphics.getDimensions())
     return
   end
   if app.victory then
@@ -805,6 +822,20 @@ function love.mousepressed(mx, my)
     audio.play("snd_ui_click")
     app.render:set_zoom(app.render.zoom + 1) return
   end
+  -- Das Echo anklicken: Questfenster wieder oeffnen (GDD Kap. 5)
+  if app.view.echo then
+    local ex, ey = to_screen(app.view.echo.x, app.view.echo.y)
+    if math.sqrt((ex - mx) ^ 2 + (ey - my) ^ 2) < 28 then
+      local me = app.view.players[app.view.me]
+      if me and (me.quest or 2) == 1 then
+        if app.quest then app.quest:reopen()
+        else app.quest = require("game.ui.quest").new() end
+        audio.play("snd_ui_click")
+        return
+      end
+    end
+  end
+
   -- Geistheiler anklicken: funktionslose Szenerie mit genau einer Reaktion
   -- (GDD 7.1) — Leeroy-Zeile 26, rein lokal, kein Spielzustand
   do
@@ -812,7 +843,7 @@ function love.mousepressed(mx, my)
     local x, y = to_screen(sh.x, sh.y)
     if math.sqrt((x - mx) ^ 2 + (y - my) ^ 2) < 26 then
       local lines = require("game.gamesim.lines")
-      app.render:announce("Leeroy: " .. lines[26], 4)
+      app.render:announce("Echo: " .. lines[26], 4)
       audio.play("snd_ui_click")
       return
     end

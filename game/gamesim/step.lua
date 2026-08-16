@@ -421,6 +421,9 @@ end
 local function player_tick(state, p, inp, ev)
   local mask = (inp and input.valid(inp.mask)) and inp.mask or 0
   if inp and inp.facing then p.facing = inp.facing % 256 end
+  -- Vor der Questannahme darf man sich nur um die eigene Achse drehen
+  -- (GDD Kap. 5, Issue #50) — host-seitig erzwungen, nicht nur in der UI
+  if (p.quest or 2) < 2 then mask = 0 end
 
   -- tot: auf Respawn warten, dann als Geist am Friedhof erscheinen
   if not p.alive and not p.ghost then
@@ -774,6 +777,86 @@ local function each_npc(state, fn)
     local npc = state.npcs[id]
     if npc then fn(npc) end
   end
+end
+
+-- ---------------------------------------------------------------------------
+-- Das Echo von Leeroy Jenkins (GDD 10.1): Questgeber am Friedhof.
+-- Es greift nie in den Kampf ein — es redet, gibt die Quest und sieht zu,
+-- wie sein eigener Koerper jeden Try aufs Neue anstuermt und stirbt.
+-- Zustaende: idle (am Friedhof) -> charge (rennt zum Neuankoemmling) ->
+-- deliver (drueckt die Quest auf, wartet auf die Annahme) -> return.
+-- ---------------------------------------------------------------------------
+local function echo_next_target(state)
+  -- kleinste Spieler-ID ohne Quest; nie Leeroy, nie Getrennte (deterministisch)
+  for _, p in ipairs(state.players) do
+    if not p.is_leeroy and not p.disconnected and (p.quest or 0) == 0 then
+      return p.id
+    end
+  end
+  return nil
+end
+
+local function echo_move_towards(state, tx, ty)
+  local e = state.echo
+  local dx, dy = tx - e.x, ty - e.y
+  local d = math.sqrt(dx * dx + dy * dy)
+  local stepd = model.p("echo_charge_speed") * DT
+  if d <= stepd then
+    e.x, e.y = tx, ty
+    return true
+  end
+  e.x, e.y = map.clamp(e.x + dx / d * stepd, e.y + dy / d * stepd)
+  return false
+end
+
+local function echo_tick(state, ev)
+  local e = state.echo
+  if not e then return end
+  e.t = e.t + DT
+  local home = map.echo_home()
+  if e.state == "idle" then
+    local pid = echo_next_target(state)
+    if pid then
+      e.state, e.target, e.t = "charge", pid, 0
+    elseif world.dist(e.x, e.y, home.x, home.y) > 1 then
+      echo_move_towards(state, home.x, home.y)
+    end
+  elseif e.state == "charge" then
+    local p = state.players[e.target]
+    if not p or p.disconnected or (p.quest or 0) ~= 0 then
+      e.state, e.target, e.t = "return", nil, 0
+    else
+      echo_move_towards(state, p.x, p.y)
+      if world.dist(e.x, e.y, p.x, p.y) <= model.p("echo_deliver_range") then
+        p.quest = 1 -- aufgedrueckt; ablehnen kann man sie nicht (GDD Kap. 5)
+        events.push(ev, state.tick, "quest_offer", "echo", p.id, nil, nil)
+        e.state, e.t = "deliver", 0
+      end
+    end
+  elseif e.state == "deliver" then
+    -- kurz stehen bleiben, damit die Uebergabe sichtbar ist — danach sofort
+    -- zum naechsten Neuankoemmling. Wer sich Zeit laesst, haelt niemanden
+    -- auf: das Fenster steht ja schon auf seinem Schirm.
+    if e.t >= model.p("echo_deliver_pause") then
+      e.state, e.target, e.t = "return", nil, 0
+    end
+  elseif e.state == "return" then
+    if echo_move_towards(state, home.x, home.y) then
+      e.state, e.t = "idle", 0
+    elseif echo_next_target(state) then
+      e.state, e.t = "idle", 0 -- naechster Neuankoemmling geht vor
+    end
+  end
+end
+
+-- Questannahme (GDD Kap. 5): ab jetzt darf sich der Spieler bewegen, und
+-- der Raid-Leeroy nimmt seinen Pfad auf (GDD 10.3)
+function S.accept_quest(state, pid, ev)
+  if not world.accept_quest(state, pid) then return false end
+  if ev then
+    events.push(ev, state.tick, "quest_accept", pid, nil, nil, nil)
+  end
+  return true
 end
 
 -- ---------------------------------------------------------------------------
@@ -1161,6 +1244,7 @@ function S.step(state, inputs)
     player_tick(state, p, inputs[p.id], ev)
   end
   each_npc(state, function(npc) npc_tick(state, npc, ev) end)
+  echo_tick(state, ev)
   hogger_tick(state, ev)
 
   -- Mob-Respawn: 120 s am festen Punkt (GDD 7.2)

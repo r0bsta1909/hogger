@@ -38,14 +38,13 @@ local function allies_near(state, p, radius)
 end
 
 -- Try-Start-Bedingung (GDD 10.3): Leeroy nimmt seinen Pfad erst auf, wenn
--- der erste echte Spieler im Spiel steht. Beim Spielbeitritt erzaehlt er das
--- Intro (Kap. 5) — losrennen, waehrend er noch redet, zerreisst die Szene
--- (Playtest 2026-08-16, Issue #33). Danach gilt fuer alle weiteren Trys
--- wieder die normale Wartezeit.
+-- der erste Spieler auf dem Realm die Quest seines Echos angenommen hat
+-- (Issues #33/#53). Losrennen, waehrend das Echo noch redet, zerreisst die
+-- Szene. Danach gilt fuer alle weiteren Trys wieder die normale Wartezeit.
 function L.may_march(state)
   if state.leeroy_started then return true end
   for _, q in ipairs(state.players) do
-    if q.alive and not q.is_leeroy then
+    if not q.is_leeroy and (q.quest or 0) >= 2 then
       state.leeroy_started = true
       return true
     end

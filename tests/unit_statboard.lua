@@ -7,8 +7,8 @@ local statboard = require("game.gamesim.statboard")
 
 local state = world.new(42)
 world.add_leeroy(state)
-local a = world.add_player(state, "Anna")
-local b = world.add_player(state, "Bert")
+local a = world.add_player(state, "Anna", { quest_done = true })
+local b = world.add_player(state, "Bert", { quest_done = true })
 world.begin_try(state, {})
 
 local s = state.stats

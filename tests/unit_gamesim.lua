@@ -34,7 +34,7 @@ T.ok(not input.valid(256) and not input.valid(-1) and not input.valid(1.5),
 
 -- Weltaufbau und Try-Start --------------------------------------------------
 local state = world.new(1)
-for i = 1, 5 do world.add_player(state, "bot" .. i) end
+for i = 1, 5 do world.add_player(state, "bot" .. i, { quest_done = true }) end
 local ev0 = {}
 world.begin_try(state, ev0)
 T.eq(state.n_scale, 5, "world: N beim Try-Start")
@@ -70,8 +70,8 @@ end
 T.eq(#world.CLASSES, 8, "world: acht Klassenicon-Slots")
 do
   local st = world.new(3)
-  world.add_player(st, "sc")
-  world.add_player(st, "hx")
+  world.add_player(st, "sc", { quest_done = true })
+  world.add_player(st, "hx", { quest_done = true })
   world.begin_try(st, {})
   local input_mod = require("game.gamesim.input")
   -- Schurke: Slot 4
@@ -132,7 +132,7 @@ end
 -- M3-2: Mob toeten -> XP + Loot; Aufheben -> Zaehler (GDD 7.3) --------------
 do
   local st = world.new(9)
-  world.add_player(st, "jaeger")
+  world.add_player(st, "jaeger", { quest_done = true })
   world.begin_try(st, {})
   local mobs = 0
   for id = 100, 250 do
@@ -186,7 +186,7 @@ end
 -- M3-2: Gnoll-Welpen am Huegelfuss (floor(N/8), GDD 9.3) --------------------
 do
   local st = world.new(11)
-  for i = 1, 8 do world.add_player(st, "b" .. i) end
+  for i = 1, 8 do world.add_player(st, "b" .. i, { quest_done = true }) end
   world.begin_try(st, {})
   local adds = 0
   for id = 100, 250 do
@@ -239,8 +239,8 @@ end
 do
   local st = world.new(77)
   world.add_leeroy(st)
-  world.add_player(st, "b1")
-  world.add_player(st, "b2")
+  world.add_player(st, "b1", { quest_done = true })
+  world.add_player(st, "b2", { quest_done = true })
   local evs = {}
   world.begin_try(st, evs)
   T.eq(st.n_scale, 2, "world: Leeroy zaehlt nie in die N-Skalierung")
@@ -264,7 +264,7 @@ end
 
 -- Bot-Volllauf: Invarianten ueber 90 Simulationssekunden --------------------
 local state2 = world.new(7)
-for i = 1, 5 do world.add_player(state2, "bot" .. i) end
+for i = 1, 5 do world.add_player(state2, "bot" .. i, { quest_done = true }) end
 world.begin_try(state2, {})
 local evs = {}
 bot.run(state2, 90 * 60, evs)
@@ -322,7 +322,7 @@ do
   -- Autohit: derselbe Aufbau, nur die Blickrichtung entscheidet
   local function uptime(facing)
     local st = world.new(7)
-    world.add_player(st, "a")
+    world.add_player(st, "a", { quest_done = true })
     local q = st.players[1]
     world.begin_try(st, {})
     q.alive, q.ghost = true, false
@@ -341,7 +341,7 @@ do
 
   -- Wegdrehen bricht einen laufenden Cast ab
   local st = world.new(9)
-  world.add_player(st, "m")
+  world.add_player(st, "m", { quest_done = true })
   world.begin_try(st, {})
   local q = st.players[1]
   q.alive, q.ghost = true, false
@@ -355,40 +355,70 @@ do
   T.eq(q.cast, nil, "facing: Wegdrehen bricht den laufenden Cast ab")
 end
 
--- Leeroy wartet mit dem ersten Anmarsch auf den ersten echten Spieler
--- (GDD 10.3, Issue #33): waehrend des Intros bleibt er stehen
+-- Das Echo drueckt die Quest auf, Leeroy wartet darauf (GDD Kap. 5 / 10.3,
+-- Issues #50/#53): erst die angenommene Quest startet den Raid-Leeroy
 do
   local leeroy = require("game.gamesim.leeroy")
   local st = world.new(3)
   world.add_leeroy(st)
-  world.add_player(st, "mensch")
+  local pid = world.add_player(st, "mensch") -- ohne quest_done: Neuankoemmling
   world.begin_try(st, {})
   local lee = st.players[st.leeroy_pid]
-  for _ = 1, 60 * 20 do -- 20 s: ohne die Regel waere er laengst unterwegs
-    step.step(st, {})
-  end
-  T.eq(st.leeroy_started, false, "Leeroy: Try-Start-Bedingung noch offen")
-  -- Er belebt sich am Feld wieder (das gehoert zum Loop), nimmt aber den
-  -- Pfad zum Huegel nicht auf
-  T.ok(lee.ai.phase ~= "march", "Leeroy: kein Anmarsch waehrend des Intros")
-  T.ok(world.dist(lee.x, lee.y, map.hill.x, map.hill.y)
-       > model.p("field_to_hill_dist") * 0.9,
-    "Leeroy: bleibt hinter dem Wiederbelebungsfeld")
-  -- Spieler belebt sich -> Leeroy darf los
-  local q = st.players[2]
-  q.alive, q.ghost, q.class = true, false, "warrior"
-  T.ok(leeroy.may_march(st), "Leeroy: erster Wiederbelebter gibt ihn frei")
-  for _ = 1, 60 * 10 do step.step(st, {}) end
-  T.ok(world.dist(lee.x, lee.y, map.hill.x, map.hill.y)
-       < model.p("field_to_hill_dist") * 0.9, "Leeroy: marschiert danach los")
+  local p = st.players[pid]
+  T.eq(p.quest, 0, "Quest: Neuankoemmling startet ohne Quest")
+  T.ok(st.echo ~= nil and st.echo.state == "idle", "Echo: wartet am Friedhof")
 
-  -- Notbremse: niemand belebt sich, trotzdem geht es irgendwann los
+  -- Der Spieler versucht zu laufen: bis zur Annahme bewegt er sich nicht
+  local x0, y0 = p.x, p.y
+  local evs = {}
+  for _ = 1, 60 do
+    local e = step.step(st, { [pid] = { mask = input.RIGHT + input.DOWN, facing = 0 } })
+    for _, ee in ipairs(e) do evs[#evs + 1] = ee end
+  end
+  T.near(world.dist(p.x, p.y, x0, y0), 0, "Quest: keine Bewegung vor der Annahme")
+
+  -- Das Echo chargt heran und drueckt die Quest auf (es steht am Friedhof
+  -- und ist schnell da, deshalb zaehlen die Ereignisse von oben schon mit)
+  local offered = false
+  for _, ee in ipairs(evs) do
+    if ee.ev == "quest_offer" then offered = true end
+  end
+  for _ = 1, 60 * 20 do
+    local e = step.step(st, { [pid] = { mask = 0, facing = 0 } })
+    for _, ee in ipairs(e) do
+      if ee.ev == "quest_offer" then offered = true end
+    end
+    if offered then break end
+  end
+  T.ok(offered, "Echo: drueckt die Quest persoenlich auf")
+  T.eq(p.quest, 1, "Quest: aufgedrueckt, aber noch nicht angenommen")
+  T.eq(st.leeroy_started, false, "Leeroy: wartet auf die Annahme")
+  T.ok(lee.ai == nil or lee.ai.phase ~= "march", "Leeroy: kein Anmarsch vorher")
+
+  -- Annahme: Bewegung frei, Leeroy laeuft
+  T.eq(step.accept_quest(st, pid, {}), true, "Quest: Annahme greift")
+  T.eq(step.accept_quest(st, pid, {}), false, "Quest: zweite Annahme prallt ab")
+  T.ok(leeroy.may_march(st), "Leeroy: erste angenommene Quest gibt ihn frei")
+  local x1, y1 = p.x, p.y
+  for _ = 1, 60 do
+    step.step(st, { [pid] = { mask = input.RIGHT, facing = 0 } })
+  end
+  T.ok(world.dist(p.x, p.y, x1, y1) > 50, "Quest: nach der Annahme laeuft er")
+  for _ = 1, 60 * 12 do step.step(st, { [pid] = { mask = 0, facing = 0 } }) end
+  T.ok(world.dist(lee.x, lee.y, map.hill.x, map.hill.y)
+       < model.p("field_to_hill_dist") * 0.95, "Leeroy: marschiert danach los")
+
+  -- Notbremse: niemand nimmt an, trotzdem geht es irgendwann los
   local st2 = world.new(4)
   world.add_leeroy(st2)
   world.add_player(st2, "mensch")
   world.begin_try(st2, {})
   st2.time = model.p("leeroy_first_march_wait")
   T.ok(leeroy.may_march(st2), "Leeroy: Notbremse nach der Wartezeit")
+
+  -- Das Echo steht am Friedhof, in der Schutzzone
+  local home = map.echo_home()
+  T.ok(map.in_graveyard(home.x, home.y), "Echo: Standposition liegt am Friedhof")
 end
 
 -- Friedhof von Elwynn (GDD 7.1, Issue #34): Szenerie liegt in der
