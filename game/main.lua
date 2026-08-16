@@ -352,11 +352,16 @@ function love.update(dt)
       start_client(ip)
       return
     end
-  elseif app.mode == "client" and app.net.failed then
+  end
+  if app.net and app.net.failed then
     -- authentischer WoW-Disconnect-Dialog, danach Glitch-Schwarz und
-    -- automatischer Reconnect (GDD Kap. 3)
+    -- automatischer Reconnect (GDD Kap. 3). Auch der Host landet hier, wenn
+    -- sein Socket dauerhaft Fehler liefert (Issue #23) — nie ein Absturz.
+    app.debug.note = app.net.net_error
+      and ("Netz: " .. tostring(app.net.net_error):sub(1, 70)) or app.debug.note
+    local msg = app.net.failed
     teardown_net()
-    app.dialog = require("game.ui.dialog").new("Vom Server getrennt.")
+    app.dialog = require("game.ui.dialog").new(msg)
     app.mode = "disconnected"
     return
   end
@@ -586,6 +591,7 @@ function love.draw()
     lobbies = lobbies,
     log_dir = love.filesystem.getSaveDirectory(),
     volume = audio.master(),
+    net = app.net and app.net.guard and app.net.guard:note(),
   })
 end
 

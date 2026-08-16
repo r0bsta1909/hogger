@@ -8,6 +8,7 @@ local map = require("game.data.map")
 local input = require("game.gamesim.input")
 local wire = require("game.net.wire")
 local hostmod = require("game.net.host")
+local netguard = require("game.net.netguard")
 
 local C = {}
 C.__index = C
@@ -17,10 +18,22 @@ local HISTORY_MAX = 120 -- Replay-Deckel (2 s)
 
 function C.new(ip, name)
   local self = setmetatable({}, C)
+  self.guard = netguard.new()
   -- ephemerer Port statt ungebundenem Host (Skill Par. 4; ungebunden
-  -- schlaegt der service()-Aufruf in LOEVEs lua-enet fehl)
-  self.enet_host = enet.host_create("*:0", 1, 2)
-  self.peer = self.enet_host:connect(ip .. ":" .. hostmod.PORT, 2)
+  -- schlaegt der service()-Aufruf in LOEVEs lua-enet fehl); scheitert schon
+  -- das Anlegen (macOS-Firewall, belegter Port), ist das kein Absturz,
+  -- sondern ein Verbindungsfehler (Issue #23)
+  local ok, host_or_err = pcall(enet.host_create, "*:0", 1, 2)
+  self.enet_host = ok and host_or_err or nil
+  if self.enet_host then
+    local okc, peer_or_err = pcall(self.enet_host.connect, self.enet_host,
+      ip .. ":" .. hostmod.PORT, 2)
+    self.peer = okc and peer_or_err or nil
+    if not okc then self.net_error = tostring(peer_or_err) end
+  else
+    self.net_error = tostring(host_or_err)
+  end
+  if not self.peer then self.failed = "Vom Server getrennt." end
   self.name = name
   self.pid = nil
   self.snap = nil
@@ -96,44 +109,47 @@ function C:_handle(data)
   end
 end
 
+-- jeder Sendeweg geht durch den Guard: ein Socket-Fehler ist ein
+-- Verbindungsproblem, kein Programmabbruch (Issue #23)
+function C:_send(data, channel, mode)
+  if not (self.connected and self.peer) then return false end
+  return self.guard:call(self.peer.send, self.peer, data, channel, mode)
+end
+
 function C:send_revanche()
-  if self.connected then
-    self.peer:send(wire.revanche(), CH_RELIABLE, "reliable")
-  end
+  self:_send(wire.revanche(), CH_RELIABLE, "reliable")
 end
 
 function C:send_rename(name)
-  if self.connected then
-    self.rename_result = nil
-    self.peer:send(wire.rename(name), CH_RELIABLE, "reliable")
-  end
+  if self.connected then self.rename_result = nil end
+  self:_send(wire.rename(name), CH_RELIABLE, "reliable")
 end
 
 function C:set_target(id)
-  if self.connected then
-    self.peer:send(wire.set_target(id), CH_RELIABLE, "reliable")
-  end
+  self:_send(wire.set_target(id), CH_RELIABLE, "reliable")
 end
 
 function C:send_zoom(level)
-  if self.connected then
-    self.peer:send(wire.zoom(level), CH_RELIABLE, "reliable")
-  end
+  self:_send(wire.zoom(level), CH_RELIABLE, "reliable")
 end
 
 function C:update(dt, local_input)
-  local event = self.enet_host:service(0)
-  while event do
+  if not self.enet_host then return end
+  self.guard:frame(dt)
+  -- ENet-Schleife: bricht beim ersten Socket-Fehler ab statt zu drehen
+  local ok, event = self.guard:call(self.enet_host.service, self.enet_host, 0)
+  while ok and event do
     if event.type == "receive" then
       self:_handle(event.data)
     elseif event.type == "connect" then
-      self.peer:timeout(0, 0, 5000)
-      self.peer:send(wire.hello(self.name), CH_RELIABLE, "reliable")
+      self.guard:call(self.peer.timeout, self.peer, 0, 0, 5000)
+      self.connected = true -- fuer den Sendeweg; WELCOME bestaetigt danach
+      self:_send(wire.hello(self.name), CH_RELIABLE, "reliable")
     elseif event.type == "disconnect" then
       self.connected = false
       self.failed = "Vom Server getrennt."
     end
-    event = self.enet_host:service(0)
+    ok, event = self.guard:call(self.enet_host.service, self.enet_host, 0)
   end
 
   if self.connected then
@@ -146,7 +162,7 @@ function C:update(dt, local_input)
       local m0 = local_input.mask
       local m1 = self.history[self.ctick - 1] or m0
       local m2 = self.history[self.ctick - 2] or m1
-      self.peer:send(wire.input(self.ctick, m0, m1, m2, local_input.facing),
+      self:_send(wire.input(self.ctick, m0, m1, m2, local_input.facing),
         1, "unsequenced")
       -- lokale Vorhersage sofort weiterfuehren (eine Zeitbasis)
       if self.predicted then
@@ -163,12 +179,20 @@ function C:update(dt, local_input)
     end
   end
 
-  self.enet_host:flush()
+  self.guard:call(self.enet_host.flush, self.enet_host)
+
+  -- anhaltender Netzfehler = Verbindungsverlust; main.lua zeigt daraufhin den
+  -- Disconnect-Dialog und sucht neu (GDD Kap. 3) statt abzustuerzen
+  if self.guard.dead and not self.failed then
+    self.connected = false
+    self.failed = "Vom Server getrennt."
+    self.net_error = self.guard.last_error
+  end
 end
 
 function C:destroy()
-  if self.peer then self.peer:disconnect_now() end
-  if self.enet_host then self.enet_host:destroy() end
+  if self.peer then pcall(self.peer.disconnect_now, self.peer) end
+  if self.enet_host then pcall(self.enet_host.destroy, self.enet_host) end
 end
 
 return C

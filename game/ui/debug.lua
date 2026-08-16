@@ -59,6 +59,7 @@ function D:draw(info)
     "",
     "[H] Host erzwingen    [N] Neuer Abend (session.json loeschen)",
     "[+/-] Lautstaerke: " .. string.format("%d %%", (info.volume or 0) * 100),
+    info.net or "Netz: keine Fehler",
     "IP eintippen + Enter verbindet: " .. self.ip_input .. "_",
     info.note or "",
   }
