@@ -6,6 +6,7 @@
 **IP-Status:** Privat, WoW-Namen, -Icons und -Referenzen werden 1:1 verwendet
 **Datum:** 2026-08-15
 
+**Changelog v2.6 (M1-Befunde, Rob-Entscheidungen zu Issues #2/#3/#4):** Hogger erhält **Rundumschlag (Cleave)**: Autohit trifft bis zu `ceil(N/8)` Ziele im Nahkampf, Divisor justierbar im Panel — Begründung: sein Droh-Durchsatz muss mit N skalieren, sonst überrollen große Raids (M1-Kapazitätsbeweis; Fiktion: umzingelt drischt der Gnoll um sich) · Fress-Unterbrechung moderat verschärft: Schadensschwelle 2,5 % → 5 % Max-HP, Unterbrecher `ceil(N/10)+1` → `+2` · Nahkampf-Reichweite 40 px festgeschrieben (war unspezifiziert) · Sim-Agenten erhalten ein **Streuungsmodell** (Skill-Faktor je Spieler 0,7–1,3 auf verursachten Schaden, Gruppenfaktor je Lauf 0,85–1,15; Kap. 17.2) — ohne Streuung sind Siegquoten-Bänder wie F1 nicht messbar · Klarstellung Todesstrafe: Gesamtstrafe = N-skalierender Respawn-Timer (9.3) + Geisterlauf + Restanmarsch; der Korridor 25–35 s beschreibt die Spanne über N, die Feldposition verschiebt den Laufweg-Anteil
 **Changelog v2.5 (ADR-001, Kap. 14):** Snapshots mit voller Tickrate 60 Hz als Vollzustand statt 20 Hz + Interpolation; Client-Input 60 Hz mit 3-Tick-Redundanz statt 30 Hz; Client-Darstellung per Rebase + Replay (eine Zeitbasis). Begründung, Rechnung und Revisionsauslöser in `docs/adr/001-snapshot-strategie.md`.
 **Changelog v2.4 (Review-Einarbeitung):** Fünf-Sekunden-Regel statt Kein-Regen (10 Mana/s nach 5 s Cast-Pause, Vanilla-authentisch; Manatränke bewusst abgelehnt) · Charge wählt nur Ziele im Leash-Radius + 2-s-Leash-Hysterese gegen versehentliche Full-Heal-Resets · Fress-Unterbrechung zusätzlich per Schadensschwelle (≥ 2,5 % Max-HP im Kanal) gegen Stalling · Heil-Bedrohung 1,5 → 0,75 (Panel-Parameter) · Render-Hierarchie + Floating-Text-Budget + gedimmte Geister gegen Icon-Gulasch bei N≥20 · IP-Fallback-Zeile im Glitch-Screen nach 5 s Discovery-Fehlschlag · Turtle-Agent in der Sim gegen Heil-Stalling
 **Changelog v2.3:** Wiederbelebung nicht am Friedhof, sondern am Wiederbelebungsfeld am Ende des Elwynn-Pfads Richtung Hogger · Die acht Klassenicons sind nur als Geist sichtbar und verschwinden nach der Wiederbelebung · Statt 40 dominanter Leichen nur dezent verstreute Totenkopf-Icons · Geistheiler ist funktionslose Szenerie mit Gag · Feldposition als expliziter Todesstrafen-Stellhebel im Tuning-Panel
@@ -174,6 +175,7 @@ Alle acht Vanilla-Allianz-Klassen sind im Spiel, mit ihren gültigen Rassen-Komb
 | Autohit Nahkampf (weiß) | 2 Schaden alle 2,0 s | Krieger, Paladin, Schurke, Druide |
 | Autoschuss (Jäger) | 3 Schaden alle 2,0 s, Reichweite 200 px | ersetzt den Nahkampf-Autohit; stärkste manalose Dauer-Distanz-DPS |
 | Autohit Zauberstab | 2 Schaden alle 2,0 s, Reichweite 120 px | Priester, Magier, Hexenmeister — OOM-Caster stochern auf Distanz weiter, müssen aber näher ran als der Jäger und bleiben Charge-gefährdet |
+| Nahkampf-Reichweite | 40 px | v2.6 festgeschrieben (Issue #2); Panel-Parameter |
 | Global Cooldown | 1,5 s | drosselt Input-Spam |
 | Kritchance | 5 %, ×2 | beide Seiten, fester Multiplikator |
 
@@ -219,9 +221,10 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 | Tempo | 155 px/s | Weglaufen verzögert, rettet nicht |
 | Leash | 600 px | Kiten unmöglich |
 
+- **Rundumschlag (Cleave, ab v2.6):** Hoggers Autohit trifft zusätzlich bis zu `ceil(N/8) − 1` weitere Ziele mit Bedrohung im Nahkampf (insgesamt `ceil(N/8)` Ziele; bei N ≤ 8 reiner Einzelziel-Autohit — kleine Gruppen behalten den Vanilla-Gnoll). Divisor als Panel-Parameter, justierbar. Grund: Hoggers Droh-Durchsatz muss mit N wachsen, sonst überrollen große Raids ohne Zusammenarbeit (M1-Befund, Issue #3); Fiktion: umzingelt drischt er wild um sich.
 - **Vicious Slice** (alle 12 s aufs aktuelle Ziel): 15 Sofortschaden + Blutung 5/2 s über 6 s — garantiert den Tod Angeschlagener, verhindert Heraus-Heilen.
 - **Rushing Charge** (CD 15 s): stürmt auf das am weitesten entfernte Ziel mit Bedrohung **innerhalb des Leash-Radius** (Ziele außerhalb sind nie Charge-Ziel — ein einzelner ungünstig stehender Jäger darf keinen Try ruinieren), 25 Schaden + 120 px Knockback, 0,8 s Anlauf mit blinkender Ziellinie auf der Minimap. **Kein Krit möglich.**
-- **Fressen** (CD 20 s, Leiche in 200 px, HP < 90 %): zieht die nächste Leiche mit 1,0-s-Schlepp-Animation heran (schließt den Safe-Death-Exploit, dient als Wind-up), kanalisiert dann 8 s, heilt 1,5 % Max-HP/s (12 % gesamt). **Unterbrechung:** Treffer von `ceil(N/10) + 1` verschiedenen Spielern ODER kumulierter Schaden ≥ 2,5 % seiner Max-HP während des Kanals — die Schadensschwelle skaliert automatisch mit N und verhindert Stalling, wenn nach einem Frontlinien-Wipe kaum noch jemand in Reichweite lebt. **Zählerbalken am Hogger-Icon ("2/4") ist Pflicht-UI** — er lehrt das Wie; dass man während des Fressens angreifen muss, findet die Gruppe selbst heraus (bzw. Leeroy platzt irgendwann der Kragen, Kap. 10). Kein Krit auf Fress-Heilung, keine Krits auf Slice/Charge/DoT-Ticks — Choreo bleibt deterministisch.
+- **Fressen** (CD 20 s, Leiche in 200 px, HP < 90 %): zieht die nächste Leiche mit 1,0-s-Schlepp-Animation heran (schließt den Safe-Death-Exploit, dient als Wind-up), kanalisiert dann 8 s, heilt 1,5 % Max-HP/s (12 % gesamt). **Unterbrechung:** Treffer von `ceil(N/10) + 2` verschiedenen Spielern ODER kumulierter Schaden ≥ 5 % seiner Max-HP während des Kanals (v2.6, Issue #4: die alten Schwellen wurden von beiläufigem Schaden automatisch erfüllt) — die Schadensschwelle skaliert automatisch mit N und verhindert Stalling, wenn nach einem Frontlinien-Wipe kaum noch jemand in Reichweite lebt. **Zählerbalken am Hogger-Icon ("2/4") ist Pflicht-UI** — er lehrt das Wie; dass man während des Fressens angreifen muss, findet die Gruppe selbst heraus (bzw. Leeroy platzt irgendwann der Kragen, Kap. 10). Kein Krit auf Fress-Heilung, keine Krits auf Slice/Charge/DoT-Ticks — Choreo bleibt deterministisch.
 - **Gnoll-Welpen:** `floor(N/8)` Adds (20 HP, 10 Schaden/2 s, kein Krit, kein Respawn im Try) am Hügelfuß — dünnen bei großen Gruppen die Wellen aus und geben Nahkämpfern frühe Erfolgserlebnisse.
 
 ### 9.3 Skalierung (pro Try-Start)
@@ -230,7 +233,8 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 |---|---|---|---|---|---|
 | Hogger HP | 120 × N | 600 | 1.200 | 2.400 | 4.800 |
 | Fress-Heilung/Kanal | 12 % Max-HP | 72 | 144 | 288 | 576 |
-| Unterbrecher | ceil(N/10)+1 | 2 | 2 | 3 | 5 |
+| Unterbrecher | ceil(N/10)+2 | 3 | 3 | 4 | 6 |
+| Cleave-Ziele | ceil(N/8) | 1 | 2 | 3 | 5 |
 | Adds | floor(N/8) | 0 | 1 | 2 | 5 |
 | Respawn-Timer | clamp(8 + 0,3 × N; 10; 20) s | 10 | 11 | 14 | 20 |
 
@@ -418,6 +422,7 @@ hogger/
 3. **Agent "koordiniert":** zusätzlich Fress-Fokus (80 % Unterbrechungs-Erfolg je Kanal), Charge-Ausweichen 60 %, Konvergenz ab Minute 3 zu einer Zielkomposition (Startannahme: 50 % Jäger, 2 Heiler (Priester/Paladin/Druide), 2 Schurken für Unterbrechungen, Rest gemischt — die Sim darf eine bessere finden, `report.lua` weist die siegreichste Verteilung aus).
 4. **Agent "Turtle" (Anti-Stall-Beweis):** Heil-Maximierer — alle Heilerklassen, minimaler Schaden, nutzt die Fünf-Sekunden-Regel optimal. Muss in jeder Zelle > 95 % seiner Läufe per Zeitlimit verlieren; gewinnt oder überlebt er nennenswert, erzeugt die Mana-Regeneration ein Zermürbungs-Patt → Stellhebel: Vicious-Slice-Werte oder Regen-Rate, nie die Regel selbst streichen.
 5. **Leeroy im Modell:** ein zusätzlicher Krieger-Agent, immer unkoordiniert, zählt nicht in N — er ist im Modell, weil er real DPS und eine Dauer-Leiche beisteuert.
+5b. **Streuungsmodell (v2.6, Pflicht für alle Agenten):** Je Lauf erhält jeder Agent einen Skill-Faktor (gleichverteilt 0,7–1,3, wirkt multiplikativ auf verursachten Schaden) und die Gruppe einen gemeinsamen Koordinationsfaktor (gleichverteilt 0,85–1,15, multiplikativ obendrauf). Beide deterministisch aus dem geloggten Seed. Grund: Deterministisch-homogene Agenten erzeugen Stufenfunktions-Siegquoten — Bänder wie F1 (60–90 %) sind erst mit Streuung eine messbare Größe (M1-Befund, Issue #3). Die Faktoren sind Sim-Modellparameter in `model.lua` (Kapitel 17.2), kein Spielverhalten.
 6. Matrix: 1.000 Läufe je Zelle über N ∈ {5, 10, 20, 40} × Todesstrafe ∈ {20, 25, 30, 35 s} × Krits ∈ {an, aus} × Agententyp.
 7. F1–F6 (13.3) als automatisches Pass/Fail; Falsifikation → Stellhebel → Wiederholung → Eintrag in 17.9.
 8. Zusatzmetriken: Median-Try-Länge, Uptime (Soll 25–30 %), Fress-Kanäle gesamt/unterbrochen, Klassenverteilung der Siegläufe (→ Frage 16.2).
@@ -448,7 +453,7 @@ Alle Parameter als **eine flache Tabelle** in `model.lua` (`M.params`, je `{wert
 
 | Gruppe | Parameter |
 |---|---|
-| Hogger | HP-Koeffizient, Autohit-Schaden/-Intervall, Tempo, Slice-Werte, Charge-CD/-Schaden/-Anlauf, Leash |
+| Hogger | HP-Koeffizient, Autohit-Schaden/-Intervall, Cleave-Divisor, Tempo, Slice-Werte, Charge-CD/-Schaden/-Anlauf, Leash |
 | Fressen | Heilrate, Kanaldauer, CD, Zugradius, Zugdauer, Unterbrecher-Offset, Schadensschwelle (% Max-HP) |
 | Krits | Chance und Multiplikator, je Seite getrennt schaltbar (A/B-Gefühlstests) |
 | Spieler | HP je Rüstungsklasse, alle Fähigkeitswerte, Autohit/Zauberstab, Reichweiten, GCD, Tempo lebend/Geist, Fünf-Sekunden-Regel (Wartezeit, Regen-Rate), Bedrohung je Heilung |

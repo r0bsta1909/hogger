@@ -24,6 +24,7 @@ M.params = {
   -- Hogger (GDD 9.2 / 9.3)
   hogger_hp_coeff        = p(120, 40, 300, 5, "9.3"),
   hogger_autohit_dmg     = p(30, 10, 60, 1, "9.2"),
+  hogger_cleave_divisor  = p(8, 2, 40, 1, "9.2"),   -- Cleave-Ziele = ceil(N / Divisor)
   hogger_autohit_interval= p(1.8, 1.0, 3.0, 0.1, "9.2"),
   hogger_speed           = p(155, 100, 250, 5, "9.2"),
   hogger_aggro_radius    = p(250, 100, 500, 10, "9.1"),
@@ -46,8 +47,8 @@ M.params = {
   eat_drag_duration      = p(1.0, 0, 3.0, 0.1, "9.2"),
   eat_channel_duration   = p(8, 2, 20, 1, "9.2"),
   eat_heal_rate          = p(0.015, 0.005, 0.05, 0.001, "9.2"),  -- Anteil Max-HP pro s
-  eat_interrupt_offset   = p(1, 0, 5, 1, "9.3"),                 -- ceil(N/10) + offset
-  eat_dmg_threshold_pct  = p(0.025, 0.005, 0.10, 0.005, "9.2"),  -- Anteil Max-HP im Kanal
+  eat_interrupt_offset   = p(2, 0, 5, 1, "9.3"),                 -- ceil(N/10) + offset (v2.6)
+  eat_dmg_threshold_pct  = p(0.05, 0.005, 0.15, 0.005, "9.2"),   -- Anteil Max-HP im Kanal (v2.6)
 
   -- Krits (GDD 13.2, je Seite getrennt stellbar)
   crit_chance_player     = p(0.05, 0, 0.5, 0.01, "13.2"),
@@ -167,6 +168,12 @@ M.params = {
   leeroy_threat_factor   = p(0.5, 0.1, 1.0, 0.05, "10"),
   leeroy_kragen_trys     = p(3, 1, 10, 1, "10"),
   leeroy_stuck_timeout   = p(5, 1, 15, 1, "10"),
+
+  -- Sim-Streuungsmodell (GDD 17.2 Punkt 5b, v2.6) — Agentenmodell, kein Spielverhalten
+  sim_skill_min          = p(0.7, 0.3, 1.0, 0.05, "17.2"),
+  sim_skill_max          = p(1.3, 1.0, 2.0, 0.05, "17.2"),
+  sim_group_factor_min   = p(0.85, 0.5, 1.0, 0.05, "17.2"),
+  sim_group_factor_max   = p(1.15, 1.0, 1.5, 0.05, "17.2"),
 
   -- UI (GDD 4.1 / 4.2)
   zoom_radius_1          = p(300, 150, 600, 25, "4.2"),
@@ -316,6 +323,11 @@ end
 
 function M.adds(n)
   return math.floor(n / M.p("add_divisor"))
+end
+
+-- Rundumschlag: Gesamtzahl der Autohit-Ziele im Nahkampf (GDD 9.2/9.3, v2.6)
+function M.cleave_targets(n)
+  return math.ceil(n / M.p("hogger_cleave_divisor"))
 end
 
 function M.respawn_timer(n)

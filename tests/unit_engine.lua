@@ -1,4 +1,4 @@
--- tests/unit_engine.lua — Stufe 1: Engine-Invarianten auf echten Sim-Laeufen
+﻿-- tests/unit_engine.lua â€” Stufe 1: Engine-Invarianten auf echten Sim-Laeufen
 -- und gezielte Einzelpruefungen (Threat-Loeschung bei Tod, Heilungsdeckel).
 
 local model = require("sim.model")
@@ -7,7 +7,7 @@ local T = _G.T
 
 -- Kompletter Kurzlauf jedes Agententyps: Ergebnisstruktur plausibel ----------
 for _, agent in ipairs({ "unkoordiniert", "koordiniert", "turtle" }) do
-  local r = engine.run_try({ n = 5, penalty = 25, crits = true,
+  local r = engine.run_try({ n = 5, walk = 15, crits = true,
                              agent = agent, seed = 1, log = false })
   T.ok(r.duration > 0 and r.duration <= model.p("try_time_limit") + 1,
     "engine: Trydauer im Rahmen (" .. agent .. ")")
@@ -23,7 +23,7 @@ end
 local rngmod = require("sim.rng")
 local function mini_run()
   local run = {
-    cfg = { n = 5, penalty = 25, crits = false, agent = "unkoordiniert",
+    cfg = { n = 5, walk = 15, crits = false, agent = "unkoordiniert",
             seed = 1, log = false },
     rng = rngmod.new(1), t = 100, events = {}, corpses = {}, adds = {},
     players = {},
@@ -45,7 +45,7 @@ local p = { id = "p1", class = "warrior", is_leeroy = false, alive = true,
             next_auto = 0, raptor_ready = 0, threat = 50, bleed_until = 0,
             bleed_next = math.huge, shout_until = 0, seal_hits = 0,
             has_frost_armor = false, imp_alive = false, add_idx = nil,
-            combat_time = 0, dmg_done = 0, heal_done = 0, deaths = 0 }
+            combat_time = 0, dmg_done = 0, heal_done = 0, deaths = 0, skill = 1 }
 run.players[1] = p
 
 -- Threat-Loeschung bei Tod (GDD 9.4)
@@ -64,7 +64,7 @@ local healer = { id = "p1", class = "priest", is_leeroy = false, alive = true,
                  threat = 0, bleed_until = 0, bleed_next = math.huge,
                  shout_until = 0, seal_hits = 0, has_frost_armor = false,
                  imp_alive = false, add_idx = nil, combat_time = 0,
-                 dmg_done = 0, heal_done = 0, deaths = 0 }
+                 dmg_done = 0, heal_done = 0, deaths = 0, skill = 1 }
 local hurt = { id = "p2", class = "warrior", is_leeroy = false, alive = true,
                hp = 78, max_hp = 80, resource = 0, cp = 0, d = 40,
                state = "combat", dead_until = 0, gcd_ready = 0, cast = nil,
@@ -72,7 +72,7 @@ local hurt = { id = "p2", class = "warrior", is_leeroy = false, alive = true,
                threat = 0, bleed_until = 0, bleed_next = math.huge,
                shout_until = 0, seal_hits = 0, has_frost_armor = false,
                imp_alive = false, add_idx = nil, combat_time = 0,
-               dmg_done = 0, heal_done = 0, deaths = 0 }
+               dmg_done = 0, heal_done = 0, deaths = 0, skill = 1 }
 run2.players[1], run2.players[2] = healer, hurt
 engine.heal_player(run2, healer, hurt, 20, "heal")
 T.eq(hurt.hp, 80, "engine: Heilung deckelt bei Max-HP")
@@ -91,7 +91,7 @@ local a1 = { id = "a1", class = "hunter", is_leeroy = false, alive = true,
              bleed_until = 0, bleed_next = math.huge, shout_until = 0,
              seal_hits = 0, has_frost_armor = false, imp_alive = false,
              add_idx = nil, combat_time = 0, dmg_done = 0, heal_done = 0,
-             deaths = 0 }
+             deaths = 0, skill = 1 }
 local a2 = { id = "a2", class = "hunter", is_leeroy = false, alive = true,
              hp = 65, max_hp = 65, resource = 100, cp = 0, d = 200,
              state = "combat", dead_until = 0, gcd_ready = 0, cast = nil,
@@ -99,10 +99,23 @@ local a2 = { id = "a2", class = "hunter", is_leeroy = false, alive = true,
              bleed_until = 0, bleed_next = math.huge, shout_until = 0,
              seal_hits = 0, has_frost_armor = false, imp_alive = false,
              add_idx = nil, combat_time = 0, dmg_done = 0, heal_done = 0,
-             deaths = 0 }
-run3.players[1], run3.players[2] = a1, a2
+             deaths = 0, skill = 1 }
+local a3 = { id = "a3", class = "hunter", is_leeroy = false, alive = true,
+             hp = 65, max_hp = 65, resource = 100, cp = 0, d = 200,
+             state = "combat", dead_until = 0, gcd_ready = 0, cast = nil,
+             last_cast_t = -1000, next_auto = 0, raptor_ready = 0, threat = 0,
+             bleed_until = 0, bleed_next = math.huge, shout_until = 0,
+             seal_hits = 0, has_frost_armor = false, imp_alive = false,
+             add_idx = nil, combat_time = 0, dmg_done = 0, heal_done = 0,
+             deaths = 0, skill = 1 }
+run3.players[1], run3.players[2], run3.players[3] = a1, a2, a3
+-- v2.6: bei N=5 braucht es ceil(5/10)+2 = 3 verschiedene Angreifer;
+-- 3x3 Schaden bleibt unter der 5-%-Schwelle (30 von 600)
 engine.player_damage_hogger(run3, a1, 3, "autohit")
 T.ok(run3.hogger.eating ~= nil, "engine: 1 Angreifer unterbricht bei N=5 nicht")
 engine.player_damage_hogger(run3, a2, 3, "autohit")
-T.ok(run3.hogger.eating == nil, "engine: 2 verschiedene Angreifer unterbrechen bei N=5")
+T.ok(run3.hogger.eating ~= nil, "engine: 2 Angreifer unterbrechen bei N=5 nicht (v2.6)")
+engine.player_damage_hogger(run3, a3, 3, "autohit")
+T.ok(run3.hogger.eating == nil, "engine: 3 verschiedene Angreifer unterbrechen bei N=5")
 T.eq(run3.c.eat_interrupted, 1, "engine: Unterbrechung gezaehlt")
+
