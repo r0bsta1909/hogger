@@ -55,6 +55,7 @@ function A.get(id)
   if cache[id] then return cache[id] end
   local spec = manifest[id]
   assert(spec, "unbekannte Asset-ID: " .. tostring(id))
+  assert(not spec.art, "Sound-ID im Grafikpfad: " .. tostring(id))
   local drawable
   if spec.datei and love.filesystem.getInfo
      and love.filesystem.getInfo("assets/" .. spec.datei) then

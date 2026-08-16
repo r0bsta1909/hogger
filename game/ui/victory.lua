@@ -41,6 +41,10 @@ end
 local function enter(self, state)
   self.state = state
   self.t = 0
+  if state == "unglitch" then
+    -- der Glitch laeuft rueckwaerts — mit demselben Static (GDD 11/12)
+    require("game.audio").play("snd_glitch_static")
+  end
 end
 
 function V:update(dt)

@@ -62,4 +62,57 @@ return {
   ab_imp        = { form = "quadrat", groesse = 40, farbe = { 0.75, 0.35, 0.85 }, kuerzel = "WI", datei = "ab_imp.png" },
   ab_wrath      = { form = "quadrat", groesse = 40, farbe = { 0.95, 0.60, 0.25 }, kuerzel = "ZO", datei = "ab_wrath.png" },
   ab_touch      = { form = "quadrat", groesse = 40, farbe = { 0.45, 0.85, 0.45 }, kuerzel = "HB", datei = "ab_touch.png" },
+
+  -- =========================================================================
+  -- Sounds — vollstaendige Liste aus GDD Kap. 12, eine ID je Position.
+  -- art "blip" = Sinus-Platzhalter (freq/dauer), "rauschen" = Static,
+  -- "stille" = Musik-/Ambience-Slot spielt Stille bis eine Datei liegt.
+  -- Finale Dateien (ogg/wav) einfach unter `datei` ablegen (17.5).
+  -- =========================================================================
+  -- 1: Boot-Sequenz
+  snd_login_music     = { art = "stille", loop = false, datei = "snd_login_music.ogg" },
+  snd_glitch_static   = { art = "rauschen", dauer = 1.4, datei = "snd_glitch_static.ogg" },
+  -- 2/3: Grundteppich + Totensicht
+  snd_ambience_elwynn = { art = "stille", loop = true, datei = "snd_ambience_elwynn.ogg" },
+  snd_ghost_wind      = { art = "stille", loop = true, datei = "snd_ghost_wind.ogg" },
+  -- 4: Schritte (Geister sind lautlos)
+  snd_footsteps       = { art = "blip", freq = 90, dauer = 0.25, loop = true, gain = 0.25, datei = "snd_footsteps.ogg" },
+  -- 5: Nahkampf
+  snd_melee_hit       = { art = "blip", freq = 220, dauer = 0.08, datei = "snd_melee_hit.ogg" },
+  -- 6: Caster
+  snd_cast_loop       = { art = "blip", freq = 520, dauer = 0.4, loop = true, gain = 0.25, datei = "snd_cast_loop.ogg" },
+  snd_impact_fire     = { art = "blip", freq = 330, dauer = 0.12, datei = "snd_impact_fire.ogg" },
+  snd_impact_shadow   = { art = "blip", freq = 180, dauer = 0.14, datei = "snd_impact_shadow.ogg" },
+  snd_impact_holy     = { art = "blip", freq = 660, dauer = 0.12, datei = "snd_impact_holy.ogg" },
+  snd_impact_frost    = { art = "blip", freq = 440, dauer = 0.12, datei = "snd_impact_frost.ogg" },
+  -- 7: OOM-Stochern und Jaeger
+  snd_wand            = { art = "blip", freq = 700, dauer = 0.07, datei = "snd_wand.ogg" },
+  snd_shot            = { art = "blip", freq = 500, dauer = 0.07, datei = "snd_shot.ogg" },
+  -- 8: Klassen-Signaturen
+  snd_shout           = { art = "blip", freq = 250, dauer = 0.3, datei = "snd_shout.ogg" },
+  snd_stealth         = { art = "blip", freq = 150, dauer = 0.2, gain = 0.6, datei = "snd_stealth.ogg" },
+  snd_imp_summon      = { art = "blip", freq = 400, dauer = 0.35, datei = "snd_imp_summon.ogg" },
+  -- 9: Krit-Punch (beide Seiten)
+  snd_crit            = { art = "blip", freq = 110, dauer = 0.18, gain = 1.4, datei = "snd_crit.ogg" },
+  -- 10: Hogger-Lesbarkeit
+  snd_hogger_growl    = { art = "blip", freq = 80, dauer = 0.5, datei = "snd_hogger_growl.ogg" },
+  snd_hogger_schmatzen= { art = "blip", freq = 65, dauer = 0.6, loop = true, gain = 1.2, datei = "snd_hogger_schmatzen.ogg" },
+  snd_hogger_charge   = { art = "blip", freq = 130, dauer = 0.4, gain = 1.2, datei = "snd_hogger_charge.ogg" },
+  snd_hogger_death    = { art = "blip", freq = 70, dauer = 1.2, gain = 1.4, datei = "snd_hogger_death.ogg" },
+  -- 11: Mob-Aggro (der Murloc-Schrei ist gesetzt — teuerster Einzelgag)
+  snd_wolf_growl      = { art = "blip", freq = 120, dauer = 0.3, datei = "snd_wolf_growl.ogg" },
+  snd_murloc          = { art = "blip", freq = 800, dauer = 0.6, gain = 1.2, datei = "snd_murloc.ogg" },
+  -- 12/12b: Spieler-Feedback
+  snd_player_death    = { art = "blip", freq = 160, dauer = 0.35, datei = "snd_player_death.ogg" },
+  snd_jump            = { art = "blip", freq = 300, dauer = 0.08, gain = 0.5, datei = "snd_jump.ogg" },
+  snd_land            = { art = "blip", freq = 140, dauer = 0.07, gain = 0.5, datei = "snd_land.ogg" },
+  -- 13/14: DING und Plunder
+  snd_ding            = { art = "blip", freq = 880, dauer = 0.7, gain = 1.2, datei = "snd_ding.ogg" },
+  snd_loot            = { art = "blip", freq = 950, dauer = 0.1, datei = "snd_loot.ogg" },
+  snd_ui_click        = { art = "blip", freq = 600, dauer = 0.04, gain = 0.5, datei = "snd_ui_click.ogg" },
+  -- 15: Try-Enden (Wipe-Sting: kurz, Moll — lachen, nicht trauern)
+  snd_fanfare         = { art = "blip", freq = 523, dauer = 1.5, gain = 1.2, datei = "snd_fanfare.ogg" },
+  snd_wipe_sting      = { art = "blip", freq = 233, dauer = 0.9, datei = "snd_wipe_sting.ogg" },
+  -- 16: DER Schrei — einzige Voice-Line, Eigenproduktion (Rob/TTS/Suno)
+  snd_leeroy_scream   = { art = "blip", freq = 350, dauer = 1.0, gain = 1.4, datei = "snd_leeroy_scream.ogg" },
 }
