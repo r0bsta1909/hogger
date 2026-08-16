@@ -180,7 +180,9 @@ Alle acht Vanilla-Allianz-Klassen sind im Spiel, mit ihren gültigen Rassen-Komb
 | Autohit Zauberstab | 2 Schaden alle 2,0 s, Reichweite 120 px | Priester, Magier, Hexenmeister — OOM-Caster stochern auf Distanz weiter, müssen aber näher ran als der Jäger und bleiben Charge-gefährdet |
 | Nahkampf-Reichweite | 40 px | v2.6 festgeschrieben (Issue #2); Panel-Parameter |
 | Global Cooldown | 1,5 s | drosselt Input-Spam |
-| Frontbogen | 180° (Panel-Parameter `facing_arc_deg`) | Vanilla-authentisch: Angriffe gehen nur durch, wenn das Ziel **vor** einem liegt; Wegdrehen bricht einen laufenden Zauber ab (wie Bewegung). Die Blickrichtung folgt der Maus (4.1) und war bis zum Playtest 2026-08-16 rein kosmetisch. 360° schaltet die Regel ab. Die UI sagt „Ziel ist nicht vor dir.", sonst sucht man den Fehler bei sich |
+| Frontbogen | 180° (Panel-Parameter `facing_arc_deg`) | Vanilla-authentisch: Angriffe gehen nur durch, wenn das Ziel **vor** einem liegt; Wegdrehen bricht einen laufenden Zauber ab (wie Bewegung). Die Blickrichtung folgt der Maus (4.1) und war bis zum Playtest 2026-08-16 rein kosmetisch. 360° schaltet die Regel ab |
+
+**Fehlermeldungen** (v2.7): Der Host verwirft einen unmöglichen Versuch stumm — deshalb sagt der Client, woran es lag, als kurz aufblinkende rote Zeile im Ton des Originals: „Zu weit entfernt.", „Ziel ist nicht vor dir.", „Du hast kein Ziel.", „Nicht genug Mana/Wut/Energie.", „Keine Combopunkte.", „Das ist noch nicht bereit." Die Prüfregeln sind dieselben wie in der Sim und werden gegen sie getestet.
 | Kritchance | 5 %, ×2 | beide Seiten, fester Multiplikator |
 
 **HP nach Rüstungsklasse:** Platte (Krieger, Paladin) 80 · Leder/Schwer (Jäger, Schurke, Druide) 65 · Stoff (Priester, Magier, Hexenmeister) 50.

@@ -772,9 +772,21 @@ function love.keypressed(key)
       and require("game.gamesim.step").ABILITIES[me.class]
     local spec = specs and specs[slot]
     if spec then
-      local cd = spec.cd and model.p(spec.cd) or model.p("gcd")
-      app.cooldown_view[slot] = cd
-      app.cooldown_max[slot] = cd
+      -- Fehlerzeile im Original-Ton (Issue #56): der Host verwirft den
+      -- Versuch stumm, also sagt der Client hier, warum nichts passiert
+      local err = require("game.ui.errors").check(me, spec, {
+        x = app.view.me_x, y = app.view.me_y,
+        facing = input.facing_from_angle(app.facing_angle or 0),
+        cooldown = app.cooldown_view[slot] or 0,
+        hogger = app.view.hogger, npcs = app.view.npcs,
+      })
+      if err then
+        app.render:error(err)
+      else
+        local cd = spec.cd and model.p(spec.cd) or model.p("gcd")
+        app.cooldown_view[slot] = cd
+        app.cooldown_max[slot] = cd
+      end
     end
   elseif key == "tab" then
     if app.mode == "host" then app.net:set_local_target(world.HOGGER_ID)
