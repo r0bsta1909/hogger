@@ -131,14 +131,25 @@ local function draw_console_line(self, w, h)
     .. self.ip_input .. "_", 24, h - 40)
 end
 
-local function draw_splash(self, w, h)
-  -- Splash-Asset (Platzhalter oder finale Datei) bildschirmfuellend
-  local img = assets.get("splash_login")
+-- Der Splash wird VOLLSTAENDIG gezeigt, nicht bildschirmfuellend
+-- beschnitten (Issue #66): das Original ist 4:3, das Fenster meist breiter —
+-- cover hat oben und unten Streifen abgeschnitten. Rand bleibt schwarz.
+local function splash_scale(img, w, h)
   local iw, ih = img:getDimensions()
-  local scale = math.max(w / iw, h / ih)
+  return math.min(w / iw, h / ih), iw, ih
+end
+
+local function draw_splash(self, w, h)
+  local img = assets.get("splash_login")
+  local scale, iw, ih = splash_scale(img, w, h)
+  love.graphics.setColor(0, 0, 0, 1)
+  love.graphics.rectangle("fill", 0, 0, w, h)
   love.graphics.setColor(1, 1, 1, 1)
   love.graphics.draw(img, w / 2, h / 2, 0, scale, scale, iw / 2, ih / 2)
-  -- Lade-Zeilen unten links, Konsolen-Stil
+  -- Lade-Zeilen unten links, Konsolen-Stil; dunkler Streifen darunter,
+  -- damit sie auf hellem Himmel lesbar bleiben
+  love.graphics.setColor(0, 0, 0, 0.45)
+  love.graphics.rectangle("fill", 0, h - 108, w, 108)
   local li = math.min(#LOAD_LINES, 1 + math.floor(self.t / 1.6))
   local y = h - 96
   for i = 1, li do
@@ -173,8 +184,9 @@ end
 local function draw_glitch(self, w, h)
   -- Bild zerreisst: horizontale Versatz-Baender + Scanlines + Static
   local img = assets.get("splash_login")
-  local iw, ih = img:getDimensions()
-  local scale = math.max(w / iw, h / ih)
+  local scale, iw, ih = splash_scale(img, w, h)
+  love.graphics.setColor(0, 0, 0, 1)
+  love.graphics.rectangle("fill", 0, 0, w, h)
   local rnd = love.math.random
   local bands = 14
   local band_h = h / bands
