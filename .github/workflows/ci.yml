@@ -1,6 +1,8 @@
-# CI-Skelett — M0-Auftrag: lauffähig machen (siehe CLAUDE.md).
-# Pflicht-Matrix für Stufe 1 (Unit) + Stufe 3 (Determinismus): ubuntu, windows, macos.
-# Stufe 2 (Sim, Minuten) nur bei Balancing-Labels; Stufe 4 (headless LÖVE) auf ubuntu+macos.
+# CI: Test-Pyramide Stufe 1 (Unit) + Stufe 3 (Determinismus) auf allen drei
+# Plattformen — die Matrix IST der Cross-Platform-Beweis (GDD 17.0).
+# Die leafo/gh-actions-lua-Action aus dem Skelett wurde ersetzt: Paketmanager-
+# LuaJIT je OS ist robuster (Windows: dasselbe MSI wie auf dem Dev-Rechner).
+# Stufe 2 (Sim, Minuten) laeuft bei Balancing-PRs; Stufe 4 folgt ab M2.
 name: ci
 on:
   push:
@@ -15,13 +17,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Lua einrichten
-        uses: leafo/gh-actions-lua@v10
-        with:
-          luaVersion: "luajit-2.1"
-        # M0: prüfen, ob diese Action auf windows-latest trägt; sonst
-        # scoop/choco-Fallback oder vorgebautes LuaJIT-Binary einchecken.
+      - name: LuaJIT einrichten (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y luajit
+      - name: LuaJIT einrichten (macOS)
+        if: runner.os == 'macOS'
+        run: brew install luajit
+      - name: LuaJIT einrichten (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $url = "https://github.com/DevelopersCommunity/cmake-luajit/releases/download/v2.1.19907/LuaJIT-2.1.19907-win64.msi"
+          Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\luajit.msi"
+          Start-Process msiexec.exe -ArgumentList "/i","$env:TEMP\luajit.msi","/qn" -Wait
+          Add-Content $env:GITHUB_PATH "$env:LOCALAPPDATA\Programs\LuaJIT\bin"
       - name: "Stufe 1: Unit"
-        run: lua tests/run_all.lua --stage unit
+        run: luajit tests/run_all.lua --stage unit
       - name: "Stufe 3: Determinismus"
-        run: lua tests/run_all.lua --stage determinism
+        run: luajit tests/run_all.lua --stage determinism
