@@ -4,7 +4,7 @@ LÖVE2D-LAN-Koop-Zerg für 5–40 Spieler. Privates Spaßprojekt, LAN-Party-Ziel
 
 ## Wahrheitsquellen (in dieser Reihenfolge)
 
-1. **`docs/gdd.md`** (v2.4) — das Game Design Document ist die einzige Design-Wahrheit. Alle Zahlen, Formeln, Mechaniken, Meilensteine und Testkriterien stehen dort. Bei Widerspruch zwischen Code und GDD gewinnt das GDD; bei Unklarheit im GDD: Issue mit Label `frage` anlegen und Rob fragen, nicht raten.
+1. **`docs/gdd.md`** (v2.5) — das Game Design Document ist die einzige Design-Wahrheit. Alle Zahlen, Formeln, Mechaniken, Meilensteine und Testkriterien stehen dort. Bei Widerspruch zwischen Code und GDD gewinnt das GDD; bei Unklarheit im GDD: Issue mit Label `frage` anlegen und Rob fragen, nicht raten.
 2. **`docs/skills/love2d-lan-game.md`** — destillierte Learnings aus einem real durchgezogenen LÖVE2D-LAN-Projekt. **Pflichtlektüre VOR der ersten Architekturentscheidung und vor der ersten Zeile Netzcode.** Die [gemessen]-Punkte darin sind teuer bezahlte Fallen — nicht neu verhandeln.
 3. Diese Datei — Arbeitsweise und Betriebsregeln.
 
