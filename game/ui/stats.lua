@@ -8,11 +8,19 @@ S.__index = S
 
 local SHOW_T = 10 -- ~10 s (GDD 11)
 
-function S.new(board)
-  return setmetatable({ board = board, t = SHOW_T, visible = true }, S)
+-- opts.sticky: bleibt stehen (finale Sieg-Tafel); opts.button: Beschriftung
+-- eines Knopfs unten mittig (REVANCHE, GDD 11) — Klick liefert "button"
+function S.new(board, opts)
+  opts = opts or {}
+  return setmetatable({ board = board, t = SHOW_T, visible = true,
+                        sticky = opts.sticky, button = opts.button }, S)
 end
 
 function S:update(dt)
+  if self.sticky then
+    self.t = math.max(1, self.t) -- volle Deckkraft, kein Auto-Ausblenden
+    return
+  end
   self.t = self.t - dt
   if self.t <= 0 then self.visible = false end
 end
@@ -23,11 +31,25 @@ local function panel_rect(w, h)
   return (w - pw) / 2, (h - ph) / 2, pw, ph
 end
 
--- Klick in die Tafel schliesst sie (wegklickbar, GDD 11)
+local function button_rect(w, h)
+  local px, py, pw, ph = panel_rect(w, h)
+  local bw, bh = 180, 36
+  return px + (pw - bw) / 2, py + ph - bh - 14, bw, bh
+end
+
+-- Klick in die Tafel schliesst sie (wegklickbar, GDD 11); mit Knopf
+-- (finale Sieg-Tafel) schliesst nur der Knopf — Rueckgabe "button"
 function S:mousepressed(mx, my)
   if not self.visible then return false end
   local w, h = love.graphics.getDimensions()
   local px, py, pw, ph = panel_rect(w, h)
+  if self.button then
+    local bx, by, bw2, bh2 = button_rect(w, h)
+    if mx >= bx and mx <= bx + bw2 and my >= by and my <= by + bh2 then
+      return "button"
+    end
+    return mx >= px and mx <= px + pw and my >= py and my <= py + ph
+  end
   if mx >= px and mx <= px + pw and my >= py and my <= py + ph then
     self.visible = false
     return true
@@ -37,7 +59,7 @@ end
 
 function S:keypressed(key)
   if not self.visible then return false end
-  if key == "escape" then
+  if key == "escape" and not self.sticky then
     self.visible = false
     return true
   end
@@ -90,13 +112,28 @@ function S:draw()
 
   -- Titelzeilen unten
   if #b.titles > 0 then
-    local ty = py + ph - 18 - #b.titles * line_h
+    local bottom_off = self.button and 60 or 18
+    local ty = py + ph - bottom_off - #b.titles * line_h
     love.graphics.setColor(0.6, 0.56, 0.45, a)
     love.graphics.print("Titel des Trys", lx, ty - line_h)
     for i, t in ipairs(b.titles) do
       love.graphics.setColor(0.85, 0.75, 0.5, a)
       love.graphics.print(t, lx, ty + (i - 1) * line_h)
     end
+  end
+
+  -- REVANCHE-Knopf der finalen Tafel (GDD 11)
+  if self.button then
+    local bx, by, bw2, bh2 = button_rect(w, h)
+    love.graphics.setColor(0.45, 0.12, 0.10, a)
+    love.graphics.rectangle("fill", bx, by, bw2, bh2, 5, 5)
+    love.graphics.setColor(0.95, 0.75, 0.3, a)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", bx, by, bw2, bh2, 5, 5)
+    love.graphics.setLineWidth(1)
+    love.graphics.setColor(0.98, 0.92, 0.75, a)
+    love.graphics.print(self.button,
+      bx + bw2 / 2 - font:getWidth(self.button), by + 6, 0, 2, 2)
   end
 end
 

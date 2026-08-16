@@ -41,4 +41,8 @@ return {
   -- 29-30: Besonderes
   [29] = "DING? ... das ist nicht moeglich.",
   [30] = "Zeit haben wir. Ewig, genau genommen.",
+  -- 31-33: Fluchbruch (GDD 11), zeitversetzt aus step.lua
+  [31] = "ER IST TOT. ER IST WIRKLICH TOT. ICH HABE ES GESEHEN.",
+  [32] = "Der Fluch ... bricht. Ich spuere es. Endlich.",
+  [33] = "Danke. Ehrlich. Und jetzt ... REVANCHE?",
 }

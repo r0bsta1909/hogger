@@ -12,7 +12,8 @@ local events = require("game.gamesim.events")
 local S = {}
 local DT = model.TICK_DT
 local ICON_RADIUS = 60      -- Draufstellen-Radius der Klassenicons (GDD 5)
-local VICTORY_FREEZE = 10   -- s bis zum naechsten Try nach dem Sieg (M2)
+-- Leeroys letzte Zeilen nach dem Fluchbruch (GDD 11): Zeit -> Zeilen-ID
+local WON_LINES = { { 1.0, 31 }, { 4.5, 32 }, { 9.0, 33 } }
 
 -- ---------------------------------------------------------------------------
 -- Kampfhelfer
@@ -1065,8 +1066,44 @@ local function end_try(state, ev, won)
     for _, t in ipairs(board.title_awards) do
       state.players[t.pid].titel = t.title -- persistiert via session.json
     end
+    if won then
+      -- Zerfledderter Wams: 2 Kupfer, Zufalls-Roll — folgenloser RNG,
+      -- ausdruecklich erlaubt (GDD 11/13.2); Leeroy wuerfelt nicht (Fluch)
+      local cands = {}
+      for _, p in ipairs(state.players) do
+        if not p.is_leeroy and not p.disconnected then cands[#cands + 1] = p end
+      end
+      if #cands > 0 then
+        local winner = cands[state.rng:range(1, #cands)]
+        local roll = state.rng:range(1, 100)
+        winner.kupfer = winner.kupfer + 2
+        events.push(ev, state.tick, "loot_pickup", winner.id, 0, 2, nil)
+        board.wams = winner.name .. " gewinnt den Wurf (" .. roll .. ")"
+      end
+    end
     e.board = board
   end
+end
+
+-- Neustart nach dem Fluchbruch: alle als Geist an den Friedhof
+local function restart_all(state, ev)
+  world.begin_try(state, ev)
+  for _, p in ipairs(state.players) do
+    p.alive = false
+    p.ghost = true
+    local g = map.graveyard()
+    p.x, p.y = g.x, g.y
+  end
+end
+
+-- REVANCHE (GDD 11): startet den naechsten Abend-Durchlauf, Try-Zaehler
+-- bei 1 — der Fluch ist gebrochen, ab jetzt zergt man freiwillig
+function S.revanche(state, ev)
+  if state.phase ~= "won" then return false end
+  state.phase = "try"
+  state.try_nr = 0
+  restart_all(state, ev)
+  return true
 end
 
 -- ---------------------------------------------------------------------------
@@ -1076,14 +1113,13 @@ function S.step(state, inputs)
   state.time = state.tick * DT
 
   if state.phase == "won" then
-    state.won_t = state.won_t - DT
-    if state.won_t <= 0 then
-      world.begin_try(state, ev)
-      for _, p in ipairs(state.players) do
-        p.alive = false
-        p.ghost = true
-        local g = map.graveyard()
-        p.x, p.y = g.x, g.y
+    -- Fluchbruch (GDD 11): die Welt haelt an, bis REVANCHE gedrueckt wird;
+    -- Leeroys letzte Zeilen kommen zeitversetzt
+    local before = state.won_t
+    state.won_t = state.won_t + DT
+    for _, l in ipairs(WON_LINES) do
+      if before < l[1] and state.won_t >= l[1] then
+        events.push(ev, state.tick, "leeroy_line", "leeroy", l[2], nil, nil)
       end
     end
     return ev
@@ -1141,7 +1177,7 @@ function S.step(state, inputs)
   if state.hogger.hp <= 0 then
     end_try(state, ev, true)
     state.phase = "won"
-    state.won_t = VICTORY_FREEZE
+    state.won_t = 0
   elseif state.clock >= model.p("try_time_limit") then
     end_try(state, ev, false)
     world.begin_try(state, ev)

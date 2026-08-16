@@ -58,6 +58,7 @@ function T.run()
   local rejoined = false
   local old_pid_of_c2 = nil
   local max_body = 0
+  local revanche_sent, revanche_done = false, false
   local function outcome_counts()
     local try_starts, revives, damage_evs = 0, 0, 0
     for _, line in ipairs(log_lines) do
@@ -126,6 +127,18 @@ function T.run()
         "Rename: Roster-Broadcast bei allen angekommen")
     end
 
+    -- Fluchbruch (GDD 11): ein Sieg haelt die Welt an, bis REVANCHE
+    -- gedrueckt wird — hier drueckt Client 1 ueber das Netz
+    if host.state.phase == "won" and not revanche_sent then
+      revanche_sent = true
+      clients[1]:send_revanche()
+    end
+    if revanche_sent and not revanche_done and host.state.phase == "try" then
+      revanche_done = true
+      ok(host.state.try_nr == 1,
+        "REVANCHE: Try-Zaehler startet bei 1 (" .. host.state.try_nr .. ")")
+    end
+
     -- Statistik-Tafel (GDD 11): nach dem ersten Try-Ende (90 s) bei allen
     if iter == math.floor(95 / DT) then
       ok(clients[1].stats_board ~= nil, "Statistik-Tafel beim Client angekommen")
@@ -183,7 +196,9 @@ function T.run()
   ok(try_starts >= 2, "Voller Try inkl. Try-Uebergang (" .. try_starts .. " Starts)")
   ok(revives >= 4, "Clients beleben sich ueber das Netz wieder (" .. revives .. ")")
   ok(damage_evs > 50, "Kampf laeuft ueber das Netz (" .. damage_evs .. " Treffer)")
-  ok(host.state.try_nr >= 1000, "Try-Zaehler vierstellig (GDD 6)")
+  -- nach einer REVANCHE zaehlt der Try-Zaehler regulaer ab 1 (GDD 11)
+  ok(revanche_sent or host.state.try_nr >= 1000,
+    "Try-Zaehler vierstellig (GDD 6) bzw. REVANCHE-Neustart")
   -- Leeroy vollendet seinen Loop ohne leeroy_stuck (GDD 17.7 Stufe 4)
   local leeroy_revive, leeroy_stuck = false, false
   for _, line in ipairs(log_lines) do
