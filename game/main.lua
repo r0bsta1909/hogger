@@ -1,25 +1,29 @@
--- game/main.lua — LOEVE-Einstieg: Verdrahtung von Sim, Netz und Darstellung.
--- M2-Debug-Start (GDD 15): love game [--join IP] [--name X] [--bots K]
---                          [--seed N] | love game --headless --test
--- Fixer Zeitschritt lebt in host/client; hier nur Eingabe, Kosmetik, UI.
+-- game/main.lua — LOEVE-Einstieg: Discovery-Wahl, Verdrahtung von Sim, Netz
+-- und Darstellung. Der erste Spieler, der startet, IST der Realm (GDD Kap. 3):
+--   love game                  -> Discovery: joinen oder selbst Host werden
+--   love game --join <ip>      -> manuelle IP (Pflichtfeature, Skill Par. 5)
+--   love game --host           -> Host erzwingen
+--   love game --headless --test-> Stufe-4-Integrationstest
+-- Debug: --bots K, --auto, --shot N, --panel, --seed N, --name X; F12-Overlay.
 
--- Repo-Wurzel in den Suchpfad: game/ importiert sim/model.lua unveraendert
 do
   local src = love.filesystem.getSource()
   package.path = src .. "/../?.lua;" .. src .. "/?.lua;" .. package.path
 end
 
+local socket = require("socket")
 local model = require("sim.model")
 local input = require("game.gamesim.input")
 local world = require("game.gamesim.world")
-local wire -- erst nach --headless-Entscheidung laden (braucht love.data)
+local wire, discovery
 
 local app = {
-  mode = "host", name = "spieler", join_ip = nil, seed = nil,
+  mode = "discover", name = "spieler", join_ip = nil, seed = nil,
   bots = 0, headless = false, test = false,
-  net = nil, render = nil, panel = nil, floating = nil,
+  net = nil, search = nil, beacon = nil,
+  render = nil, panel = nil, floating = nil, debug = nil,
   cooldown_view = { 0, 0, 0 }, cooldown_max = { 1, 1, 1 },
-  last_try = 0,
+  discover_t = 0,
 }
 
 local function parse_args(args)
@@ -27,55 +31,83 @@ local function parse_args(args)
   while i <= #args do
     local a = args[i]
     if a == "--join" then i = i + 1; app.join_ip = args[i]; app.mode = "client"
+    elseif a == "--host" then app.mode = "host"
     elseif a == "--name" then i = i + 1; app.name = args[i]
     elseif a == "--seed" then i = i + 1; app.seed = tonumber(args[i])
-    elseif a == "--bots" then i = i + 1; app.bots = tonumber(args[i]) or 0
+    elseif a == "--bots" then i = i + 1; app.bots = tonumber(args[i]) or 0; app.mode = "host"
     elseif a == "--headless" then app.headless = true
     elseif a == "--test" then app.test = true
     elseif a == "--shot" then i = i + 1; app.shot_at = tonumber(args[i]) or 3
-    elseif a == "--auto" then app.auto = true -- Debug: eigener Spieler als Bot
-    elseif a == "--panel" then app.open_panel = true -- Debug: F10 direkt offen
+    elseif a == "--auto" then app.auto = true
+    elseif a == "--panel" then app.open_panel = true
     end
     i = i + 1
   end
 end
 
+local function start_search()
+  app.mode = "discover"
+  app.discover_t = 0
+  if app.search then app.search:close() end
+  app.search = discovery.new_search()
+end
+
+local function start_host()
+  app.mode = "host"
+  if app.search then app.search:close(); app.search = nil end
+  local hostmod = require("game.net.host")
+  love.filesystem.createDirectory("logs")
+  local logname = "logs/session-" .. os.date("%Y%m%d-%H%M%S") .. ".jsonl"
+  app.net = hostmod.new({
+    name = app.name,
+    seed = app.seed or os.time(),
+    bots = app.bots,
+    log = function(line)
+      love.filesystem.append(logname, line .. "\n")
+    end,
+  })
+  -- Bake laeuft waehrend des Matches weiter (Skill Par. 5)
+  local lobby_id = string.format("%s-%d", app.name, os.time() % 100000)
+  app.beacon = discovery.new_host(lobby_id, socket.gettime(), hostmod.PORT)
+  app.panel = require("game.ui.panel").new(function(key, value)
+    return app.net:set_param(key, value)
+  end)
+  if app.open_panel then app.panel.visible = true end
+end
+
+local function start_client(ip)
+  app.mode = "client"
+  if app.search then app.search:close(); app.search = nil end
+  if app.beacon then app.beacon:close(); app.beacon = nil end
+  local clientmod = require("game.net.client")
+  app.net = clientmod.new(ip, app.name)
+  app.panel = nil
+end
+
+local function teardown_net()
+  if app.net and app.net.destroy then app.net:destroy() end
+  app.net = nil
+  if app.beacon then app.beacon:close(); app.beacon = nil end
+  app.view = nil
+end
+
 function love.load(args)
   parse_args(args or {})
-
   if app.headless and app.test then
     local exit = require("game.test.headless").run()
     love.event.quit(exit)
     return
   end
-
   wire = require("game.net.wire")
+  discovery = require("game.net.discovery")
   app.render = require("game.render").new()
   app.floating = require("game.ui.floating").new()
+  app.debug = require("game.ui.debug").new()
 
-  if app.mode == "host" then
-    local hostmod = require("game.net.host")
-    love.filesystem.createDirectory("logs")
-    local logname = "logs/session-" .. os.date("%Y%m%d-%H%M%S") .. ".jsonl"
-    app.net = hostmod.new({
-      name = app.name,
-      seed = app.seed or os.time(),
-      bots = app.bots,
-      log = function(line)
-        love.filesystem.append(logname, line .. "\n")
-      end,
-    })
-    app.panel = require("game.ui.panel").new(function(key, value)
-      return app.net:set_param(key, value)
-    end)
-    if app.open_panel then app.panel.visible = true end
-  else
-    local clientmod = require("game.net.client")
-    app.net = clientmod.new(app.join_ip, app.name)
-  end
+  if app.mode == "host" then start_host()
+  elseif app.mode == "client" then start_client(app.join_ip)
+  else start_search() end
 end
-
-local ABILITY_KEYS = { "1", "2" }
 
 local function local_input_frame()
   local mask = 0
@@ -98,14 +130,17 @@ end
 -- Sicht fuer den Renderer: Host dekodiert seinen eigenen Snapshot durch
 -- denselben Codec wie die Clients — ein Lesepfad, staendig geprueft
 local function build_view()
-  if app.mode == "host" then
+  if app.mode == "host" and app.net then
     local body = wire.snapshot_body(app.net.state)
     local _, snap = wire.read_snapshot(wire.snapshot(0, body), 4)
     snap.me = app.net.local_pid
     local me = snap.players[snap.me]
     snap.me_x, snap.me_y = me.x, me.y
+    snap.names = {}
+    for _, p in ipairs(app.net.state.players) do snap.names[p.id] = p.name end
     return snap
   end
+  if app.mode ~= "client" or not app.net then return nil end
   local snap = app.net.snap
   if not snap or not app.net.pid then return nil end
   snap.me = app.net.pid
@@ -115,21 +150,21 @@ local function build_view()
   elseif me then
     snap.me_x, snap.me_y = me.x, me.y
   end
+  snap.names = app.net.names
   return snap
 end
 
 local function process_cosmetics(view)
-  local list = app.net.cosmetics
+  local list = app.net and app.net.cosmetics or nil
+  if not list then return end
   if not view then
     for i = #list, 1, -1 do list[i] = nil end
     return
   end
   local function entity_pos(idnum)
-    if idnum == 0 or idnum == 255 or idnum == "hogger" or idnum == "host" then
-      return view.hogger.x, view.hogger.y
-    end
-    local p = view.players[tonumber(idnum)]
-    if p then return p.x, p.y end
+    local n = tonumber(idnum)
+    if n and view.players[n] then return view.players[n].x, view.players[n].y end
+    if n and view.npcs and view.npcs[n] then return view.npcs[n].x, view.npcs[n].y end
     return view.hogger.x, view.hogger.y
   end
   for _, e in ipairs(list) do
@@ -137,8 +172,8 @@ local function process_cosmetics(view)
       local tx, ty = entity_pos(e.dst)
       local own = tonumber(e.src) == view.me or tonumber(e.dst) == view.me
       local color = e.crit and { 1, 0.85, 0.2 } or { 1, 1, 1 }
-      local txt = tostring(math.floor((e.val or 0) + 0.5))
-      app.floating:add(txt, tx, ty, color, (e.crit or own) and 2 or 1)
+      app.floating:add(tostring(math.floor((e.val or 0) + 0.5)), tx, ty,
+        color, (e.crit or own) and 2 or 1)
       if e.crit and tonumber(e.dst) == view.me then app.render:add_shake(10) end
     elseif e.ev == "heal" then
       local tx, ty = entity_pos(e.dst)
@@ -173,17 +208,48 @@ end
 
 function love.update(dt)
   if app.headless then return end
+
+  if app.mode == "discover" then
+    app.search:update(dt)
+    app.discover_t = app.discover_t + dt
+    local best = app.search:best()
+    if best and app.discover_t > 0.5 then
+      start_client(best.ip)
+    elseif app.discover_t > 3 then
+      -- kein Realm gefunden: diese Instanz IST der Realm (GDD Kap. 3)
+      start_host()
+    end
+    return
+  end
+
   local inp, angle = local_input_frame()
   app.facing_angle = angle
   if app.auto and app.mode == "host" then
     inp = require("game.gamesim.bot").decide(app.net.state, app.net.local_pid)
   end
-  if app.panel and app.panel.visible then
-    inp = { mask = 0, facing = inp.facing } -- Panel schluckt die Eingabe
+  if (app.panel and app.panel.visible) or app.debug.visible then
+    inp = { mask = 0, facing = inp.facing }
   end
+
   app.net:update(dt, inp)
 
-  -- lokale Cooldown-Anzeige (nur Optik; Wahrheit liegt beim Host)
+  if app.mode == "host" and app.beacon then
+    app.beacon:update(dt)
+    if app.beacon.degrade_to then
+      -- juengerer Host degradiert sich zum Client (GDD Kap. 3)
+      local ip = app.beacon.degrade_to.ip
+      teardown_net()
+      start_client(ip)
+      return
+    end
+  elseif app.mode == "client" and app.net.failed then
+    -- Disconnect: automatischer Reconnect ueber neue Discovery (GDD Kap. 3)
+    app.render:announce("Vom Server getrennt.", 3)
+    teardown_net()
+    start_search()
+    return
+  end
+
   for i = 1, 3 do
     if app.cooldown_view[i] > 0 then
       app.cooldown_view[i] = math.max(0, app.cooldown_view[i] - dt)
@@ -196,13 +262,12 @@ function love.update(dt)
   app.floating:update(dt)
   app.render:update(dt)
 
-  -- Debug: Screenshot nach N Sekunden, dann beenden (--shot N)
   if app.shot_at then
     app.shot_at = app.shot_at - dt
     if app.shot_at <= 0 then
       app.shot_at = nil
       love.graphics.captureScreenshot("debug-shot.png")
-      app.quit_next = 2 -- zwei Frames warten, bis der Shot geschrieben ist
+      app.quit_next = 2
     end
   elseif app.quit_next then
     app.quit_next = app.quit_next - 1
@@ -212,38 +277,72 @@ end
 
 function love.draw()
   if app.headless then return end
-  if not app.view then
+  if app.mode == "discover" or not app.view then
     love.graphics.setColor(0.9, 0.88, 0.8, 1)
-    love.graphics.print(app.net and app.net.failed or "Verbinde ...", 40, 40)
-    return
+    local msg = app.mode == "discover"
+      and "Realm wird gesucht ..." or (app.net and app.net.failed or "Verbinde ...")
+    love.graphics.print(msg, 40, 40)
+    love.graphics.setColor(0.5, 0.48, 0.4, 1)
+    love.graphics.print("F12: Debug (manuelle IP, Host erzwingen)", 40, 62)
+  else
+    local cds = {}
+    for i = 1, 3 do
+      cds[i] = app.cooldown_max[i] > 0
+        and app.cooldown_view[i] / app.cooldown_max[i] or 0
+    end
+    local to_screen = app.render:draw(app.view, {
+      facing_angle = app.facing_angle,
+      cooldowns = cds,
+      mouse = { love.mouse.getPosition() },
+    })
+    app.floating:draw(to_screen)
+    if app.panel then app.panel:draw() end
   end
-  local cds = {}
-  for i = 1, 3 do
-    cds[i] = app.cooldown_max[i] > 0
-      and app.cooldown_view[i] / app.cooldown_max[i] or 0
+  local lobbies = 0
+  if app.search then
+    for _ in pairs(app.search.lobbies) do lobbies = lobbies + 1 end
   end
-  local to_screen = app.render:draw(app.view, {
-    facing_angle = app.facing_angle,
-    cooldowns = cds,
+  app.debug:draw({
+    mode = app.mode,
+    own_ip = discovery and discovery.own_ip() or "?",
+    lobbies = lobbies,
+    log_dir = love.filesystem.getSaveDirectory(),
   })
-  app.floating:draw(to_screen)
-  if app.panel then app.panel:draw() end
 end
 
 function love.keypressed(key)
   if app.headless then return end
+  local action = app.debug:keypressed(key)
+  if action == "host" then
+    teardown_net()
+    if app.search then app.search:close(); app.search = nil end
+    start_host()
+    return
+  elseif action == "wipe" then
+    require("game.session").wipe()
+    app.debug.note = "session.json geloescht (wirkt beim naechsten Host-Start)"
+    return
+  elseif type(action) == "table" and action.join then
+    teardown_net()
+    if app.search then app.search:close(); app.search = nil end
+    start_client(action.join)
+    return
+  elseif action == true then
+    return
+  end
+  if key == "f12" then app.debug:toggle() return end
+  if app.mode == "discover" then return end
   if app.panel and app.panel:keypressed(key) then return end
   if key == "f10" and app.panel then
     app.panel:toggle()
   elseif key == "kp+" or key == "+" then
-    app.render:set_zoom(app.render.zoom - 1) -- reinzoomen = kleinerer Radius
+    app.render:set_zoom(app.render.zoom - 1)
     if app.net.send_zoom then app.net:send_zoom(app.render.zoom) end
   elseif key == "kp-" or key == "-" then
     app.render:set_zoom(app.render.zoom + 1)
     if app.net.send_zoom then app.net:send_zoom(app.render.zoom) end
   elseif key == "1" or key == "2" or key == "3" then
     local slot = tonumber(key)
-    -- lokale Cooldown-Optik: GCD bzw. Raptor-CD
     local me = app.view and app.view.players[app.view.me]
     local cd = model.p("gcd")
     if me and me.class == "hunter" and slot == 1 then
@@ -252,28 +351,31 @@ function love.keypressed(key)
     app.cooldown_view[slot] = cd
     app.cooldown_max[slot] = cd
   elseif key == "tab" then
-    -- Ziel: Hogger (M2 hat genau einen Feind)
     if app.mode == "host" then app.net:set_local_target(world.HOGGER_ID)
     else app.net:set_target(world.HOGGER_ID) end
   end
 end
 
-function love.wheelmoved(_, dy)
-  if app.headless or not app.render then return end
-  if dy > 0 then app.render:set_zoom(app.render.zoom - 1)
-  elseif dy < 0 then app.render:set_zoom(app.render.zoom + 1) end
-  if app.net and app.net.send_zoom then app.net:send_zoom(app.render.zoom) end
+function love.textinput(t)
+  if app.debug and app.debug:textinput(t) then return end
 end
 
 function love.mousepressed(mx, my)
   if app.headless or not app.view then return end
-  -- Klick-Zielwahl: naechstes Spieler-Icon, sonst Hogger (ADR-002)
   local w, h = love.graphics.getDimensions()
   local radius = h / 2 - 8
   local scale = radius / app.render:zoom_radius()
   local function to_screen(wx, wy)
     return w / 2 + (wx - app.view.me_x) * scale,
            h / 2 + (wy - app.view.me_y) * scale
+  end
+  -- Zoom-Knoepfe am Ring (GDD 4.2)
+  local zx, zy = w / 2 + radius * 0.86, h / 2 + radius * 0.42
+  if math.abs(mx - zx) < 14 and math.abs(my - zy) < 14 then
+    app.render:set_zoom(app.render.zoom - 1) return
+  end
+  if math.abs(mx - zx) < 14 and math.abs(my - (zy + 34)) < 14 then
+    app.render:set_zoom(app.render.zoom + 1) return
   end
   local best, best_d = nil, 24
   for pid, p in pairs(app.view.players) do
@@ -301,6 +403,14 @@ function love.mousepressed(mx, my)
   end
 end
 
+function love.wheelmoved(_, dy)
+  if app.headless or not app.render or app.mode == "discover" then return end
+  if dy > 0 then app.render:set_zoom(app.render.zoom - 1)
+  elseif dy < 0 then app.render:set_zoom(app.render.zoom + 1) end
+  if app.net and app.net.send_zoom then app.net:send_zoom(app.render.zoom) end
+end
+
 function love.quit()
-  if app.net and app.net.destroy then app.net:destroy() end
+  teardown_net()
+  if app.search then app.search:close() end
 end
