@@ -71,3 +71,20 @@ T.eq(row(fresh.raid, "Reichster Spieler"), "Bert - 9 Kupfer",
   "Kupfer persistiert ueber Trys (GDD 7.3)")
 T.eq(#fresh.titles, 1, "nur der persistente DING-Titel bleibt")
 T.ok(fresh.titles[1]:find("der Zweite") ~= nil, "der Zweite haengt am Abend")
+
+-- REVANCHE (GDD 11): nur aus der Siegphase, Try-Zaehler bei 1
+local step = require("game.gamesim.step")
+state.phase = "won"
+state.try_nr = 4711
+local rev_ev = {}
+T.ok(step.revanche(state, rev_ev), "REVANCHE aus der Siegphase")
+T.eq(state.phase, "try", "REVANCHE startet den naechsten Durchlauf")
+T.eq(state.try_nr, 1, "Try-Zaehler startet bei 1")
+T.ok(state.players[a].ghost and not state.players[a].alive,
+  "alle starten als Geist am Friedhof")
+local found_start = false
+for _, e in ipairs(rev_ev) do
+  if e.ev == "try_start" then found_start = true end
+end
+T.ok(found_start, "try_start nach REVANCHE geloggt")
+T.ok(not step.revanche(state, {}), "REVANCHE ausserhalb der Siegphase wirkungslos")

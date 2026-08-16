@@ -319,14 +319,26 @@ function love.update(dt)
   app.floating:update(dt)
   app.render:update(dt)
 
-  -- Statistik-Tafel am Try-Ende (GDD 11): Host baut, alle zeigen
+  -- Statistik-Tafel am Try-Ende (GDD 11): Host baut, alle zeigen;
+  -- ein SIEG startet stattdessen die Fluchbruch-Sequenz
   if app.net and app.net.stats_board then
-    app.stats = require("game.ui.stats").new(app.net.stats_board)
+    local board = app.net.stats_board
     app.net.stats_board = nil
+    if board.header:find("^SIEG") then
+      app.victory = require("game.ui.victory").new(board)
+      app.stats = nil
+    else
+      app.stats = require("game.ui.stats").new(board)
+    end
   end
   if app.stats then
     app.stats:update(dt)
     if not app.stats.visible then app.stats = nil end
+  end
+  if app.victory then
+    app.victory:update(dt)
+    -- REVANCHE gedrueckt, der naechste Durchlauf laeuft: Sequenz beenden
+    if app.view and app.view.phase == "try" then app.victory = nil end
   end
 
   -- Leeroy-Intro (GDD Kap. 5): startet nach der Aufblende (Boot fertig);
@@ -410,6 +422,7 @@ function love.draw()
     app.floating:draw(to_screen)
     if app.intro then app.intro:draw(app.view, bw, bh) end
     if app.stats then app.stats:draw() end
+    if app.victory then app.victory:draw(app.view, to_screen, bw, bh) end
     if app.panel then app.panel:draw() end
   end
   if app.boot and app.boot:active() and not app.boot:covers_screen() then
@@ -475,6 +488,10 @@ function love.keypressed(key)
     app.intro:keypressed(key) -- Intro schluckt alles (Eingaben gesperrt)
     return
   end
+  if app.victory then
+    app.victory:keypressed(key) -- Sequenz schluckt Tasten (Welt steht)
+    return
+  end
   if app.stats and app.stats:keypressed(key) then return end
   if app.mode == "discover" then return end
   if app.panel and app.panel:keypressed(key) then return end
@@ -523,6 +540,14 @@ function love.mousepressed(mx, my)
   end
   if app.intro and app.intro:blocking() then
     app.intro:mousepressed() -- Dialog-Panels weiterklicken (GDD 5)
+    return
+  end
+  if app.victory then
+    if app.victory:mousepressed(mx, my) == "revanche" then
+      -- REVANCHE (GDD 11): jeder darf druecken, der Host fuehrt aus
+      if app.mode == "host" then app.net:revanche()
+      else app.net:send_revanche() end
+    end
     return
   end
   if app.stats and app.stats:mousepressed(mx, my) then return end

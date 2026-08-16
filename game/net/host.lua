@@ -146,6 +146,8 @@ function H:_handle(peer, data)
     local wish = wire.read_rename(data, off)
     local ok = self:rename(c.pid, wish)
     peer:send(wire.rename_result(ok), CH_RELIABLE, "reliable")
+  elseif c and msg == wire.MSG.REVANCHE then
+    self:revanche() -- jeder darf den Knopf druecken (LAN-Party, GDD 11)
   elseif c and msg == wire.MSG.INPUT then
     local ctick, m0, m1, m2 = wire.read_input(data, off)
     local _, _, _, _, facing = wire.read_input(data, off)
@@ -214,6 +216,14 @@ function H:rename(pid, wish)
     self.host:broadcast(wire.roster(self.state.players), CH_RELIABLE, "reliable")
   end
   return true
+end
+
+-- REVANCHE (GDD 11): naechster Abend-Durchlauf, Try-Zaehler bei 1
+function H:revanche()
+  local ev = {}
+  if step.revanche(self.state, ev) then
+    self:_after_step(ev)
+  end
 end
 
 function H:set_local_target(target_id)

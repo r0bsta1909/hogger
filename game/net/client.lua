@@ -96,6 +96,12 @@ function C:_handle(data)
   end
 end
 
+function C:send_revanche()
+  if self.connected then
+    self.peer:send(wire.revanche(), CH_RELIABLE, "reliable")
+  end
+end
+
 function C:send_rename(name)
   if self.connected then
     self.rename_result = nil

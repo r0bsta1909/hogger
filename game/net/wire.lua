@@ -11,7 +11,7 @@ W.PROTO = 1
 W.MSG = {
   HELLO = 1, WELCOME = 2, INPUT = 3, SNAPSHOT = 4, EVENTS = 5,
   SET_TARGET = 6, PARAM_SET = 7, ZOOM = 8, ROSTER = 9,
-  RENAME = 10, RENAME_RESULT = 11, STATS = 12,
+  RENAME = 10, RENAME_RESULT = 11, STATS = 12, REVANCHE = 13,
 }
 
 -- Ereignistypen fuers Netz (Kosmetik-Feed; das JSONL-Log bleibt Host-Sache)
@@ -173,10 +173,16 @@ local function read_rows(data, off)
   return rows, off
 end
 
+-- REVANCHE-Knopf der finalen Tafel (GDD 11): Client -> Host, kein Payload
+function W.revanche()
+  return header(W.MSG.REVANCHE)
+end
+
 function W.stats(board)
   local parts = { header(W.MSG.STATS),
-                  pack("<s1s1", board.header:sub(1, 250),
-                       (board.big or ""):sub(1, 250)),
+                  pack("<s1s1s1", board.header:sub(1, 250),
+                       (board.big or ""):sub(1, 250),
+                       (board.wams or ""):sub(1, 250)),
                   pack_rows(board.hogger), pack_rows(board.raid) }
   parts[#parts + 1] = pack("<B", #board.titles)
   for _, t in ipairs(board.titles) do
@@ -186,9 +192,10 @@ function W.stats(board)
 end
 function W.read_stats(data, off)
   local board = {}
-  local big
-  board.header, big, off = love.data.unpack("<s1s1", data, off)
+  local big, wams
+  board.header, big, wams, off = love.data.unpack("<s1s1s1", data, off)
   board.big = big ~= "" and big or nil
+  board.wams = wams ~= "" and wams or nil
   board.hogger, off = read_rows(data, off)
   board.raid, off = read_rows(data, off)
   local count
