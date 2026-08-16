@@ -41,7 +41,7 @@ function T.run()
 
   local log_lines = {}
   local host = hostmod.new({
-    name = "hostbot", seed = 4242, bots = 0,
+    name = "hostbot", seed = 4242, bots = 0, session = false,
     log = function(line) log_lines[#log_lines + 1] = line end,
   })
 
@@ -124,7 +124,11 @@ function T.run()
     if iter % math.floor(5 / DT) == 0 then
       local body = wire.snapshot_body(st)
       max_body = math.max(max_body, #body)
-      ok(#body <= 64 + 12 * #st.players + 4 * #st.corpses + 32,
+      local npc_count, loot_count = 0, 0
+      for id = 100, 250 do if st.npcs[id] then npc_count = npc_count + 1 end end
+      for id = 1, 60 do if st.loot[id] then loot_count = loot_count + 1 end end
+      ok(#body <= 64 + 20 * #st.players + 4 * #st.corpses
+              + 8 * npc_count + 6 * loot_count + 32,
         "Snapshot-Budget eingehalten (" .. #body .. " B)")
       local _, snap = wire.read_snapshot(wire.snapshot(0, body), 4)
       for _, p in ipairs(st.players) do

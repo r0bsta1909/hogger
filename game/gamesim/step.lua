@@ -113,12 +113,86 @@ local function heal_player(state, src, dst, amount, ev)
 end
 
 -- ---------------------------------------------------------------------------
+-- Feind-Aufloesung: Ziel ist Hogger ODER ein feindlicher NPC (Mob/Add)
+-- ---------------------------------------------------------------------------
+local MOB_TYPES = { boar = true, wolf = true, kobold = true, murloc = true }
+local loot_pool = require("game.gamesim.loot")
+
+local function current_enemy(state, p)
+  if p.target == world.HOGGER_ID then
+    local h = state.hogger
+    if h.hp > 0 and h.state ~= "reset" then return h, "hogger" end
+    return nil
+  end
+  local npc = state.npcs[p.target]
+  if npc and npc.kind ~= "imp" then return npc, "npc" end
+  return nil
+end
+
+local function give_xp(state, p, ev)
+  p.xp = p.xp + model.p("xp_per_mob")
+  events.push(ev, state.tick, "xp_gain", p.id, nil, model.p("xp_per_mob"), nil)
+  if not p.ding_done and p.xp >= model.p("xp_level2") then
+    p.ding_done = true -- DING: mechanischer Effekt exakt null (GDD 7.3)
+    events.push(ev, state.tick, "ding", p.id, nil, p.xp, nil)
+  end
+end
+
+local function mob_died(state, npc, killer, ev)
+  if npc.kind == "add" then
+    events.push(ev, state.tick, "add_death", npc.id, nil, nil, nil)
+  elseif MOB_TYPES[npc.kind] then
+    events.push(ev, state.tick, "mob_kill", killer.id, npc.kind, nil, nil)
+    give_xp(state, killer, ev)
+    -- Loot-Roll: sanktionierter Zufall (GDD 13.2), fester Kupferwert je Typ
+    local item_idx = state.rng:range(1, #loot_pool)
+    world.add_loot(state, npc.x, npc.y, model.mobs[npc.kind].kupfer, item_idx)
+    if npc.slot then
+      state.mob_by_slot[npc.slot] = nil
+      state.mob_respawn[npc.slot] = model.p("mob_respawn")
+    end
+  end
+  state.hogger.threat[npc.id] = nil
+  state.npcs[npc.id] = nil
+end
+
+-- ---------------------------------------------------------------------------
 -- Faehigkeiten (GDD 8.2) als Daten: je Klasse bis zu 3 Slots (Tasten 1-3)
 -- ---------------------------------------------------------------------------
 local function enemy_in_range(state, p, range)
-  local h = state.hogger
-  return h.hp > 0 and h.state ~= "reset"
-         and world.dist(p.x, p.y, h.x, h.y) <= range
+  local enemy = current_enemy(state, p)
+  return enemy ~= nil and world.dist(p.x, p.y, enemy.x, enemy.y) <= range
+end
+
+local function player_damage_npc(state, p, npc, amount, kind, ev)
+  local crit = false
+  if kind == "autohit" or kind == "ability" then
+    crit = crit_roll(state, "player", MOB_TYPES[npc.kind] and "mob" or "add")
+  end
+  if crit then amount = amount * model.p("crit_mult_player") end
+  npc.hp = npc.hp - amount
+  p.dmg_done = p.dmg_done + amount
+  if p.stealth then p.stealth = false end
+  if MOB_TYPES[npc.kind] and npc.state ~= "flee" then
+    npc.state = "combat"
+    npc.target_pid = p.id
+  elseif npc.kind == "add" then
+    npc.state = "combat"
+    npc.target_pid = npc.target_pid or p.id
+  end
+  events.push(ev, state.tick, "damage", p.id, npc.id, amount, crit)
+  if npc.hp <= 0 then mob_died(state, npc, p, ev) end
+end
+
+-- Schaden auf das aktuelle Ziel des Spielers (Hogger oder NPC)
+local function player_damage_enemy(state, p, amount, kind, ev)
+  local enemy, etype = current_enemy(state, p)
+  if not enemy then return end
+  if etype == "hogger" then
+    player_damage_hogger(state, p, amount, kind, ev)
+  else
+    player_damage_npc(state, p, enemy, amount, kind, ev)
+  end
 end
 
 local function set_stealth(state, p, on)
@@ -127,7 +201,7 @@ end
 
 local function dmg_fx(param)
   return function(state, p, _, ev)
-    player_damage_hogger(state, p, model.p(param), "ability", ev)
+    player_damage_enemy(state, p, model.p(param), "ability", ev)
   end
 end
 
@@ -170,13 +244,13 @@ local ABILITIES = {
     { id = "sinister", cost = "rogue_sinister_energy", range = "melee_range",
       target = "enemy",
       effect = function(state, p, _, ev)
-        player_damage_hogger(state, p, model.p("rogue_sinister_dmg"), "ability", ev)
+        player_damage_enemy(state, p, model.p("rogue_sinister_dmg"), "ability", ev)
         p.cp = math.min(5, p.cp + 1)
       end },
     { id = "evis", cost = "rogue_evis_energy", range = "melee_range",
       target = "enemy", requires_cp = true,
       effect = function(state, p, _, ev)
-        player_damage_hogger(state, p,
+        player_damage_enemy(state, p,
           model.p("rogue_evis_dmg_per_cp") * p.cp, "ability", ev)
         p.cp = 0
       end },
@@ -420,12 +494,12 @@ local function player_tick(state, p, inp, ev)
         dmg = dmg + model.p("paladin_seal_bonus_dmg")
       end
     end
-    if p.target == world.HOGGER_ID and enemy_in_range(state, p, range) then
+    if enemy_in_range(state, p, range) then
       p.next_auto = model.p("autohit_interval")
       if attack ~= "shot" and attack ~= "wand" and p.seal_hits > 0 then
         p.seal_hits = p.seal_hits - 1
       end
-      player_damage_hogger(state, p, dmg, "autohit", ev)
+      player_damage_enemy(state, p, dmg, "autohit", ev)
     end
   end
 
@@ -442,7 +516,143 @@ local function remove_npc(state, npc)
   state.npcs[npc.id] = nil
 end
 
+-- Mob/Add greift einen Spieler an; Mobs kritten mit Standard-5 % (GDD 7.2),
+-- Adds nie (GDD 9.2)
+local function npc_damage_player(state, npc, p, ev)
+  local dmg = MOB_TYPES[npc.kind] and model.p(npc.kind .. "_dmg")
+                                    or model.p("add_dmg")
+  local kind = MOB_TYPES[npc.kind] and "mob" or "add"
+  local crit = crit_roll(state, "hogger", kind)
+  if crit then dmg = dmg * model.p("crit_mult_hogger") end
+  p.hp = p.hp - dmg
+  events.push(ev, state.tick, "damage", npc.id, p.id, dmg, crit)
+  if p.hp <= 0 then
+    kill_player(state, p, ev, crit)
+    if MOB_TYPES[npc.kind] then
+      -- die Pflicht-Anekdote (GDD 7.2)
+      events.push(ev, state.tick, "mob_death_by", p.id, npc.kind, nil, nil)
+    end
+  end
+end
+
+local function mob_tick(state, npc, ev)
+  local typ = npc.kind
+  local speed = model.p("move_speed_alive")
+  local function move_towards(tx, ty)
+    local d = world.dist(npc.x, npc.y, tx, ty)
+    if d < 2 then return end
+    local step_len = math.min(speed * DT, d)
+    npc.x = npc.x + (tx - npc.x) / d * step_len
+    npc.y = npc.y + (ty - npc.y) / d * step_len
+  end
+
+  -- Leash an den Spawn (GDD 7.2)
+  if npc.state ~= "leash"
+     and world.dist(npc.x, npc.y, npc.spawn_x, npc.spawn_y) > 450 then
+    npc.state = "leash"
+    npc.target_pid = nil
+    npc.hp = npc.max_hp
+  end
+
+  if npc.state == "leash" then
+    move_towards(npc.spawn_x, npc.spawn_y)
+    if world.dist(npc.x, npc.y, npc.spawn_x, npc.spawn_y) < 8 then
+      npc.state = "idle"
+      npc.hp = npc.max_hp
+    end
+    return
+  end
+
+  -- Wildschwein flieht bei 25 % HP (GDD 7.2)
+  if typ == "boar" and npc.state == "combat"
+     and npc.hp <= model.p("boar_flee_hp_pct") * npc.max_hp then
+    npc.state = "flee"
+  end
+  if npc.state == "flee" then
+    local from = state.players[npc.target_pid]
+    if from then
+      local dx, dy = npc.x - from.x, npc.y - from.y
+      local d = math.max(1, math.sqrt(dx * dx + dy * dy))
+      npc.x = npc.x + dx / d * speed * DT
+      npc.y = npc.y + dy / d * speed * DT
+      npc.x, npc.y = map.clamp(npc.x, npc.y)
+    end
+    return -- bis der Leash greift
+  end
+
+  if npc.state == "idle" then
+    -- aggressive Typen: Wolf/Murloc ab Naehe (GDD 7.2)
+    if typ == "wolf" or typ == "murloc" then
+      for _, p in ipairs(state.players) do
+        if p.alive and not p.stealth
+           and world.dist(p.x, p.y, npc.x, npc.y) <= model.p("wolf_aggro_radius") then
+          npc.state = "combat"
+          npc.target_pid = p.id
+          break
+        end
+      end
+    end
+    return
+  end
+
+  -- Kampf
+  local target = state.players[npc.target_pid]
+  if not (target and target.alive) then
+    npc.state = "leash"
+    return
+  end
+  local d = world.dist(npc.x, npc.y, target.x, target.y)
+  if d > model.p("melee_range") then
+    move_towards(target.x, target.y)
+    return
+  end
+  npc.next_auto = npc.next_auto - DT
+  if npc.next_auto <= 0 then
+    npc.next_auto = model.p("mob_attack_interval")
+    npc_damage_player(state, npc, target, ev)
+  end
+end
+
+local function add_tick(state, npc, ev)
+  if npc.state == "idle" then
+    for _, p in ipairs(state.players) do
+      if p.alive and not p.stealth
+         and world.dist(p.x, p.y, npc.x, npc.y) <= 150 then
+        npc.state = "combat"
+        npc.target_pid = p.id
+        break
+      end
+    end
+    return
+  end
+  local target = state.players[npc.target_pid]
+  if not (target and target.alive) then
+    npc.state = "idle"
+    npc.target_pid = nil
+    return
+  end
+  if world.dist(npc.x, npc.y, npc.spawn_x, npc.spawn_y) > 400 then
+    npc.state = "idle" -- Welpen bleiben am Huegelfuss (GDD 9.2)
+    npc.target_pid = nil
+    return
+  end
+  local d = world.dist(npc.x, npc.y, target.x, target.y)
+  if d > model.p("melee_range") then
+    local step_len = math.min(model.p("move_speed_alive") * DT, d)
+    npc.x = npc.x + (target.x - npc.x) / d * step_len
+    npc.y = npc.y + (target.y - npc.y) / d * step_len
+    return
+  end
+  npc.next_auto = npc.next_auto - DT
+  if npc.next_auto <= 0 then
+    npc.next_auto = model.p("add_attack_interval")
+    npc_damage_player(state, npc, target, ev)
+  end
+end
+
 local function npc_tick(state, npc, ev)
+  if MOB_TYPES[npc.kind] then return mob_tick(state, npc, ev) end
+  if npc.kind == "add" then return add_tick(state, npc, ev) end
   if npc.kind ~= "imp" then return end
   local owner = state.players[npc.owner]
   if not owner or not owner.alive then
@@ -802,6 +1012,42 @@ function S.step(state, inputs)
   end
   each_npc(state, function(npc) npc_tick(state, npc, ev) end)
   hogger_tick(state, ev)
+
+  -- Mob-Respawn: 120 s am festen Punkt (GDD 7.2)
+  local active_slots = model.mob_slots(math.max(1, state.n_scale))
+  for slot = 1, #map.MOB_SPAWNS do
+    local t = state.mob_respawn[slot]
+    if t then
+      t = t - DT
+      if t <= 0 then
+        state.mob_respawn[slot] = nil
+        if slot <= active_slots then world.spawn_mob(state, slot) end
+      else
+        state.mob_respawn[slot] = t
+      end
+    end
+  end
+
+  -- Bodenbeute: Verfall + Aufheben, sofort Zaehler statt Inventar (GDD 7.3)
+  for id = 1, 60 do
+    local l = state.loot[id]
+    if l then
+      l.t = l.t - DT
+      if l.t <= 0 then
+        state.loot[id] = nil
+      else
+        for _, p in ipairs(state.players) do
+          if p.alive and world.dist(p.x, p.y, l.x, l.y) <= 30 then
+            p.kupfer = p.kupfer + l.kupfer
+            p.plunder = p.plunder + 1
+            events.push(ev, state.tick, "loot_pickup", p.id, l.item_idx, l.kupfer, nil)
+            state.loot[id] = nil
+            break
+          end
+        end
+      end
+    end
+  end
 
   if state.hogger.hp <= 0 then
     end_try(state, ev, true)
