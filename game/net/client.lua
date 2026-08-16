@@ -28,6 +28,7 @@ function C.new(ip, name)
   self.ctick = 0
   self.history = {}      -- ctick -> mask (fuer Redundanz + Replay)
   self.cosmetics = {}    -- Ereignisse fuer Darstellung
+  self.names = {}        -- pid -> Charaktername (Roster)
   self.predicted = nil   -- { x, y } eigene Position nach Rebase+Replay
   self.accumulator = 0
   self.connected = false
@@ -85,6 +86,8 @@ function C:_handle(data)
   elseif msg == wire.MSG.PARAM_SET then
     local k, v = wire.read_param_set(data, off)
     if model.params[k] then model.params[k].wert = v end
+  elseif msg == wire.MSG.ROSTER then
+    self.names = wire.read_roster(data, off)
   end
 end
 

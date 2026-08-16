@@ -123,6 +123,7 @@ function H:_handle(peer, data)
                            ack = 0, next_ctick = nil, facing = 0 }
     self.by_pid[pid] = self.clients[peer]
     peer:send(wire.welcome(pid, model.params), CH_RELIABLE, "reliable")
+    self.host:broadcast(wire.roster(self.state.players), CH_RELIABLE, "reliable")
   elseif c and msg == wire.MSG.INPUT then
     local ctick, m0, m1, m2 = wire.read_input(data, off)
     local _, _, _, _, facing = wire.read_input(data, off)

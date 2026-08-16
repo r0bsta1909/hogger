@@ -287,10 +287,156 @@ function R:draw(view, ui)
       oy - radius * 0.66 + 16)
   end
 
-  -- Zoom-Anzeige am Ring (GDD 4.2)
-  love.graphics.setColor(0.6, 0.56, 0.45, 1)
-  love.graphics.print("Zoom " .. self.zoom .. "  (+/-)", ox + radius * 0.6,
-    oy + radius * 0.72)
+  -- ====== Ring-UI komplett (GDD 4.2/4.3) ======
+  local names = view.names or {}
+  local RES_COL = { mana = { 0.25, 0.45, 0.9 }, rage = { 0.9, 0.2, 0.2 },
+                    energy = { 0.9, 0.85, 0.2 } }
+  local RACE_K = { mensch = "M", zwerg = "Z", nachtelf = "N", gnom = "G" }
+
+  -- Einheitenfenster nach Original-Vorbild: Portrait, Namensbalken,
+  -- Stufen-Medaillon, HP/Ressource (GDD 4.3)
+  local function unit_frame(x, y, u)
+    love.graphics.setColor(0.07, 0.07, 0.09, 0.85)
+    love.graphics.rectangle("fill", x, y, 214, 48, 3, 3)
+    local px, py = x + 24, y + 24
+    love.graphics.setColor(0.35, 0.30, 0.24, 1)
+    love.graphics.circle("fill", px, py, 18)
+    if u.elite then -- goldener Elite-Drachenrahmen (Platzhalter-Doppelring)
+      love.graphics.setColor(0.95, 0.78, 0.2, 1)
+      love.graphics.setLineWidth(3)
+      love.graphics.circle("line", px, py, 21)
+      love.graphics.setLineWidth(1)
+    end
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(u.rk or "?", px - 5, py - 8)
+    love.graphics.setColor(0.85, 0.72, 0.25, 1)
+    love.graphics.circle("fill", px + 15, py + 13, 9)
+    love.graphics.setColor(0, 0, 0, 1)
+    local lv = tostring(u.level or 1)
+    love.graphics.print(lv, px + 15 - #lv * 4, py + 6)
+    love.graphics.setColor(u.name_col[1], u.name_col[2], u.name_col[3], 1)
+    love.graphics.print(u.name or "?", x + 50, y + 4)
+    love.graphics.setColor(0.85, 0.85, 0.8, 1)
+    love.graphics.print(string.format("%d/%d", u.hp or 0, u.maxhp or 1), x + 50, y + 18)
+    hp_bar(x + 128, y + 24, 80, (u.hp or 0) / math.max(1, u.maxhp or 1), 0.2, 0.8, 0.2)
+    if u.res_frac then
+      local c = u.res_col or RES_COL.mana
+      hp_bar(x + 128, y + 34, 80, u.res_frac, c[1], c[2], c[3])
+    end
+  end
+
+  -- Oben links: das eigene Einheitenfenster (GDD 4.3)
+  if me and me.class then
+    unit_frame(12, 10, {
+      name = names[view.me] or "?", rk = RACE_K[me.race] or "?",
+      level = 1, hp = me.hp, maxhp = model.hp_for_class(me.class),
+      res_frac = (me.resource or 0) / 100,
+      res_col = RES_COL[model.classes[me.class].resource],
+      name_col = { 0.95, 0.92, 0.8 },
+    })
+    if me.class == "rogue" and (me.cp or 0) > 0 then
+      love.graphics.setColor(0.95, 0.35, 0.35, 1)
+      love.graphics.print("CP " .. me.cp, 232, 14)
+    end
+    love.graphics.setColor(0.6, 0.56, 0.45, 1)
+    love.graphics.print(string.format("Kupfer %d   Plunder %d",
+      me.kupfer or 0, me.plunder or 0), 14, 62)
+  end
+
+  -- Oben rechts: Zielfenster, Ziel des Ziels, Buff-Leiste (GDD 4.3)
+  if me then
+    local t = me.target
+    local frame
+    if t == 0 then
+      frame = { name = "Hogger", rk = "H", level = 11, elite = true,
+                hp = view.hogger.hp, maxhp = view.hogger.max_hp,
+                name_col = { 0.9, 0.25, 0.2 } }
+    elseif view.players[t] then
+      local q = view.players[t]
+      frame = { name = names[t] or "?", rk = RACE_K[q.race] or "?", level = 1,
+                hp = q.hp, maxhp = q.class and model.hp_for_class(q.class) or 1,
+                res_frac = (q.resource or 0) / 100,
+                res_col = q.class and RES_COL[model.classes[q.class].resource],
+                name_col = { 0.4, 0.9, 0.4 } }
+    elseif view.npcs and view.npcs[t] then
+      local npc = view.npcs[t]
+      local hostile = npc.kind == "add" or npc.kind == "wolf" or npc.kind == "murloc"
+      local mobdef = model.mobs[npc.kind]
+      frame = { name = mobdef and mobdef.name_de
+                  or (npc.kind == "add" and "Gnoll-Welpe" or "Wichtel"),
+                rk = "-", level = 1, hp = npc.hp,
+                maxhp = npc.kind == "add" and model.p("add_hp")
+                        or (mobdef and model.p(npc.kind .. "_hp")) or 1,
+                name_col = hostile and { 0.9, 0.25, 0.2 } or { 0.9, 0.8, 0.3 } }
+    end
+    if frame then
+      unit_frame(w - 226, 10, frame)
+      -- Ziel des Ziels: wen verpruegelt Hogger gerade? (GDD 4.3)
+      if t == 0 and view.hogger.target and names[view.hogger.target] then
+        love.graphics.setColor(0.07, 0.07, 0.09, 0.85)
+        love.graphics.rectangle("fill", w - 226, 62, 214, 20, 3, 3)
+        love.graphics.setColor(0.85, 0.8, 0.7, 1)
+        love.graphics.print("> " .. names[view.hogger.target], w - 220, 64)
+      end
+    end
+    -- Buff-Leiste: nur Buffs, die Level-1-Klassen haben (GDD 4.3)
+    local buffs = {}
+    if me.shout then buffs[#buffs + 1] = { "SR", me.shout_rest } end
+    if me.seal then buffs[#buffs + 1] = { "SG" } end
+    if me.frost_armor then buffs[#buffs + 1] = { "FR" } end
+    if me.stealth then buffs[#buffs + 1] = { "VS" } end
+    for i, b in ipairs(buffs) do
+      local bx, by = w - 226 + (i - 1) * 34, 88
+      love.graphics.setColor(0.2, 0.25, 0.4, 0.9)
+      love.graphics.rectangle("fill", bx, by, 30, 30, 3, 3)
+      love.graphics.setColor(0.9, 0.9, 0.95, 1)
+      love.graphics.print(b[1], bx + 6, by + 2)
+      if b[2] and b[2] > 0 then
+        love.graphics.print(tostring(b[2]), bx + 8, by + 15)
+      end
+    end
+  end
+
+  -- XP-Bogen an der Innenkante, fuellt im Uhrzeigersinn (GDD 4.2)
+  if me then
+    local frac = math.min(1, (me.xp or 0) / model.p("xp_level2"))
+    love.graphics.setColor(0.35, 0.30, 0.2, 0.6)
+    love.graphics.setLineWidth(3)
+    love.graphics.circle("line", ox, oy, radius - 8)
+    if frac > 0 then
+      love.graphics.setColor(0.75, 0.45, 0.85, 0.9)
+      love.graphics.arc("line", "open", ox, oy, radius - 8,
+        -math.pi / 2, -math.pi / 2 + frac * 2 * math.pi)
+    end
+    love.graphics.setLineWidth(1)
+    -- Tooltip bei Hover (GDD 4.2)
+    if ui.mouse then
+      local md = math.sqrt((ui.mouse[1] - ox) ^ 2 + (ui.mouse[2] - oy) ^ 2)
+      if md > radius - 16 and md < radius + 4 then
+        local rest = math.max(0, model.p("xp_level2") - (me.xp or 0))
+        love.graphics.setColor(0.07, 0.07, 0.09, 0.9)
+        love.graphics.rectangle("fill", ui.mouse[1] + 10, ui.mouse[2] - 24, 214, 20)
+        love.graphics.setColor(0.95, 0.92, 0.8, 1)
+        love.graphics.print("Noch " .. rest .. " Erfahrung bis Stufe 2.",
+          ui.mouse[1] + 14, ui.mouse[2] - 22)
+      end
+    end
+  end
+
+  -- Zoom-Knoepfe am Ring (klassische Position, GDD 4.2) + Stufenanzeige
+  do
+    local zx, zy = ox + radius * 0.86, oy + radius * 0.42
+    for i, sym in ipairs({ "+", "-" }) do
+      local by = zy + (i - 1) * 34
+      love.graphics.setColor(0.15, 0.14, 0.11, 0.9)
+      love.graphics.circle("fill", zx, by, 13)
+      love.graphics.setColor(0.78, 0.63, 0.28, 1)
+      love.graphics.circle("line", zx, by, 13)
+      love.graphics.print(sym, zx - 4, by - 8)
+    end
+    love.graphics.setColor(0.6, 0.56, 0.45, 1)
+    love.graphics.print("Zoom " .. self.zoom, zx - 24, zy + 60)
+  end
 
   -- Faehigkeitenleiste unten mittig, aus den Faehigkeits-Spezifikationen
   -- generiert — nie mehr Buttons als die Klasse Faehigkeiten hat (GDD 4.2)
@@ -303,7 +449,6 @@ function R:draw(view, ui)
     for i, b in ipairs(buttons) do
       local x, y = bx + (i - 1) * 48, oy + radius - 34
       assets.draw(b[1], x, y, 1)
-      -- Cooldown-Sweep (lokale Anzeige)
       local cd = ui.cooldowns and ui.cooldowns[i] or 0
       if cd > 0 then
         love.graphics.setColor(0, 0, 0, 0.6)
@@ -312,24 +457,6 @@ function R:draw(view, ui)
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.print(b[2], x - 18, y - 18)
     end
-    -- Ressourcen-/HP-Balken des eigenen Charakters (oben links minimal)
-    local maxhp = model.hp_for_class(me.class)
-    love.graphics.setColor(0.9, 0.88, 0.8, 1)
-    love.graphics.print(string.format("%s  HP %d/%d", me.class, me.hp, maxhp), 16, 14)
-    hp_bar(76, 34, 60, me.hp / maxhp, 0.2, 0.8, 0.2)
-    local res_type = model.classes[me.class].resource
-    hp_bar(76, 42, 60, (me.resource or 0) / 100,
-      res_type == "rage" and 0.9 or res_type == "energy" and 0.9 or 0.25,
-      res_type == "rage" and 0.2 or res_type == "energy" and 0.85 or 0.45,
-      res_type == "energy" and 0.2 or 0.9)
-    if me.class == "rogue" and (me.cp or 0) > 0 then
-      love.graphics.setColor(0.95, 0.35, 0.35, 1)
-      love.graphics.print("CP " .. me.cp, 142, 36)
-    end
-    -- XP/Kupfer/Plunder-Zaehler (XP-Bogen folgt in M3-4)
-    love.graphics.setColor(0.6, 0.56, 0.45, 1)
-    love.graphics.print(string.format("XP %d/%d   Kupfer %d   Plunder %d",
-      me.xp or 0, model.p("xp_level2"), me.kupfer or 0, me.plunder or 0), 16, 52)
     -- Cast-/Wiederbelebungsbalken
     if me.casting or me.reviving then
       hp_bar(ox, oy + 40, 50, me.progress, 0.9, 0.8, 0.3)
