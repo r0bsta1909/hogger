@@ -22,9 +22,12 @@ end
 
 M.params = {
   -- Hogger (GDD 9.2 / 9.3)
-  hogger_hp_coeff        = p(120, 40, 300, 5, "9.3"),
+  -- HP = slope x N - offset (affin, v2.6): der Sockel bildet den
+  -- Kleingruppen-Overhead ab; offset=0, slope=120 ergibt die alte Formel
+  hogger_hp_slope        = p(430, 100, 800, 10, "9.3"),
+  hogger_hp_offset       = p(950, 0, 3000, 50, "9.3"),
   hogger_autohit_dmg     = p(30, 10, 60, 1, "9.2"),
-  hogger_cleave_divisor  = p(8, 2, 40, 1, "9.2"),   -- Cleave-Ziele = ceil(N / Divisor)
+  hogger_cleave_divisor  = p(5, 2, 40, 1, "9.2"),   -- Cleave-Ziele = ceil(N / Divisor)
   hogger_autohit_interval= p(1.8, 1.0, 3.0, 0.1, "9.2"),
   hogger_speed           = p(155, 100, 250, 5, "9.2"),
   hogger_aggro_radius    = p(250, 100, 500, 10, "9.1"),
@@ -35,7 +38,7 @@ M.params = {
   hogger_slice_bleed_interval = p(2.0, 0.5, 4.0, 0.5, "9.2"),
   hogger_slice_duration  = p(6, 2, 12, 1, "9.2"),
   hogger_slice_cd        = p(12, 4, 30, 1, "9.2"),
-  hogger_charge_cd       = p(15, 5, 60, 1, "9.2"),
+  hogger_charge_cd       = p(10, 5, 60, 1, "9.2"),
   hogger_charge_dmg      = p(25, 5, 60, 1, "9.2"),
   hogger_charge_knockback= p(120, 0, 300, 10, "9.2"),
   hogger_charge_windup   = p(0.8, 0.2, 2.0, 0.1, "9.2"),
@@ -131,13 +134,14 @@ M.params = {
 
   -- Loop / Todesstrafe (GDD 6, 7.1, 9.3)
   respawn_base           = p(8, 0, 30, 1, "9.3"),
-  respawn_factor         = p(0.3, 0, 1.0, 0.05, "9.3"),
+  respawn_factor         = p(0.5, 0, 1.0, 0.05, "9.3"),
   respawn_min            = p(10, 0, 30, 1, "9.3"),
-  respawn_max            = p(20, 5, 60, 1, "9.3"),
+  respawn_max            = p(28, 5, 60, 1, "9.3"),
   try_time_limit         = p(900, 300, 1800, 60, "6"),
-  -- Feldposition = Feinsteller der Todesstrafe (GDD 7.1); Richtwerte, fixiert per M1-Sweep
-  graveyard_to_field_dist= p(2520, 500, 6000, 50, "7.1"),
-  field_to_hill_dist     = p(1400, 300, 4000, 50, "7.1"),
+  -- Feldposition = Feinsteller der Todesstrafe (GDD 7.1); Laufweg-Anteil
+  -- 15 s gesamt (M1-Sweep): Geisterlauf 9 s + Restanmarsch 6 s
+  graveyard_to_field_dist= p(1890, 500, 6000, 50, "7.1"),
+  field_to_hill_dist     = p(840, 300, 4000, 50, "7.1"),
 
   -- Ambient-Mobs (GDD 7.2 / 7.3)
   mob_slot_base          = p(4, 0, 12, 1, "7.2"),
@@ -302,7 +306,7 @@ local function clamp(x, lo, hi)
 end
 
 function M.hogger_hp(n)
-  return M.p("hogger_hp_coeff") * n
+  return math.max(1, M.p("hogger_hp_slope") * n - M.p("hogger_hp_offset"))
 end
 
 function M.eat_heal_per_second(n)

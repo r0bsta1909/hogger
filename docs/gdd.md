@@ -6,7 +6,7 @@
 **IP-Status:** Privat, WoW-Namen, -Icons und -Referenzen werden 1:1 verwendet
 **Datum:** 2026-08-15
 
-**Changelog v2.6 (M1-Befunde, Rob-Entscheidungen zu Issues #2/#3/#4):** Hogger erhält **Rundumschlag (Cleave)**: Autohit trifft bis zu `ceil(N/8)` Ziele im Nahkampf, Divisor justierbar im Panel — Begründung: sein Droh-Durchsatz muss mit N skalieren, sonst überrollen große Raids (M1-Kapazitätsbeweis; Fiktion: umzingelt drischt der Gnoll um sich) · Fress-Unterbrechung moderat verschärft: Schadensschwelle 2,5 % → 5 % Max-HP, Unterbrecher `ceil(N/10)+1` → `+2` · Nahkampf-Reichweite 40 px festgeschrieben (war unspezifiziert) · Sim-Agenten erhalten ein **Streuungsmodell** (Skill-Faktor je Spieler 0,7–1,3 auf verursachten Schaden, Gruppenfaktor je Lauf 0,85–1,15; Kap. 17.2) — ohne Streuung sind Siegquoten-Bänder wie F1 nicht messbar · Klarstellung Todesstrafe: Gesamtstrafe = N-skalierender Respawn-Timer (9.3) + Geisterlauf + Restanmarsch; der Korridor 25–35 s beschreibt die Spanne über N, die Feldposition verschiebt den Laufweg-Anteil
+**Changelog v2.6 (M1-Befunde, Rob-Entscheidungen zu Issues #2/#3/#4):** Hogger erhält **Rundumschlag (Cleave)**: Autohit trifft bis zu `ceil(N/8)` Ziele im Nahkampf, Divisor justierbar im Panel — Begründung: sein Droh-Durchsatz muss mit N skalieren, sonst überrollen große Raids (M1-Kapazitätsbeweis; Fiktion: umzingelt drischt der Gnoll um sich) · Fress-Unterbrechung moderat verschärft: Schadensschwelle 2,5 % → 5 % Max-HP, Unterbrecher `ceil(N/10)+1` → `+2` · Nahkampf-Reichweite 40 px festgeschrieben (war unspezifiziert) · Sim-Agenten erhalten ein **Streuungsmodell** (Skill-Faktor je Spieler 0,7–1,3 auf verursachten Schaden, Gruppenfaktor je Lauf 0,85–1,15; Kap. 17.2) — ohne Streuung sind Siegquoten-Bänder wie F1 nicht messbar · Klarstellung Todesstrafe: Gesamtstrafe = N-skalierender Respawn-Timer (9.3) + Geisterlauf + Restanmarsch; die Feldposition verschiebt den Laufweg-Anteil · **M1-Sweep-Fixierung (alle Werte im Tuning-Panel justierbar):** Hogger-HP affin `430 × N − 950` (der Sockel bildet den Kleingruppen-Overhead ab; Formel per Sweep bestimmt — die Siegquoten-Bänder je N kollabieren exakt auf eine Gerade), Cleave-Divisor 5, Charge-CD 10 s, Respawn `clamp(8 + 0,5 × N; 10; 28)`, Laufweg 15 s (Geist 9 s + Anmarsch 6 s) → Gesamttodesstrafe 25,5 s (N=5) bis 43 s (N=40)
 **Changelog v2.5 (ADR-001, Kap. 14):** Snapshots mit voller Tickrate 60 Hz als Vollzustand statt 20 Hz + Interpolation; Client-Input 60 Hz mit 3-Tick-Redundanz statt 30 Hz; Client-Darstellung per Rebase + Replay (eine Zeitbasis). Begründung, Rechnung und Revisionsauslöser in `docs/adr/001-snapshot-strategie.md`.
 **Changelog v2.4 (Review-Einarbeitung):** Fünf-Sekunden-Regel statt Kein-Regen (10 Mana/s nach 5 s Cast-Pause, Vanilla-authentisch; Manatränke bewusst abgelehnt) · Charge wählt nur Ziele im Leash-Radius + 2-s-Leash-Hysterese gegen versehentliche Full-Heal-Resets · Fress-Unterbrechung zusätzlich per Schadensschwelle (≥ 2,5 % Max-HP im Kanal) gegen Stalling · Heil-Bedrohung 1,5 → 0,75 (Panel-Parameter) · Render-Hierarchie + Floating-Text-Budget + gedimmte Geister gegen Icon-Gulasch bei N≥20 · IP-Fallback-Zeile im Glitch-Screen nach 5 s Discovery-Fehlschlag · Turtle-Agent in der Sim gegen Heil-Stalling
 **Changelog v2.3:** Wiederbelebung nicht am Friedhof, sondern am Wiederbelebungsfeld am Ende des Elwynn-Pfads Richtung Hogger · Die acht Klassenicons sind nur als Geist sichtbar und verschwinden nach der Wiederbelebung · Statt 40 dominanter Leichen nur dezent verstreute Totenkopf-Icons · Geistheiler ist funktionslose Szenerie mit Gag · Feldposition als expliziter Todesstrafen-Stellhebel im Tuning-Panel
@@ -126,7 +126,7 @@ kurzer Anmarsch zum Hogger Hill → Kampf → Tod → Geisterlauf zum Feld (Klas
 
 - **Ein Try** beginnt mit Leeroys Signal (Kap. 10) und endet mit Hoggers Tod ODER nach **15:00 auf der hochzählenden Uhr** — dann leasht Hogger zurück, heilt voll, Leeroy sagt den Wipe an ("Okay. Das war nichts. Nächster Try."), die Statistik-Tafel erscheint kurz (Kap. 11), der Try-Zähler tickt hoch, weiter geht's. Kein Menü, keine Lobby zwischen Trys — der Fluch macht keine Pausen.
 - **Try-Zähler:** persistiert in session.json und startet beim allerersten Host-Start bei einer zufälligen vierstelligen Zahl (Leeroy zählt ja schon ewig). Angezeigt wird er nur in Leeroys Ansagen und auf der Statistik-Tafel.
-- **Sekundenloop des Spielers:** hinlaufen (10–20 s) → 5–15 s Uptime am Boss → Tod → 10–20 s Geist → Wiederbelebung. Niemand ist länger als ~30 s handlungsunfähig. **Die Gesamttodesstrafe (25–35 s) bleibt die tragende Balancing-Konstante** und wird per Sim-Sweep fixiert (Kap. 17), nie nach Gefühl verändert.
+- **Sekundenloop des Spielers:** hinlaufen → 5–15 s Uptime am Boss → Tod → Geist → Wiederbelebung. **Die Gesamttodesstrafe bleibt die tragende Balancing-Konstante**, per M1-Sim-Sweep fixiert (Kap. 17, v2.6): Respawn-Timer (N-skalierend, 9.3) + 15 s Laufweg = 25,5 s bei N=5 bis 43 s bei N=40 — große Raids warten länger, damit die Welle dicht statt endlos wird. Nie nach Gefühl verändern.
 - **N-Skalierung pro Try:** Hoggers Werte skalieren mit der Anzahl verbundener, wiederbelebbarer Spieler beim Try-Start. Wer mitten im Try joint, spielt sofort mit, zählt aber erst ab dem nächsten Try in die Skalierung. Leaver reduzieren nichts. Leeroy zählt nie mit.
 
 ---
@@ -139,7 +139,7 @@ Eine zusammenhängende Karte (~3×2 Bildschirmradien bei mittlerem Zoom), als Da
 
 - **Friedhof** (Nordosten): Geistheiler-Icon und Leeroys Standposition zwischen den Trys; unantastbare Zone (Hogger betritt sie nie). Hier wird nur gespawnt, nicht wiederbelebt. Der **Geistheiler ist funktionslose Szenerie** — klickt man ihn an, kommentiert Leeroy: "Der funktioniert nicht mehr. Frag nicht."
 - **Der Elwynn-Pfad** (Diagonale): der Weg vom Friedhof Richtung Südwesten, offene Fläche mit Baum-Icons als Sichtblocker und Charge-Köder-Geometrie, Fluss-Linie am Südrand.
-- **Das Wiederbelebungsfeld** (eigene Unterzone im Zonenbanner): unmittelbar am Ende des Pfads, vor dem Anmarsch auf den Hügel, außerhalb von Hoggers Leash-Zone. Hier liegen die acht Klassenicons (nur für Geister sichtbar, Kap. 5) und ein paar der Deko-Schädel. **Die Feldposition ist ein Balancing-Hebel:** Sie teilt die Todesstrafe in Geisterlauf (Friedhof → Feld, 150 % Tempo) und lebendigen Restanmarsch (Feld → Hogger) auf — die Gesamtstrafe von 25–35 s bleibt die Konstante, die Feldposition ist der Feinsteller dafür und liegt im Tuning-Panel.
+- **Das Wiederbelebungsfeld** (eigene Unterzone im Zonenbanner): unmittelbar am Ende des Pfads, vor dem Anmarsch auf den Hügel, außerhalb von Hoggers Leash-Zone. Hier liegen die acht Klassenicons (nur für Geister sichtbar, Kap. 5) und ein paar der Deko-Schädel. **Die Feldposition ist ein Balancing-Hebel:** Sie teilt die Todesstrafe in Geisterlauf (Friedhof → Feld, 150 % Tempo) und lebendigen Restanmarsch (Feld → Hogger) auf — die Gesamtstrafe (25,5–43 s über N, Kap. 6) bleibt die Konstante, die Feldposition ist der Feinsteller dafür und liegt im Tuning-Panel (v2.6: Geisterlauf 9 s + Restanmarsch 6 s).
 - **Hogger Hill** (Südwesten): Plateau mit Rampe, Hoggers Leash-Zone (Radius 600 px um die Hügelmitte; verlässt er sie, resettet er mit voller HP). Rundherum einige Deko-Schädel (Kap. 2).
 
 ### 7.2 Ambient-Mobs
@@ -215,15 +215,15 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 
 | Wert | Formel/Zahl | Anmerkung |
 |---|---|---|
-| **HP** | 120 × N | N=5: 600 · N=10: 1.200 · N=40: 4.800 |
+| **HP** | 430 × N − 950 (affin, v2.6) | N=5: 1.200 · N=10: 3.350 · N=40: 16.250 — der Sockel bildet den Kleingruppen-Overhead ab |
 | Autohit | 30 Schaden alle 1,8 s | Stoff stirbt in 2, Platte in 3 Hits |
 | Kritchance | 5 %, ×2 (= 60) | oneshottet alles außer voller Platte — der "WAS?!"-Moment |
 | Tempo | 155 px/s | Weglaufen verzögert, rettet nicht |
 | Leash | 600 px | Kiten unmöglich |
 
-- **Rundumschlag (Cleave, ab v2.6):** Hoggers Autohit trifft zusätzlich bis zu `ceil(N/8) − 1` weitere Ziele mit Bedrohung im Nahkampf (insgesamt `ceil(N/8)` Ziele; bei N ≤ 8 reiner Einzelziel-Autohit — kleine Gruppen behalten den Vanilla-Gnoll). Divisor als Panel-Parameter, justierbar. Grund: Hoggers Droh-Durchsatz muss mit N wachsen, sonst überrollen große Raids ohne Zusammenarbeit (M1-Befund, Issue #3); Fiktion: umzingelt drischt er wild um sich.
+- **Rundumschlag (Cleave, ab v2.6):** Hoggers Autohit trifft zusätzlich bis zu `ceil(N/5) − 1` weitere Ziele mit Bedrohung im Nahkampf (insgesamt `ceil(N/5)` Ziele; bei N ≤ 5 reiner Einzelziel-Autohit — kleine Gruppen behalten den Vanilla-Gnoll). Divisor als Panel-Parameter, justierbar (Standard 5 per M1-Sweep). Grund: Hoggers Droh-Durchsatz muss mit N wachsen, sonst überrollen große Raids ohne Zusammenarbeit (M1-Befund, Issue #3); Fiktion: umzingelt drischt er wild um sich.
 - **Vicious Slice** (alle 12 s aufs aktuelle Ziel): 15 Sofortschaden + Blutung 5/2 s über 6 s — garantiert den Tod Angeschlagener, verhindert Heraus-Heilen.
-- **Rushing Charge** (CD 15 s): stürmt auf das am weitesten entfernte Ziel mit Bedrohung **innerhalb des Leash-Radius** (Ziele außerhalb sind nie Charge-Ziel — ein einzelner ungünstig stehender Jäger darf keinen Try ruinieren), 25 Schaden + 120 px Knockback, 0,8 s Anlauf mit blinkender Ziellinie auf der Minimap. **Kein Krit möglich.**
+- **Rushing Charge** (CD 10 s, v2.6 — mehr Backline-Druck bei großen N): stürmt auf das am weitesten entfernte Ziel mit Bedrohung **innerhalb des Leash-Radius** (Ziele außerhalb sind nie Charge-Ziel — ein einzelner ungünstig stehender Jäger darf keinen Try ruinieren), 25 Schaden + 120 px Knockback, 0,8 s Anlauf mit blinkender Ziellinie auf der Minimap. **Kein Krit möglich.**
 - **Fressen** (CD 20 s, Leiche in 200 px, HP < 90 %): zieht die nächste Leiche mit 1,0-s-Schlepp-Animation heran (schließt den Safe-Death-Exploit, dient als Wind-up), kanalisiert dann 8 s, heilt 1,5 % Max-HP/s (12 % gesamt). **Unterbrechung:** Treffer von `ceil(N/10) + 2` verschiedenen Spielern ODER kumulierter Schaden ≥ 5 % seiner Max-HP während des Kanals (v2.6, Issue #4: die alten Schwellen wurden von beiläufigem Schaden automatisch erfüllt) — die Schadensschwelle skaliert automatisch mit N und verhindert Stalling, wenn nach einem Frontlinien-Wipe kaum noch jemand in Reichweite lebt. **Zählerbalken am Hogger-Icon ("2/4") ist Pflicht-UI** — er lehrt das Wie; dass man während des Fressens angreifen muss, findet die Gruppe selbst heraus (bzw. Leeroy platzt irgendwann der Kragen, Kap. 10). Kein Krit auf Fress-Heilung, keine Krits auf Slice/Charge/DoT-Ticks — Choreo bleibt deterministisch.
 - **Gnoll-Welpen:** `floor(N/8)` Adds (20 HP, 10 Schaden/2 s, kein Krit, kein Respawn im Try) am Hügelfuß — dünnen bei großen Gruppen die Wellen aus und geben Nahkämpfern frühe Erfolgserlebnisse.
 
@@ -231,12 +231,12 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 
 | Größe | Formel | N=5 | N=10 | N=20 | N=40 |
 |---|---|---|---|---|---|
-| Hogger HP | 120 × N | 600 | 1.200 | 2.400 | 4.800 |
-| Fress-Heilung/Kanal | 12 % Max-HP | 72 | 144 | 288 | 576 |
+| Hogger HP | 430 × N − 950 | 1.200 | 3.350 | 7.650 | 16.250 |
+| Fress-Heilung/Kanal | 12 % Max-HP | 144 | 402 | 918 | 1.950 |
 | Unterbrecher | ceil(N/10)+2 | 3 | 3 | 4 | 6 |
-| Cleave-Ziele | ceil(N/8) | 1 | 2 | 3 | 5 |
+| Cleave-Ziele | ceil(N/5) | 1 | 2 | 4 | 8 |
 | Adds | floor(N/8) | 0 | 1 | 2 | 5 |
-| Respawn-Timer | clamp(8 + 0,3 × N; 10; 20) s | 10 | 11 | 14 | 20 |
+| Respawn-Timer | clamp(8 + 0,5 × N; 10; 28) s | 10,5 | 13 | 18 | 28 |
 
 **Keine Bots:** Bei kleinem N kompensiert der kurze Respawn-Timer die fehlende Masse — die Welle wird dichter, nicht größer. Der Sieg gehört immer echten Menschen (und Leeroy).
 
@@ -311,7 +311,7 @@ Beschaffung: Original-Dateien (IP egal) oder Eigenbau/Suno; Entscheidung pro Pos
 
 ## 13. Balancing & Falsifikation
 
-### 13.1 Attrition-Erwartungsmodell (Hypothese, sim-zu-validieren)
+### 13.1 Attrition-Erwartungsmodell (Hypothese v2.4 — durch M1 validiert und neu kalibriert; gültige Zahlen in 9.3 und im Tuning-Protokoll 17.9)
 
 Mittlere DPS pro lebendem Spieler ≈ 3,5 (8-Klassen-Mix mit Jäger-Grundlast); mittlere Lebensdauer am Boss ≈ 10 s; Totzeit pro Zyklus 25–35 s → effektive Uptime ≈ 25–30 %. Beispiel N=10: ~3 aktive Spieler × 3,5 DPS ≈ 10,5 DPS netto → 1.200 HP ≈ 115 s reine Schadenszeit; mit 2–3 Fress-Heilungen und Anlaufphasen landet der Try im 8–12-Minuten-Fenster. Ob der HP-Koeffizient 120 hält, entscheidet die Sim (F5).
 
@@ -453,7 +453,7 @@ Alle Parameter als **eine flache Tabelle** in `model.lua` (`M.params`, je `{wert
 
 | Gruppe | Parameter |
 |---|---|
-| Hogger | HP-Koeffizient, Autohit-Schaden/-Intervall, Cleave-Divisor, Tempo, Slice-Werte, Charge-CD/-Schaden/-Anlauf, Leash |
+| Hogger | HP-Steigung und HP-Sockel (HP = Steigung × N − Sockel), Autohit-Schaden/-Intervall, Cleave-Divisor, Tempo, Slice-Werte, Charge-CD/-Schaden/-Anlauf, Leash |
 | Fressen | Heilrate, Kanaldauer, CD, Zugradius, Zugdauer, Unterbrecher-Offset, Schadensschwelle (% Max-HP) |
 | Krits | Chance und Multiplikator, je Seite getrennt schaltbar (A/B-Gefühlstests) |
 | Spieler | HP je Rüstungsklasse, alle Fähigkeitswerte, Autohit/Zauberstab, Reichweiten, GCD, Tempo lebend/Geist, Fünf-Sekunden-Regel (Wartezeit, Regen-Rate), Bedrohung je Heilung |
