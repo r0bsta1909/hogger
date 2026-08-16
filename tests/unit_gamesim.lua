@@ -58,6 +58,63 @@ end
 T.ok(p1.alive, "step: Wiederbelebung nach Channel")
 T.eq(p1.class, "warrior", "step: Klasse vom Icon-Slot")
 T.eq(p1.hp, model.p("hp_plate"), "step: HP nach Ruestungsklasse")
+do -- Rasse regelkonform ausgewuerfelt (GDD 5)
+  local valid = false
+  for _, r in ipairs(model.classes.warrior.races) do
+    if r == p1.race then valid = true end
+  end
+  T.ok(valid, "step: Rasse gueltig fuer Klasse (" .. tostring(p1.race) .. ")")
+end
+
+-- M3: acht Klassen-Slots am Feld; Schurke, Verstohlenheit, Wichtel ----------
+T.eq(#world.CLASSES, 8, "world: acht Klassenicon-Slots")
+do
+  local st = world.new(3)
+  world.add_player(st, "sc")
+  world.add_player(st, "hx")
+  world.begin_try(st, {})
+  local input_mod = require("game.gamesim.input")
+  -- Schurke: Slot 4
+  local rogue = st.players[1]
+  local rx, ry = world.class_icon_pos(4)
+  rogue.x, rogue.y = rx, ry
+  -- Hexenmeister: Slot 7
+  local lock = st.players[2]
+  local lx, ly = world.class_icon_pos(7)
+  lock.x, lock.y = lx, ly
+  for _ = 1, math.ceil(2.2 / model.TICK_DT) do
+    step.step(st, {})
+  end
+  T.eq(rogue.class, "rogue", "step: Slot 4 ist Schurke")
+  T.eq(lock.class, "warlock", "step: Slot 7 ist Hexenmeister")
+  T.eq(lock.resource, model.p("mana_max"), "step: Hexer startet mit vollem Mana")
+  T.eq(rogue.resource, model.p("energy_max"), "step: Schurke startet mit voller Energie")
+  T.ok(model.classes.warlock.races[1] ~= nil and lock.race ~= nil,
+    "step: Hexer-Rasse gewuerfelt")
+  -- Verstohlenheit: Slot 3 druecken -> an, nochmal -> aus (GDD 8.2)
+  step.step(st, { [1] = { mask = input_mod.AB3 } })
+  step.step(st, { [1] = { mask = 0 } })
+  T.ok(rogue.stealth, "step: Verstohlenheit an")
+  T.ok(not st.hogger.threat[1] or st.hogger.threat[1] == 0,
+    "step: Hogger ignoriert Verstohlene")
+  for _ = 1, math.ceil(model.p("gcd") / model.TICK_DT) + 1 do
+    step.step(st, {})
+  end
+  step.step(st, { [1] = { mask = input_mod.AB3 } })
+  step.step(st, { [1] = { mask = 0 } })
+  T.ok(not rogue.stealth, "step: Verstohlenheit wieder aus")
+  -- Wichtel beschwoeren: Slot 2 (3-s-Cast, GDD 8.2)
+  step.step(st, { [2] = { mask = input_mod.AB2 } })
+  T.ok(lock.cast ~= nil, "step: Wichtel-Beschwoerung castet")
+  for _ = 1, math.ceil((model.p("warlock_imp_cast") + 0.2) / model.TICK_DT) do
+    step.step(st, { [2] = { mask = 0 } })
+  end
+  T.ok(lock.imp_id ~= nil and st.npcs[lock.imp_id] ~= nil,
+    "step: Wichtel existiert als NPC")
+  T.eq(st.npcs[lock.imp_id].hp, model.p("imp_hp"), "step: Wichtel-HP nach 8.2")
+  T.ok((st.hogger.threat[lock.imp_id] or 0) > 0,
+    "step: Wichtel zieht kurz Aggro")
+end
 
 -- Bot-Volllauf: Invarianten ueber 90 Simulationssekunden --------------------
 local state2 = world.new(7)

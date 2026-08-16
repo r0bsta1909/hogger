@@ -10,13 +10,19 @@ local events = require("game.gamesim.events")
 local M = {}
 
 M.HOGGER_ID = 0
-M.CLASSES_M2 = { "warrior", "hunter", "priest" } -- M2: 3 Klassen (GDD 15)
+-- M3: alle acht Vanilla-Allianz-Klassen (GDD 8.2); Reihenfolge = Icon-Slots
+M.CLASSES = { "warrior", "paladin", "hunter", "rogue",
+              "priest", "mage", "warlock", "druid" }
+M.CLASSES_M2 = M.CLASSES -- Altname (Tests/Renderer M2)
+
+-- NPC-IDs beginnen bei 100 (Spieler 1..40, Hogger 0); u8-Adressraum im Wire
+M.NPC_ID_BASE = 100
 
 -- Positionen der begehbaren Klassenicons am Wiederbelebungsfeld
 function M.class_icon_pos(slot)
   local f = map.field()
-  local angle = (slot - 1) * (2 * math.pi / #M.CLASSES_M2) + 0.5
-  return f.x + 120 * math.cos(angle), f.y + 120 * math.sin(angle)
+  local angle = (slot - 1) * (2 * math.pi / #M.CLASSES) + 0.5
+  return f.x + 140 * math.cos(angle), f.y + 140 * math.sin(angle)
 end
 
 function M.new(seed)
@@ -31,10 +37,21 @@ function M.new(seed)
     n_scale = 0,        -- N beim Try-Start (GDD 6)
     players = {},       -- Array; Index == Spieler-ID (1..40)
     corpses = {},       -- { x, y, drag = nil|{t_left} }
+    npcs = {},          -- Wichtel (M3-1), spaeter Mobs/Adds; id -> npc
+    next_npc_id = M.NPC_ID_BASE,
     hogger = nil,
     rng = nil,
   }
   return state
+end
+
+function M.add_npc(state, kind, x, y, hp, owner)
+  local id = state.next_npc_id
+  state.next_npc_id = state.next_npc_id + 1
+  if state.next_npc_id > 250 then state.next_npc_id = M.NPC_ID_BASE end
+  state.npcs[id] = { id = id, kind = kind, x = x, y = y, hp = hp,
+                     max_hp = hp, owner = owner, next_auto = 0 }
+  return state.npcs[id]
 end
 
 function M.add_player(state, name)
@@ -43,17 +60,20 @@ function M.add_player(state, name)
   state.players[id] = {
     id = id, name = name or ("spieler" .. id),
     class = nil,             -- erst mit erster Wiederbelebung (GDD 5)
+    race = nil,              -- je Wiederbelebung ausgewuerfelt (GDD 5), kosmetisch
     alive = false, ghost = true,
     x = g.x + (id % 5) * 24 - 48, y = g.y + math.floor(id / 5) * 24,
-    hp = 0, max_hp = 0, resource = 0,
+    hp = 0, max_hp = 0, resource = 0, cp = 0,
     facing = 0,
     target = M.HOGGER_ID,
     threat = 0,
-    cast = nil,              -- { ability, t_left, target }
+    cast = nil,              -- { slot, t_left, total, target }
     gcd = 0, next_auto = 0, raptor_cd = 0,
     last_cast_t = -1000,
     bleed_t = 0, bleed_next = 0,
-    shout_until = 0,
+    shout_until = 0, seal_hits = 0,
+    stealth = false, frost_armor = false,
+    imp_id = nil,
     dead_until = 0,          -- Respawn-Wartezeit (tot, noch kein Geist)
     revive = nil,            -- { slot, t_left } waehrend des Channels
     prev_mask = 0,

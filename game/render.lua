@@ -11,9 +11,19 @@ local assets = require("game.assets")
 local R = {}
 R.__index = R
 
-local CLASS_ICON = { warrior = "icon_warrior", hunter = "icon_hunter",
-                     priest = "icon_priest" }
-local FLOOR_ICON = { "floor_warrior", "floor_hunter", "floor_priest" }
+local CLASS_ICON, FLOOR_ICON = {}, {}
+for slot, class in ipairs(world.CLASSES) do
+  CLASS_ICON[class] = "icon_" .. class
+  FLOOR_ICON[slot] = "floor_" .. class
+end
+local ABILITY_ICON = {
+  heroic = "ab_heroic", shout = "ab_shout", raptor = "ab_raptor",
+  sinister = "ab_sinister", evis = "ab_evis", stealth = "ab_stealth",
+  smite = "ab_smite", heal = "ab_heal", holylight = "ab_holylight",
+  seal = "ab_seal", fireball = "ab_fireball", frostarmor = "ab_frostarmor",
+  bolt = "ab_bolt", imp = "ab_imp", wrath = "ab_wrath", touch = "ab_touch",
+}
+local ABILITIES = require("game.gamesim.step").ABILITIES
 local UI_BG = { 0.09, 0.08, 0.07 }
 local GRASS = { 0.30, 0.44, 0.22 }
 local PATH = { 0.48, 0.40, 0.26 }
@@ -119,7 +129,7 @@ function R:draw(view, ui)
 
   -- Klassen-Bodenicons: nur im Geist-Zustand sichtbar (GDD 4.1)
   if me and me.ghost then
-    for slot = 1, #world.CLASSES_M2 do
+    for slot = 1, #world.CLASSES do
       local ix, iy = world.class_icon_pos(slot)
       local x, y = to_screen(ix, iy)
       assets.draw(FLOOR_ICON[slot], x, y, scale * 2.5)
@@ -135,9 +145,10 @@ function R:draw(view, ui)
           local x, y = to_screen(p.x, p.y)
           local icon = CLASS_ICON[p.class]
           local jump = p.jumping and 1.25 or 1
+          local alpha = p.ghost and 0.35 or p.stealth and 0.4 or 1
           if icon then
             assets.draw(icon, x, y - (p.jumping and 4 or 0),
-              scale * 1.8 * jump, p.ghost and 0.35 or 1)
+              scale * 1.8 * jump, alpha)
           else
             love.graphics.setColor(0.7, 0.8, 1.0, 0.35)
             love.graphics.circle("fill", x, y, 8 * scale * 1.8)
@@ -148,6 +159,14 @@ function R:draw(view, ui)
           end
         end
       end
+    end
+  end
+
+  -- NPCs (Wichtel; ab M3-2 Mobs/Adds)
+  if view.npcs then
+    for _, npc in pairs(view.npcs) do
+      local x, y = to_screen(npc.x, npc.y)
+      assets.draw("icon_" .. npc.kind, x, y, scale * 1.8)
     end
   end
 
@@ -234,13 +253,13 @@ function R:draw(view, ui)
   love.graphics.print("Zoom " .. self.zoom .. "  (+/-)", ox + radius * 0.6,
     oy + radius * 0.72)
 
-  -- Faehigkeitenleiste unten mittig (GDD 4.2)
+  -- Faehigkeitenleiste unten mittig, aus den Faehigkeits-Spezifikationen
+  -- generiert — nie mehr Buttons als die Klasse Faehigkeiten hat (GDD 4.2)
   if me and me.class then
-    local buttons = ({
-      warrior = { { "ab_heroic", "1" }, { "ab_shout", "2" } },
-      hunter = { { "ab_raptor", "1" } },
-      priest = { { "ab_smite", "1" }, { "ab_heal", "2" } },
-    })[me.class]
+    local buttons = {}
+    for slot, spec in ipairs(ABILITIES[me.class] or {}) do
+      buttons[slot] = { ABILITY_ICON[spec.id], tostring(slot) }
+    end
     local bx = ox - (#buttons * 48) / 2 + 24
     for i, b in ipairs(buttons) do
       local x, y = bx + (i - 1) * 48, oy + radius - 34
@@ -259,8 +278,15 @@ function R:draw(view, ui)
     love.graphics.setColor(0.9, 0.88, 0.8, 1)
     love.graphics.print(string.format("%s  HP %d/%d", me.class, me.hp, maxhp), 16, 14)
     hp_bar(76, 34, 60, me.hp / maxhp, 0.2, 0.8, 0.2)
+    local res_type = model.classes[me.class].resource
     hp_bar(76, 42, 60, (me.resource or 0) / 100,
-      me.class == "warrior" and 0.9 or 0.25, me.class == "warrior" and 0.2 or 0.45, 0.9)
+      res_type == "rage" and 0.9 or res_type == "energy" and 0.9 or 0.25,
+      res_type == "rage" and 0.2 or res_type == "energy" and 0.85 or 0.45,
+      res_type == "energy" and 0.2 or 0.9)
+    if me.class == "rogue" and (me.cp or 0) > 0 then
+      love.graphics.setColor(0.95, 0.35, 0.35, 1)
+      love.graphics.print("CP " .. me.cp, 142, 36)
+    end
     -- Cast-/Wiederbelebungsbalken
     if me.casting or me.reviving then
       hp_bar(ox, oy + 40, 50, me.progress, 0.9, 0.8, 0.3)
