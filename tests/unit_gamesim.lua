@@ -390,3 +390,23 @@ do
   st2.time = model.p("leeroy_first_march_wait")
   T.ok(leeroy.may_march(st2), "Leeroy: Notbremse nach der Wartezeit")
 end
+
+-- Friedhof von Elwynn (GDD 7.1, Issue #34): Szenerie liegt in der
+-- unantastbaren Zone und nicht auf dem Pfad
+do
+  local gy = map.graveyard()
+  local sh = map.spirit_healer()
+  T.ok(world.dist(sh.x, sh.y, gy.x, gy.y) < map.GRAVEYARD_RADIUS,
+    "Friedhof: Geistheiler steht in der Zone")
+  T.ok(map.in_graveyard(sh.x, sh.y), "Friedhof: Geistheiler in der Schutzzone")
+  local stones = map.gravestones()
+  T.ok(#stones >= 10, "Friedhof: genug Grabsteine (" .. #stones .. ")")
+  for i, s in ipairs(stones) do
+    T.ok(map.in_graveyard(s.x, s.y),
+      "Friedhof: Grabstein " .. i .. " liegt in der Zone")
+    T.ok(s.x >= 0 and s.x <= map.WIDTH and s.y >= 0 and s.y <= map.HEIGHT,
+      "Friedhof: Grabstein " .. i .. " in den Weltgrenzen")
+  end
+  T.eq(map.zone_at(sh.x, sh.y), "Friedhof von Elwynn",
+    "Friedhof: Zonenbanner passt am Geistheiler")
+end

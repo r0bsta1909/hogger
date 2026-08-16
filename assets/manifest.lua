@@ -46,6 +46,10 @@ return {
   icon_corpse   = { form = "raute",  groesse = 24, farbe = { 0.85, 0.85, 0.80 }, kuerzel = "X",  datei = "icon_corpse.png" },
   icon_deco_skull = { form = "raute", groesse = 16, farbe = { 0.65, 0.65, 0.60 }, kuerzel = "x", datei = "icon_deco_skull.png" },
   icon_tree     = { form = "kreis",  groesse = 28, farbe = { 0.22, 0.45, 0.20 }, kuerzel = "",   datei = "icon_tree.png" },
+  -- Friedhof von Elwynn (GDD 7.1 / 4.1): Grabsteine und der Geistheiler
+  -- (Engel-Icon, funktionslose Szenerie)
+  icon_gravestone = { form = "quadrat", groesse = 22, farbe = { 0.62, 0.62, 0.58 }, kuerzel = "+", datei = "icon_gravestone.png" },
+  icon_spirit_healer = { form = "kreis", groesse = 36, farbe = { 0.80, 0.90, 1.00 }, kuerzel = "GH", datei = "icon_spirit_healer.png" },
 
   -- Faehigkeiten-Buttons (Ring unten, 40 px, GDD 4.2)
   ab_heroic     = { form = "quadrat", groesse = 40, farbe = { 0.80, 0.35, 0.25 }, kuerzel = "HS", datei = "ab_heroic.png" },

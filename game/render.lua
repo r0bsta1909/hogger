@@ -284,6 +284,41 @@ function R:draw(view, ui)
   love.graphics.setColor(0.36, 0.33, 0.24, 1)
   love.graphics.circle("fill", hx2, hy2, 150 * scale)
 
+  -- Friedhof von Elwynn (GDD 7.1): Erdfleck, Zaunpfosten rund um die
+  -- unantastbare Zone, Grabsteine, Geistheiler — vorher war hier Wiese
+  do
+    local r = map.GRAVEYARD_RADIUS * scale
+    love.graphics.setColor(0.26, 0.29, 0.22, 1)
+    love.graphics.circle("fill", gx, gy, r)
+    love.graphics.setColor(0.22, 0.19, 0.15, 0.95)
+    local posts = 28
+    local pw = math.max(1.5, 3 * scale)
+    for i = 0, posts - 1 do
+      local a = i * (2 * math.pi / posts)
+      local x1, y1 = gx + math.cos(a) * r, gy + math.sin(a) * r
+      love.graphics.setLineWidth(pw)
+      love.graphics.line(x1, y1, gx + math.cos(a) * (r - 14 * scale),
+        gy + math.sin(a) * (r - 14 * scale))
+      -- Querlatte zum naechsten Pfosten
+      local a2 = (i + 1) * (2 * math.pi / posts)
+      love.graphics.setLineWidth(math.max(1, 1.5 * scale))
+      love.graphics.line(x1, y1 - 6 * scale,
+        gx + math.cos(a2) * r, gy + math.sin(a2) * r - 6 * scale)
+    end
+    love.graphics.setLineWidth(1)
+    for _, s in ipairs(map.gravestones()) do
+      local x, y = to_screen(s.x, s.y)
+      assets.draw("icon_gravestone", x, y, scale * 1.6)
+    end
+    local sh = map.spirit_healer()
+    local shx, shy = to_screen(sh.x, sh.y)
+    -- leichtes Pulsieren: Engel-Icon, funktionslose Szenerie (GDD 7.1)
+    local puls = 0.75 + 0.25 * math.sin(love.timer.getTime() * 1.5)
+    love.graphics.setColor(0.7, 0.85, 1.0, 0.25 * puls)
+    love.graphics.circle("fill", shx, shy, 26 * scale)
+    assets.draw("icon_spirit_healer", shx, shy, scale * 1.6, 0.9)
+  end
+
   -- Baeume, Deko-Schaedel (unterste Ebenen der Hierarchie, GDD 4.1)
   for _, t in ipairs(map.trees()) do
     local x, y = to_screen(t.x, t.y)
