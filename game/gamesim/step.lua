@@ -71,6 +71,7 @@ local function kill_player(state, p, ev, was_crit, cause)
   p.imp_id = nil
   p.deaths = p.deaths + 1
   p.dead_until = model.respawn_timer(math.max(1, state.n_scale))
+  p.release_wish = nil -- jeder Tod will neu freigegeben werden (Kap. 11)
   state.hogger.threat[p.id] = nil -- Bedrohung wird beim Tod geloescht (GDD 9.4)
   -- owner: "Am haeufigsten gefressen worden" braucht den Leichen-Besitzer
   state.corpses[#state.corpses + 1] = { x = p.x, y = p.y, owner = p.id }
@@ -425,12 +426,16 @@ local function player_tick(state, p, inp, ev)
   -- (GDD Kap. 5, Issue #50) — host-seitig erzwungen, nicht nur in der UI
   if (p.quest or 2) < 2 then mask = 0 end
 
-  -- tot: auf Respawn warten, dann als Geist am Friedhof erscheinen
+  -- tot: man liegt an der Sterbeposition und wartet. Erst die Freigabe
+  -- macht den Geist (GDD Kap. 11, Issue #54); nach der Nachfrist passiert
+  -- sie von selbst. Der Respawn-Timer bleibt die Todesstrafe (Kap. 6).
   if not p.alive and not p.ghost then
     p.dead_until = p.dead_until - DT
-    if p.dead_until <= 0 then
+    if p.dead_until <= 0
+       and (p.release_wish or p.dead_until <= -model.p("release_grace")) then
       local g = map.graveyard()
       p.ghost = true
+      p.release_wish = nil
       p.x, p.y = g.x, g.y
       events.push(ev, state.tick, "spawn", p.id, nil, nil, nil)
     end
@@ -847,6 +852,17 @@ local function echo_tick(state, ev)
       e.state, e.t = "idle", 0 -- naechster Neuankoemmling geht vor
     end
   end
+end
+
+-- Geist freilassen (GDD Kap. 11): moeglich, sobald der Respawn-Timer
+-- abgelaufen ist — vorher waere es eine Verkuerzung der Todesstrafe, und
+-- die ist die tragende Balancing-Konstante (Kap. 6).
+function S.release_spirit(state, pid)
+  local p = state.players[pid]
+  if not p or p.alive or p.ghost then return false end
+  if p.dead_until > 0 then return false end
+  p.release_wish = true
+  return true
 end
 
 -- Questannahme (GDD Kap. 5): ab jetzt darf sich der Spieler bewegen, und

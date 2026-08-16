@@ -84,8 +84,10 @@ return {
   snd_login_music     = { art = "stille", loop = false, datei = "snd_login_music.ogg" },
   snd_glitch_static   = { art = "rauschen", dauer = 1.4, datei = "snd_glitch_static.ogg" },
   -- 2/3: Grundteppich + Totensicht
-  snd_ambience_elwynn = { art = "stille", loop = true, datei = "snd_ambience_elwynn.ogg" },
-  snd_ghost_wind      = { art = "stille", loop = true, datei = "snd_ghost_wind.ogg" },
+  snd_ambience_elwynn = { art = "stille", loop = true, gain = 0.55, datei = "snd_ambience_elwynn.ogg" },
+  -- ohne_geisterfilter: der Geisterwind IST die Welt des Geistes und darf
+  -- nicht von der Totensicht-Daempfung mitgenommen werden (Issue #55)
+  snd_ghost_wind      = { art = "stille", loop = true, gain = 1.0, ohne_geisterfilter = true, datei = "snd_ghost_wind.ogg" },
   -- 4: Schritte (Geister sind lautlos)
   snd_footsteps       = { art = "blip", freq = 90, dauer = 0.25, loop = true, gain = 0.25, datei = "snd_footsteps.ogg" },
   -- 5: Nahkampf

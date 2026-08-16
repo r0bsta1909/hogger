@@ -107,8 +107,9 @@ function A.loop_start(id, vol)
   local spec = manifest[id]
   local c = t:clone()
   c:setLooping(true)
-  local entry = { src = c, base = (vol or 1) * (spec.gain or 1) }
-  c:setVolume(entry.base * master * ghost_mod)
+  local entry = { src = c, base = (vol or 1) * (spec.gain or 1),
+                  no_ghost = spec.ohne_geisterfilter or false }
+  c:setVolume(entry.base * master * (entry.no_ghost and 1 or ghost_mod))
   love.audio.play(c)
   loops[id] = entry
 end
@@ -121,7 +122,9 @@ end
 
 local function refresh_loops()
   for _, e in pairs(loops) do
-    if e and e.src then e.src:setVolume(e.base * master * ghost_mod) end
+    if e and e.src then
+      e.src:setVolume(e.base * master * (e.no_ghost and 1 or ghost_mod))
+    end
   end
 end
 

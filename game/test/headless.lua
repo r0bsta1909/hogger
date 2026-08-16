@@ -97,6 +97,12 @@ function T.run()
           c.quest_sent = true
           c:accept_quest()
         end
+        -- "Geist freilassen" ueber das Netz, sobald der Timer durch ist
+        -- (GDD Kap. 11, Issue #54)
+        if me and not me.alive and not me.ghost and (me.dead_rest or 1) <= 0 then
+          c:release_spirit()
+          c.released_once = true
+        end
       end
     end
 
@@ -127,6 +133,16 @@ function T.run()
         "Quest: die erste Annahme startet den Raid-Leeroy (GDD 10.3)")
       ok(clients[1].snap and clients[1].snap.echo ~= nil,
         "Quest: das Echo steht im Snapshot")
+    end
+
+    -- Geist freilassen (GDD Kap. 11): kein Client wird ohne Klick zum Geist,
+    -- bevor der Respawn-Timer durch ist
+    for _, c in ipairs(clients) do
+      local me = c.snap and c.pid and c.snap.players[c.pid]
+      if me and me.ghost then
+        ok(c.released_once == true or c.rejoin ~= nil,
+          "Freigabe: Geist gibt es erst nach dem Klick")
+      end
     end
 
     -- Rename-Pfad des Intros (GDD 5): Annahme, Kollision, Roster-Broadcast

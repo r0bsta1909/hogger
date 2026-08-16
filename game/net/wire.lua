@@ -12,7 +12,7 @@ W.MSG = {
   HELLO = 1, WELCOME = 2, INPUT = 3, SNAPSHOT = 4, EVENTS = 5,
   SET_TARGET = 6, PARAM_SET = 7, ZOOM = 8, ROSTER = 9,
   RENAME = 10, RENAME_RESULT = 11, STATS = 12, REVANCHE = 13,
-  QUEST_ACCEPT = 14,
+  QUEST_ACCEPT = 14, RELEASE_SPIRIT = 15,
 }
 
 -- Ereignistypen fuers Netz (Kosmetik-Feed; das JSONL-Log bleibt Host-Sache)
@@ -253,6 +253,11 @@ function W.quest_accept()
   return header(W.MSG.QUEST_ACCEPT)
 end
 
+-- RELEASE_SPIRIT: "Geist freilassen" (GDD Kap. 11)
+function W.release_spirit()
+  return header(W.MSG.RELEASE_SPIRIT)
+end
+
 -- SNAPSHOT ----------------------------------------------------------------
 -- Feldliste ist gegen den echten State erhoben; der Stufe-4-Test erzwingt sie.
 local function q16(x) -- Position quantisiert auf ganze logische px
@@ -345,6 +350,10 @@ function W.snapshot_body(state)
       prog = q8(1 - p.cast.t_left / p.cast.total)
     elseif p.revive then
       prog = q8(1 - p.revive.t_left / model.p("revive_channel"))
+    elseif not p.alive and not p.ghost then
+      -- tot: dasselbe Byte traegt die Restsekunden bis zur Freigabe
+      -- (GDD Kap. 11) — es ist in diesem Zustand sonst unbenutzt
+      prog = math.max(0, math.min(255, math.ceil(p.dead_until or 0)))
     end
     local race_idx = 0
     for i, r in ipairs(model.RACES) do
@@ -450,6 +459,7 @@ function W.read_snapshot(data, off)
       cp = cp,
       x = px, y = py, hp = php, resource = pres / 255 * 100,
       facing = pfacing, target = ptarget, progress = pprog / 255,
+      dead_rest = pprog, -- nur sinnvoll, solange tot und noch kein Geist
       shout_rest = pshout, xp = pxp, kupfer = pku, plunder = ppl,
     }
   end

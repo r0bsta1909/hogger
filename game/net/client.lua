@@ -116,6 +116,10 @@ function C:_send(data, channel, mode)
   return self.guard:call(self.peer.send, self.peer, data, channel, mode)
 end
 
+function C:release_spirit()
+  self:_send(wire.release_spirit(), CH_RELIABLE, "reliable")
+end
+
 function C:accept_quest()
   self:_send(wire.quest_accept(), CH_RELIABLE, "reliable")
 end
