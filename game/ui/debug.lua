@@ -20,6 +20,10 @@ function D:keypressed(key)
     return "host"
   elseif key == "n" then
     return "wipe"
+  elseif key == "+" or key == "kp+" then
+    return { volume = 0.1 } -- Lautstaerke lebt hier (GDD 4.4)
+  elseif key == "-" or key == "kp-" then
+    return { volume = -0.1 }
   elseif key == "backspace" then
     self.ip_input = self.ip_input:sub(1, -2)
   elseif key == "return" and #self.ip_input >= 7 then
@@ -54,6 +58,7 @@ function D:draw(info)
     "Logs: " .. (info.log_dir or "?"),
     "",
     "[H] Host erzwingen    [N] Neuer Abend (session.json loeschen)",
+    "[+/-] Lautstaerke: " .. string.format("%d %%", (info.volume or 0) * 100),
     "IP eintippen + Enter verbindet: " .. self.ip_input .. "_",
     info.note or "",
   }

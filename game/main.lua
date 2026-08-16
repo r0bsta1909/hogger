@@ -15,6 +15,7 @@ local socket = require("socket")
 local model = require("sim.model")
 local input = require("game.gamesim.input")
 local world = require("game.gamesim.world")
+local audio = require("game.audio")
 local wire, discovery
 
 local app = {
@@ -110,6 +111,7 @@ function love.load(args)
   app.render = require("game.render").new()
   app.floating = require("game.ui.floating").new()
   app.debug = require("game.ui.debug").new()
+  audio.load()
   -- Boot-Sequenz (GDD Kap. 3) im Normalstart; Debug-Laeufe starten direkt
   if not app.auto then
     app.boot = require("game.ui.boot").new()
@@ -203,20 +205,63 @@ local function process_cosmetics(view)
         color, e.crit and 3 or (own and 2 or 1))
       if e.crit and tonumber(e.dst) == view.me then app.render:add_shake(12)
       elseif e.crit and tonumber(e.src) == view.me then app.render:add_shake(6) end
+      -- Treffer-Sounds (GDD 12 Nr. 5-7, 9, 11), gedrosselt + Distanz
+      local vol = audio.falloff(world.dist(tx, ty, view.me_x, view.me_y))
+      if e.crit then
+        audio.play("snd_crit", math.max(0.6, vol)) -- Krit-Punch, beide Seiten
+      elseif vol > 0.05 and app.uptime - (app.last_hit_snd or 0) > 0.08 then
+        app.last_hit_snd = app.uptime
+        local src_id = tonumber(e.src)
+        local src_p = view.players[src_id]
+        local src_npc = view.npcs and view.npcs[src_id]
+        local id = "snd_melee_hit"
+        if src_p and src_p.class then
+          local atk = model.classes[src_p.class].attack
+          if atk == "shot" then id = "snd_shot"
+          elseif atk == "wand" then
+            -- Caster: grosse Hits = Zauber-Impact je Schule, kleine = Stab
+            if (e.val or 0) >= 5 then
+              id = ({ mage = "snd_impact_fire", warlock = "snd_impact_shadow",
+                      priest = "snd_impact_holy", druid = "snd_impact_fire" })
+                   [src_p.class] or "snd_wand"
+            else
+              id = "snd_wand"
+            end
+          end
+        elseif src_npc and (src_npc.kind == "wolf" or src_npc.kind == "murloc") then
+          -- Mob-Aggro-Naeherung: erster Biss bringt den Schrei (Nr. 11)
+          local st = app.sndstate
+          if st and app.uptime - (st.growl[src_id] or -10) > 8 then
+            st.growl[src_id] = app.uptime
+            audio.play(src_npc.kind == "wolf" and "snd_wolf_growl" or "snd_murloc",
+              math.max(0.4, vol))
+          end
+        end
+        audio.play(id, vol)
+      end
     elseif e.ev == "heal" then
       local tx, ty = entity_pos(e.dst)
       app.floating:add("+" .. tostring(math.floor((e.val or 0) + 0.5)),
         tx, ty, { 0.3, 0.95, 0.3 }, tonumber(e.dst) == view.me and 2 or 1)
       if tonumber(e.dst) == view.me then app.last_healed_t = app.uptime end
-    elseif e.ev == "death" and tonumber(e.src) == view.me then
-      -- Killcam-Zeile (GDD 11): kontextsensitiv, deterministische Rotation
-      app.my_deaths = (app.my_deaths or 0) + 1
-      local healed = app.last_healed_t ~= nil
-                     and (app.uptime - app.last_healed_t) < 4
-      app.render:show_killcam(require("game.gamesim.killcam").pick(
-        tonumber(e.val), e.crit, app.my_deaths, healed))
+    elseif e.ev == "death" then
+      local dp = view.players[tonumber(e.src)]
+      if dp then -- Todeslaut (GDD 12 Nr. 12)
+        audio.play("snd_player_death",
+          audio.falloff(world.dist(dp.x, dp.y, view.me_x, view.me_y)))
+      end
+      if tonumber(e.src) == view.me then
+        -- Killcam-Zeile (GDD 11): kontextsensitiv, deterministische Rotation
+        app.my_deaths = (app.my_deaths or 0) + 1
+        local healed = app.last_healed_t ~= nil
+                       and (app.uptime - app.last_healed_t) < 4
+        app.render:show_killcam(require("game.gamesim.killcam").pick(
+          tonumber(e.val), e.crit, app.my_deaths, healed))
+      end
     elseif e.ev == "crit_kill" and tonumber(e.dst) == view.me then
       app.render:add_shake(18) -- der "WAS?!"-Moment (GDD 9.2)
+    elseif e.ev == "charge" then
+      audio.play("snd_hogger_charge") -- Boss-Lesbarkeit (GDD 12 Nr. 10)
     elseif e.ev == "eat_start" then
       app.render:announce("HOGGER FRISST!", 2.5)
     elseif e.ev == "eat_complete" then
@@ -224,8 +269,11 @@ local function process_cosmetics(view)
     elseif e.ev == "try_end" then
       if (e.val or 0) >= 1 then
         app.render:announce("HOGGER IST TOT!", 8)
+        audio.play("snd_hogger_death")           -- GDD 12 Nr. 10
+        audio.play_later(1.2, "snd_fanfare")     -- Nr. 15: Sieg-Fanfare
       else
         app.render:announce("Wipe. Naechster Try.", 4)
+        audio.play("snd_wipe_sting")             -- Nr. 15: kurz, Moll
       end
     elseif e.ev == "try_start" then
       app.render:announce("Try " .. tostring(e.dst or ""), 2.5)
@@ -233,16 +281,22 @@ local function process_cosmetics(view)
       local pool = require("game.gamesim.loot")
       local item = pool[tonumber(e.dst) or 0] or "Plunder"
       app.render:toast(item .. "  (+" .. tostring(math.floor(e.val or 0)) .. " Kupfer)")
+      audio.play("snd_loot") -- Muenzklimpern (GDD 12 Nr. 14)
     elseif e.ev == "ding" then
       -- DING-Inszenierung (GDD 7.3): goldener Ring + Ansage; Leeroys
       -- Kommentar (Zeile 29) folgt als eigenes leeroy_line-Event
       app.render:announce("DING!", 6)
+      audio.play("snd_ding") -- Original-Levelup-Moment (GDD 7.3 / 12 Nr. 13)
       local dp = view.players[tonumber(e.src)]
       if dp then app.render:add_ding(dp.x, dp.y) end
     elseif e.ev == "leeroy_line" then
       local lines = require("game.gamesim.lines")
-      local text = lines[tonumber(e.dst) or 0]
+      local lid = tonumber(e.dst) or 0
+      local text = lines[lid]
       if text then app.render:announce("Leeroy: " .. text, 4) end
+      if lid == 1 then
+        audio.play("snd_leeroy_scream") -- kartenweit: DAS Startsignal (Nr. 16)
+      end
     end
   end
   for i = #list, 1, -1 do list[i] = nil end
@@ -318,6 +372,99 @@ function love.update(dt)
   app.view = view
   app.floating:update(dt)
   app.render:update(dt)
+
+  -- ====== Sound aus dem Weltzustand (GDD Kap. 12) ======
+  audio.update(dt)
+  if view then
+    local st = app.sndstate
+    if not st then
+      st = { jump = {}, imps = {}, growl = {}, hogger_state = nil,
+             stealth = nil, shout = false, frost = false, eating = false }
+      app.sndstate = st
+    end
+    local function dist_vol(x, y)
+      return audio.falloff(world.dist(x, y, view.me_x, view.me_y))
+    end
+    local me = view.players[view.me]
+    audio.set_ghost(me ~= nil and not me.alive) -- Tiefpass-Naeherung (Nr. 3)
+    -- Grundteppich: Elwynn-Tag lebend, Geister-Wind tot (Nr. 2/3);
+    -- beide Slots spielen Stille, bis echte Dateien liegen (17.5)
+    if me and me.alive then
+      audio.loop_start("snd_ambience_elwynn")
+      audio.loop_stop("snd_ghost_wind")
+    else
+      audio.loop_start("snd_ghost_wind")
+      audio.loop_stop("snd_ambience_elwynn")
+    end
+    -- Schritte nur lebend — Geister sind lautlos (Nr. 4)
+    if me and me.alive and inp.mask % 16 > 0 then
+      audio.loop_start("snd_footsteps")
+    else
+      audio.loop_stop("snd_footsteps")
+    end
+    -- Zauber-Cast-Loop (Nr. 6)
+    if me and me.casting then
+      audio.loop_start("snd_cast_loop")
+    else
+      audio.loop_stop("snd_cast_loop")
+    end
+    -- eigener Sprung + Landung (Nr. 12b)
+    local jumping = input.has(inp.mask, input.JUMP)
+    if jumping and not st.me_jump then
+      audio.play("snd_jump")
+      audio.play_later(0.35, "snd_land")
+    end
+    st.me_jump = jumping
+    -- Spruenge der anderen (Jump-Flag im Snapshot, GDD 4.1)
+    for pid, p in pairs(view.players) do
+      if pid ~= view.me then
+        if p.jumping and not st.jump[pid] then
+          local v = dist_vol(p.x, p.y)
+          if v > 0.05 then
+            audio.play("snd_jump", v * 0.6)
+            audio.play_later(0.35, "snd_land", v * 0.6)
+          end
+        end
+        st.jump[pid] = p.jumping
+      end
+    end
+    -- Klassen-Signaturen am eigenen Zustand (Nr. 8 + Frost-Buff Nr. 6)
+    if me then
+      if st.stealth ~= nil and me.stealth ~= st.stealth then
+        audio.play("snd_stealth")
+      end
+      st.stealth = me.stealth
+      if me.shout and not st.shout then audio.play("snd_shout") end
+      st.shout = me.shout
+      if me.frost_armor and not st.frost then audio.play("snd_impact_frost") end
+      st.frost = me.frost_armor
+    end
+    -- Hogger-Lesbarkeit (Nr. 10): Growl bei Aggro, Schmatzen kartenweit
+    local hs = view.hogger.state
+    if hs == "combat" and st.hogger_state == "idle" then
+      audio.play("snd_hogger_growl")
+    end
+    st.hogger_state = hs
+    local eating = view.hogger.eat ~= nil
+    if eating and not st.eating then
+      audio.loop_start("snd_hogger_schmatzen") -- IST die Fress-Telegraphie
+    elseif not eating and st.eating then
+      audio.loop_stop("snd_hogger_schmatzen")
+    end
+    st.eating = eating
+    -- Wichtel-Beschwoerung: neues Imp-Icon (Nr. 8)
+    for nid, npc in pairs(view.npcs or {}) do
+      if npc.kind == "imp" and not st.imps[nid] then
+        st.imps[nid] = true
+        audio.play("snd_imp_summon", dist_vol(npc.x, npc.y))
+      end
+    end
+    for nid in pairs(st.imps) do
+      if not (view.npcs and view.npcs[nid] and view.npcs[nid].kind == "imp") then
+        st.imps[nid] = nil
+      end
+    end
+  end
 
   -- Statistik-Tafel am Try-Ende (GDD 11): Host baut, alle zeigen;
   -- ein SIEG startet stattdessen die Fluchbruch-Sequenz
@@ -438,6 +585,7 @@ function love.draw()
     own_ip = discovery and discovery.own_ip() or "?",
     lobbies = lobbies,
     log_dir = love.filesystem.getSaveDirectory(),
+    volume = audio.master(),
   })
 end
 
@@ -466,6 +614,11 @@ function love.keypressed(key)
     teardown_net()
     if app.search then app.search:close(); app.search = nil end
     start_client(action.join)
+    return
+  elseif type(action) == "table" and action.volume then
+    -- Lautstaerke lebt im Debug-Overlay (GDD 4.4)
+    audio.set_master(audio.master() + action.volume)
+    audio.play("snd_ui_click")
     return
   elseif action == true then
     return
@@ -559,12 +712,14 @@ function love.mousepressed(mx, my)
     return w / 2 + (wx - app.view.me_x) * scale,
            h / 2 + (wy - app.view.me_y) * scale
   end
-  -- Zoom-Knoepfe am Ring (GDD 4.2)
+  -- Zoom-Knoepfe am Ring (GDD 4.2); UI-Klick-Sound (GDD 12 Nr. 14)
   local zx, zy = w / 2 + radius * 0.86, h / 2 + radius * 0.42
   if math.abs(mx - zx) < 14 and math.abs(my - zy) < 14 then
+    audio.play("snd_ui_click")
     app.render:set_zoom(app.render.zoom - 1) return
   end
   if math.abs(mx - zx) < 14 and math.abs(my - (zy + 34)) < 14 then
+    audio.play("snd_ui_click")
     app.render:set_zoom(app.render.zoom + 1) return
   end
   local best, best_d = nil, 24

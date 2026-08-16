@@ -9,6 +9,7 @@
 -- Gesamtdauer <= 20 s; reine Praesentation, kein Spielzustand.
 
 local assets = require("game.assets")
+local audio = require("game.audio")
 
 local B = {}
 B.__index = B
@@ -46,6 +47,7 @@ function B.new()
   self.ip_visible = false  -- getarnte Konsole (setzt main nach 5 s Discovery)
   self.ip_input = ""
   self.is_windows = love.system and love.system.getOS() == "Windows"
+  audio.play("snd_login_music") -- Login-Musik-Anriss (GDD 12 Nr. 1)
   return self
 end
 
@@ -62,6 +64,9 @@ end
 local function enter(self, phase)
   self.phase = phase
   self.t = 0
+  if phase == "glitch" then
+    audio.play("snd_glitch_static") -- Audio-Static zum Bildzerriss (Nr. 1)
+  end
 end
 
 function B:update(dt)
