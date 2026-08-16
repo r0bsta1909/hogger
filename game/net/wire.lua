@@ -31,6 +31,12 @@ local CLASS_IDX = {}
 for i, name in ipairs(CLASS_NAMES) do CLASS_IDX[name] = i end
 W.CLASS_IDX, W.CLASS_NAMES = CLASS_IDX, CLASS_NAMES
 
+-- Schadensarten (GDD 17.3, Feld "art"): Index = Wire-ID, 0 = unbestimmt.
+-- Sie steuert Geschoss-/Schlag-Darstellung und Trefferklang (GDD 4.1/12).
+W.DMG_ARTS = { "autohit", "ability", "dot", "charge", "slice", "mob", "add" }
+local ART_IDX = {}
+for i, name in ipairs(W.DMG_ARTS) do ART_IDX[name] = i end
+
 W.NPC_KINDS = { "imp", "add", "boar", "wolf", "kobold", "murloc" } -- Index = Wire-ID
 local NPC_KIND_IDX = {}
 for i, name in ipairs(W.NPC_KINDS) do NPC_KIND_IDX[name] = i end
@@ -220,8 +226,10 @@ end
 function W.events(list)
   local parts = { header(W.MSG.EVENTS), pack("<I2", #list) }
   for _, e in ipairs(list) do
+    -- letztes Byte: Bit 0 = Krit, Bits 1-4 = Schadensart (kostet nichts extra)
+    local flags = (e.crit and 1 or 0) + 2 * (ART_IDX[e.art] or 0)
     parts[#parts + 1] = pack("<BBBfB", W.EV[e.ev], ent(e.src), ent(e.dst),
-      z(tonumber(e.val) or 0), e.crit and 1 or 0)
+      z(tonumber(e.val) or 0), flags)
   end
   return table.concat(parts)
 end
@@ -230,10 +238,11 @@ function W.read_events(data, off)
   count, off = love.data.unpack("<I2", data, off)
   local list = {}
   for _ = 1, count do
-    local t, src, dst, val, crit
-    t, src, dst, val, crit, off = love.data.unpack("<BBBfB", data, off)
-    list[#list + 1] = { ev = W.EV_NAMES[t], src = src, dst = dst,
-                        val = val, crit = crit == 1 }
+    local t, src, dst, val, flags
+    t, src, dst, val, flags, off = love.data.unpack("<BBBfB", data, off)
+    list[#list + 1] = { ev = W.EV_NAMES[t], src = src, dst = dst, val = val,
+                        crit = flags % 2 == 1,
+                        art = W.DMG_ARTS[math.floor(flags / 2) % 16] }
   end
   return list
 end

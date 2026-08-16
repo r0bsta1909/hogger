@@ -66,6 +66,56 @@ function R:add_ding(wx, wy)
   self.effects[#self.effects + 1] = { x = wx, y = wy, t = 1.5, total = 1.5 }
 end
 
+-- ---------------------------------------------------------------------------
+-- Kampf-Effekte (GDD 4.1): Symbole, keine Sprites. Ein Treffer erzeugt eine
+-- kurze Spur von der Quelle zum Ziel plus einen Einschlag — damit ist
+-- sichtbar, WER gerade WAS macht, nicht nur dass eine Zahl auftaucht (#30).
+-- Schule/Form ergeben sich aus Klasse und Schadensart ("art", GDD 17.3).
+-- ---------------------------------------------------------------------------
+local SCHOOL = {
+  mage    = { 1.00, 0.55, 0.15 },  -- Feuer
+  warlock = { 0.62, 0.35, 0.95 },  -- Schatten
+  priest  = { 1.00, 0.95, 0.70 },  -- Heilig
+  druid   = { 0.55, 0.90, 0.35 },  -- Natur
+}
+local MELEE_COL = { 0.95, 0.95, 0.90 }
+local ENEMY_COL = { 0.95, 0.35, 0.25 }
+
+-- src_class = Klasse des Angreifers (nil bei Hogger/Mobs), art aus dem Event
+function R:add_attack_fx(src_class, attack, art, sx, sy, tx, ty)
+  if art == "dot" then return end -- Blutung hat kein Geschoss
+  local form, col
+  if not src_class then
+    form = (art == "charge") and "charge" or "slash"
+    col = ENEMY_COL
+  elseif attack == "shot" and art ~= "ability" then
+    form, col = "arrow", { 0.85, 0.85, 0.75 }
+  elseif attack == "wand" then
+    form = "bolt"
+    col = (art == "ability") and (SCHOOL[src_class] or MELEE_COL)
+          or { 0.75, 0.80, 0.95 } -- Zauberstab: fahles Blau
+  else
+    form, col = "slash", MELEE_COL
+  end
+  self.fx = self.fx or {}
+  if #self.fx > 60 then return end -- Budget wie beim Floating Text (4.1)
+  self.fx[#self.fx + 1] = { form = form, col = col, t = 0.22, total = 0.22,
+                            sx = sx, sy = sy, tx = tx, ty = ty }
+end
+
+function R:add_heal_fx(tx, ty)
+  self.fx = self.fx or {}
+  if #self.fx > 60 then return end
+  self.fx[#self.fx + 1] = { form = "heal", col = { 0.35, 0.95, 0.45 },
+                            t = 0.5, total = 0.5, sx = tx, sy = ty,
+                            tx = tx, ty = ty }
+end
+
+-- kurzer roter Rand, wenn man selbst getroffen wird (Issue #31)
+function R:add_hurt_flash(strength)
+  self.hurt = math.max(self.hurt or 0, strength or 0.5)
+end
+
 function R:toast(text)
   table.insert(self.toasts, 1, { text = text, t = 4 })
   if #self.toasts > 5 then table.remove(self.toasts) end
@@ -99,6 +149,67 @@ function R:update(dt)
   for i = #self.effects, 1, -1 do
     self.effects[i].t = self.effects[i].t - dt
     if self.effects[i].t <= 0 then table.remove(self.effects, i) end
+  end
+  if self.fx then
+    for i = #self.fx, 1, -1 do
+      self.fx[i].t = self.fx[i].t - dt
+      if self.fx[i].t <= 0 then table.remove(self.fx, i) end
+    end
+  end
+  if self.hurt and self.hurt > 0 then
+    self.hurt = math.max(0, self.hurt - dt * 2.2)
+  end
+end
+
+-- Geschosse, Schlagboegen, Einschlaege (GDD 4.1) — zwischen Entitaeten und
+-- Floating Text gezeichnet
+function R:draw_fx(to_screen, scale)
+  if not self.fx then return end
+  for _, f in ipairs(self.fx) do
+    local k = 1 - f.t / f.total          -- 0 = Start, 1 = Ende
+    local c = f.col
+    local sx, sy = to_screen(f.sx, f.sy)
+    local tx, ty = to_screen(f.tx, f.ty)
+    if f.form == "bolt" or f.form == "arrow" then
+      -- Flugphase in der ersten Haelfte, danach Einschlag am Ziel
+      local fly = math.min(1, k * 2)
+      local x, y = sx + (tx - sx) * fly, sy + (ty - sy) * fly
+      love.graphics.setColor(c[1], c[2], c[3], 1)
+      if f.form == "arrow" then
+        local dx, dy = tx - sx, ty - sy
+        local len = math.max(1, math.sqrt(dx * dx + dy * dy))
+        local ux, uy = dx / len * 14, dy / len * 14
+        love.graphics.setLineWidth(2)
+        love.graphics.line(x - ux, y - uy, x, y)
+        love.graphics.setLineWidth(1)
+      else
+        love.graphics.circle("fill", x, y, 5)
+        love.graphics.setColor(c[1], c[2], c[3], 0.35)
+        love.graphics.circle("fill", x, y, 9)
+      end
+      if k > 0.5 then
+        love.graphics.setColor(c[1], c[2], c[3], (1 - k) * 2)
+        love.graphics.setLineWidth(2)
+        love.graphics.circle("line", tx, ty, 8 + (k - 0.5) * 40)
+        love.graphics.setLineWidth(1)
+      end
+    elseif f.form == "slash" or f.form == "charge" then
+      -- kurzer Schlagbogen quer zur Angriffsrichtung am Ziel
+      local a = math.atan2(ty - sy, tx - sx)
+      local r = (f.form == "charge") and 26 or 18
+      love.graphics.setColor(c[1], c[2], c[3], 1 - k)
+      love.graphics.setLineWidth(f.form == "charge" and 4 or 3)
+      love.graphics.arc("line", "open", tx, ty, r + k * 6,
+        a - 2.2, a - 0.9)
+      love.graphics.arc("line", "open", tx, ty, r + k * 6,
+        a + 0.9, a + 2.2)
+      love.graphics.setLineWidth(1)
+    elseif f.form == "heal" then
+      love.graphics.setColor(c[1], c[2], c[3], 1 - k)
+      love.graphics.setLineWidth(2)
+      love.graphics.circle("line", tx, ty - k * 18, 10 * (1 - k * 0.5))
+      love.graphics.setLineWidth(1)
+    end
   end
 end
 
@@ -297,6 +408,9 @@ function R:draw(view, ui)
     love.graphics.setLineWidth(1)
   end
 
+  -- Geschosse und Schlaege (GDD 4.1, Issue #30)
+  self:draw_fx(to_screen, scale)
+
   -- Eigener Pfeil exakt im Zentrum (GDD 4.1)
   do
     local a = ui.facing_angle or 0
@@ -320,6 +434,18 @@ function R:draw(view, ui)
   if me and not me.alive then
     love.graphics.setColor(0.25, 0.35, 0.60, 0.45)
     love.graphics.rectangle("fill", 0, 0, w, h)
+  end
+
+  -- eigener Treffer: kurzer roter Rand — erlittener Schaden ist etwas
+  -- anderes als ausgeteilter (Issue #31)
+  if (self.hurt or 0) > 0 then
+    local a = math.min(0.5, self.hurt * 0.5)
+    for i = 1, 5 do
+      love.graphics.setColor(0.8, 0.1, 0.08, a * (1 - i / 6))
+      love.graphics.setLineWidth(10)
+      love.graphics.circle("line", ox, oy, radius - i * 9)
+      love.graphics.setLineWidth(1)
+    end
   end
 
   -- Ring
