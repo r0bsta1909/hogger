@@ -38,6 +38,26 @@ for _, agent in ipairs({ "unkoordiniert", "koordiniert", "turtle" }) do
     "Determinismus: anderer Seed -> anderer Sim-Lauf (" .. agent .. ")")
 end
 
+-- Spielsimulation (gamesim): zwei Bot-Laeufe, gleicher Seed -> gleicher Hash
+local gworld = require("game.gamesim.world")
+local gbot = require("game.gamesim.bot")
+local gevents = require("game.gamesim.events")
+local function gamesim_hash(seed, ticks)
+  local state = gworld.new(seed)
+  for i = 1, 5 do gworld.add_player(state, "bot" .. i) end
+  local evs = {}
+  gworld.begin_try(state, evs)
+  gbot.run(state, ticks, evs)
+  local lines = {}
+  for i, e in ipairs(evs) do lines[i] = gevents.to_jsonl(e) end
+  return hash.djb2(table.concat(lines, "\n"))
+end
+local g1 = gamesim_hash(42, 120 * 60)
+local g2 = gamesim_hash(42, 120 * 60)
+T.eq(g1, g2, "Determinismus: gamesim reproduzierbar (Seed 42, 120 s)")
+local g3 = gamesim_hash(43, 120 * 60)
+T.ok(g1 ~= g3, "Determinismus: gamesim anderer Seed -> anderer Lauf")
+
 -- Rassenwurf ist eine reine Funktion desselben Wurfs
 local model = require("sim.model")
 local r = rng.new(99)

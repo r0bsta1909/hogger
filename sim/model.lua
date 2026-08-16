@@ -91,6 +91,7 @@ M.params = {
   warrior_heroic_dmg     = p(6, 1, 20, 1, "8.2"),
   warrior_heroic_rage    = p(15, 5, 50, 5, "8.2"),
   warrior_shout_bonus    = p(0.15, 0, 0.5, 0.05, "8.2"),
+  warrior_shout_radius   = p(300, 100, 800, 25, "8.2"),  -- "im Umkreis", GDD unbeziffert
   warrior_shout_duration = p(15, 5, 60, 5, "8.2"),
   warrior_shout_rage     = p(10, 0, 50, 5, "8.2"),
   paladin_holylight_cast = p(2.5, 0.5, 5.0, 0.1, "8.2"),

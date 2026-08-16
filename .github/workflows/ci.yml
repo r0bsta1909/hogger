@@ -35,3 +35,28 @@ jobs:
         run: luajit tests/run_all.lua --stage unit
       - name: "Stufe 3: Determinismus"
         run: luajit tests/run_all.lua --stage determinism
+
+  stufe4:
+    # Integration: Host + Bot-Clients in-process, fensterlos (GDD 17.0/17.7)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: LOEVE einrichten (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y love
+      - name: LOEVE einrichten (macOS)
+        if: runner.os == 'macOS'
+        run: brew install --cask love
+      - name: "Stufe 4: Integration (headless, Loopback)"
+        shell: bash
+        run: |
+          export SDL_VIDEODRIVER=dummy
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            "/Applications/love.app/Contents/MacOS/love" game --headless --test
+          else
+            love game --headless --test
+          fi
