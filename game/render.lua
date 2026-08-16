@@ -112,6 +112,14 @@ function R:add_heal_fx(tx, ty)
                             tx = tx, ty = ty }
 end
 
+-- Fehlermeldung im Original-Ton (Issue #56): rot, kurz, blinkt einmal auf
+-- und ist wieder weg. Ersetzt den Dauertext zur Blickrichtung.
+function R:error(text)
+  if self.err_text == text and (self.err_t or 0) > 1.4 then return end
+  self.err_text = text
+  self.err_t = 2.0
+end
+
 -- kurzer roter Rand, wenn man selbst getroffen wird (Issue #31)
 function R:add_hurt_flash(strength)
   self.hurt = math.max(self.hurt or 0, strength or 0.5)
@@ -160,6 +168,7 @@ function R:update(dt)
   if self.hurt and self.hurt > 0 then
     self.hurt = math.max(0, self.hurt - dt * 2.2)
   end
+  if (self.err_t or 0) > 0 then self.err_t = self.err_t - dt end
 end
 
 -- Geschosse, Schlagboegen, Einschlaege (GDD 4.1) — zwischen Entitaeten und
@@ -780,26 +789,14 @@ function R:draw(view, ui)
     end
   end
 
-  -- Frontbogen-Warnung (GDD 8.1): ohne sie sucht man ewig nach dem Grund,
-  -- warum die Zahlen ausbleiben (Issue #32)
-  if me and me.alive and me.class then
-    local t = me.target
-    local tx, ty
-    if t == 0 and view.hogger.state ~= "reset" then
-      tx, ty = view.hogger.x, view.hogger.y
-    elseif view.players[t] and view.players[t].alive then
-      tx, ty = view.players[t].x, view.players[t].y
-    elseif view.npcs and view.npcs[t] then
-      tx, ty = view.npcs[t].x, view.npcs[t].y
-    end
-    if tx and not input.facing_ok(me.facing, view.me_x, view.me_y, tx, ty,
-                                  model.p("facing_arc_deg")) then
-      local font = love.graphics.getFont()
-      local msg = "Ziel ist nicht vor dir."
-      love.graphics.setColor(0.95, 0.3, 0.25, 0.95)
-      love.graphics.print(msg, ox - font:getWidth(msg) / 2 * 1.2,
-        oy + radius * 0.62, 0, 1.2, 1.2)
-    end
+  -- Fehlermeldung (Issue #56): kurz, rot, blinkt einmal auf
+  if (self.err_t or 0) > 0 and self.err_text then
+    local font = love.graphics.getFont()
+    local a = math.min(1, self.err_t / 0.6)
+      * (0.75 + 0.25 * math.sin(love.timer.getTime() * 12))
+    love.graphics.setColor(0.95, 0.28, 0.22, a)
+    love.graphics.print(self.err_text,
+      ox - font:getWidth(self.err_text) / 2 * 1.2, oy + radius * 0.62, 0, 1.2, 1.2)
   end
 
   -- Cast- und Wiederbelebungsbalken: unabhaengig von der Klasse, denn beim
