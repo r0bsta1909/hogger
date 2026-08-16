@@ -23,9 +23,15 @@ W.EV = {
 W.EV_NAMES = {}
 for name, id in pairs(W.EV) do W.EV_NAMES[id] = name end
 
-local CLASS_IDX = { warrior = 1, hunter = 2, priest = 3 }
-local CLASS_NAMES = { "warrior", "hunter", "priest" }
+local CLASS_NAMES = { "warrior", "paladin", "hunter", "rogue",
+                      "priest", "mage", "warlock", "druid" }
+local CLASS_IDX = {}
+for i, name in ipairs(CLASS_NAMES) do CLASS_IDX[name] = i end
 W.CLASS_IDX, W.CLASS_NAMES = CLASS_IDX, CLASS_NAMES
+
+W.NPC_KINDS = { "imp" } -- Index = Wire-ID
+local NPC_KIND_IDX = {}
+for i, name in ipairs(W.NPC_KINDS) do NPC_KIND_IDX[name] = i end
 
 local function pack(fmt, ...)
   return love.data.pack("string", fmt, ...)
@@ -194,19 +200,38 @@ function W.snapshot_body(state)
     if p.cast then flags = flags + PFLAG.casting end
     if p.jump_t and p.jump_t > 0 then flags = flags + PFLAG.jumping end
     if p.revive then flags = flags + PFLAG.reviving end
+    -- Buffs/Zustaende fuer die Buff-Leiste (GDD 4.3)
+    local flags2 = 0
+    if p.stealth then flags2 = flags2 + 1 end
+    if (p.shout_until or 0) > state.time then flags2 = flags2 + 2 end
+    if (p.seal_hits or 0) > 0 then flags2 = flags2 + 4 end
+    if p.frost_armor then flags2 = flags2 + 8 end
     local prog = 0
-    if p.cast then
-      local total = (p.cast.ability == "smite") and model.p("priest_smite_cast")
-                                                  or model.p("priest_heal_cast")
-      prog = q8(1 - p.cast.t_left / total)
+    if p.cast and p.cast.total then
+      prog = q8(1 - p.cast.t_left / p.cast.total)
     elseif p.revive then
       prog = q8(1 - p.revive.t_left / model.p("revive_channel"))
     end
-    parts[#parts + 1] = pack("<BBBI2I2I2BBBB",
-      p.id, flags, CLASS_IDX[p.class] or 0,
+    local race_idx = 0
+    for i, r in ipairs(model.RACES) do
+      if r == p.race then race_idx = i end
+    end
+    parts[#parts + 1] = pack("<BBBBBBI2I2I2BBBB",
+      p.id, flags, CLASS_IDX[p.class] or 0, race_idx, flags2, p.cp or 0,
       q16(p.x), q16(p.y), math.max(0, math.floor(p.hp + 0.5)),
       q8((p.resource or 0) / 100), p.facing or 0,
       p.target or 255, prog)
+  end
+  -- NPCs (Wichtel; ab M3-2 Mobs/Adds)
+  local npc_ids = {}
+  for id = 100, 250 do
+    if state.npcs and state.npcs[id] then npc_ids[#npc_ids + 1] = id end
+  end
+  parts[#parts + 1] = pack("<B", #npc_ids)
+  for _, id in ipairs(npc_ids) do
+    local npc = state.npcs[id]
+    parts[#parts + 1] = pack("<BBI2I2B", id, NPC_KIND_IDX[npc.kind] or 0,
+      q16(npc.x), q16(npc.y), math.max(0, math.min(255, math.floor(npc.hp + 0.5))))
   end
   return table.concat(parts)
 end
@@ -248,9 +273,9 @@ function W.read_snapshot(data, off)
   pcount, off = love.data.unpack("<B", data, off)
   s.players = {}
   for _ = 1, pcount do
-    local pid, flags, cls, px, py, php, pres, pfacing, ptarget, pprog
-    pid, flags, cls, px, py, php, pres, pfacing, ptarget, pprog, off =
-      love.data.unpack("<BBBI2I2I2BBBB", data, off)
+    local pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog
+    pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, off =
+      love.data.unpack("<BBBBBBI2I2I2BBBB", data, off)
     s.players[pid] = {
       id = pid,
       alive = flags % 2 >= 1,
@@ -259,9 +284,23 @@ function W.read_snapshot(data, off)
       jumping = flags % 16 >= 8,
       reviving = flags % 32 >= 16,
       class = CLASS_NAMES[cls],
+      race = model.RACES[race],
+      stealth = flags2 % 2 >= 1,
+      shout = flags2 % 4 >= 2,
+      seal = flags2 % 8 >= 4,
+      frost_armor = flags2 % 16 >= 8,
+      cp = cp,
       x = px, y = py, hp = php, resource = pres / 255 * 100,
       facing = pfacing, target = ptarget, progress = pprog / 255,
     }
+  end
+  local ncount
+  ncount, off = love.data.unpack("<B", data, off)
+  s.npcs = {}
+  for _ = 1, ncount do
+    local nid, nkind, nx, ny, nhp
+    nid, nkind, nx, ny, nhp, off = love.data.unpack("<BBI2I2B", data, off)
+    s.npcs[nid] = { id = nid, kind = W.NPC_KINDS[nkind], x = nx, y = ny, hp = nhp }
   end
   return ack, s
 end

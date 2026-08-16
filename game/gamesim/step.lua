@@ -30,6 +30,15 @@ local function kill_player(state, p, ev, was_crit)
   p.hp = 0
   p.cast = nil
   p.revive = nil
+  p.stealth = false
+  p.cp = 0
+  p.seal_hits = 0
+  p.frost_armor = false
+  if p.imp_id and state.npcs[p.imp_id] then -- Wichtel stirbt mit dem Meister
+    state.hogger.threat[p.imp_id] = nil
+    state.npcs[p.imp_id] = nil
+  end
+  p.imp_id = nil
   p.deaths = p.deaths + 1
   p.dead_until = model.respawn_timer(math.max(1, state.n_scale))
   state.hogger.threat[p.id] = nil -- Bedrohung wird beim Tod geloescht (GDD 9.4)
@@ -47,6 +56,10 @@ local function hogger_damage_player(state, p, amount, kind, ev)
   p.hp = p.hp - amount
   if kind == "autohit" and p.class == "warrior" then
     p.resource = math.min(model.p("rage_max"), p.resource + model.p("rage_per_hit_taken"))
+  end
+  -- Frostruestung: Treffer auf den Magier verlangsamt Hogger (GDD 8.2)
+  if p.frost_armor and kind == "autohit" then
+    state.hogger.slow_until = state.time + model.p("mage_frostarmor_slow_duration")
   end
   events.push(ev, state.tick, "damage", "hogger", p.id, amount, crit)
   if p.hp <= 0 then kill_player(state, p, ev, crit) end
@@ -100,7 +113,7 @@ local function heal_player(state, src, dst, amount, ev)
 end
 
 -- ---------------------------------------------------------------------------
--- Faehigkeiten (M2: Krieger, Jaeger, Priester)
+-- Faehigkeiten (GDD 8.2) als Daten: je Klasse bis zu 3 Slots (Tasten 1-3)
 -- ---------------------------------------------------------------------------
 local function enemy_in_range(state, p, range)
   local h = state.hogger
@@ -108,74 +121,162 @@ local function enemy_in_range(state, p, range)
          and world.dist(p.x, p.y, h.x, h.y) <= range
 end
 
-local function try_ability(state, p, slot, ev)
-  if p.gcd > 0 or p.cast then return end
-  local class = p.class
-  if class == "warrior" then
-    if slot == 1 then
-      if p.resource >= model.p("warrior_heroic_rage")
-         and enemy_in_range(state, p, model.p("melee_range")) then
-        p.resource = p.resource - model.p("warrior_heroic_rage")
-        player_damage_hogger(state, p, model.p("warrior_heroic_dmg"), "ability", ev)
-        p.gcd = model.p("gcd")
-      end
-    elseif slot == 2 then
-      if p.resource >= model.p("warrior_shout_rage") then
-        p.resource = p.resource - model.p("warrior_shout_rage")
+local function set_stealth(state, p, on)
+  p.stealth = on
+end
+
+local function dmg_fx(param)
+  return function(state, p, _, ev)
+    player_damage_hogger(state, p, model.p(param), "ability", ev)
+  end
+end
+
+local function heal_fx(param)
+  return function(state, p, target, ev)
+    heal_player(state, p, target or p, model.p(param), ev)
+  end
+end
+
+-- spec: cost (Param-Schluessel, Klassenressource), cast (Castzeit-Param),
+-- range (Param) + target "enemy"|"ally"|"self", cd_field/cd (Cooldown),
+-- requires_cp, effect(state, p, target, ev)
+local ABILITIES = {
+  warrior = {
+    { id = "heroic", cost = "warrior_heroic_rage", range = "melee_range",
+      target = "enemy", effect = dmg_fx("warrior_heroic_dmg") },
+    { id = "shout", cost = "warrior_shout_rage", target = "self",
+      effect = function(state, p)
         local r = model.p("warrior_shout_radius")
         for _, q in ipairs(state.players) do
           if q.alive and world.dist(p.x, p.y, q.x, q.y) <= r then
             q.shout_until = state.time + model.p("warrior_shout_duration")
           end
         end
-        p.gcd = model.p("gcd")
-      end
-    end
-  elseif class == "hunter" then
-    if slot == 1 then
-      if p.raptor_cd <= 0 and enemy_in_range(state, p, model.p("melee_range")) then
-        p.raptor_cd = model.p("hunter_raptor_cd")
-        player_damage_hogger(state, p, model.p("hunter_raptor_dmg"), "ability", ev)
-        p.gcd = model.p("gcd")
-      end
-    end
-  elseif class == "priest" then
-    if slot == 1 then
-      if p.resource >= model.p("priest_smite_mana")
-         and enemy_in_range(state, p, model.p("wand_range")) then
-        p.cast = { ability = "smite", t_left = model.p("priest_smite_cast") }
-        p.gcd = model.p("gcd")
-      end
-    elseif slot == 2 then
-      if p.resource >= model.p("priest_heal_mana") then
-        local target = state.players[p.target] or p
-        if not target.alive then target = p end
-        p.cast = { ability = "heal", t_left = model.p("priest_heal_cast"),
-                   target = target.id }
-        p.gcd = model.p("gcd")
-      end
-    end
+      end },
+  },
+  paladin = {
+    { id = "holylight", cost = "paladin_holylight_mana",
+      cast = "paladin_holylight_cast", target = "ally",
+      effect = heal_fx("paladin_holylight_heal") },
+    { id = "seal", cost = "paladin_seal_mana", target = "self",
+      effect = function(_, p) p.seal_hits = model.p("paladin_seal_hits") end },
+  },
+  hunter = {
+    { id = "raptor", cd_field = "raptor_cd", cd = "hunter_raptor_cd",
+      range = "melee_range", target = "enemy",
+      effect = dmg_fx("hunter_raptor_dmg") },
+  },
+  rogue = {
+    { id = "sinister", cost = "rogue_sinister_energy", range = "melee_range",
+      target = "enemy",
+      effect = function(state, p, _, ev)
+        player_damage_hogger(state, p, model.p("rogue_sinister_dmg"), "ability", ev)
+        p.cp = math.min(5, p.cp + 1)
+      end },
+    { id = "evis", cost = "rogue_evis_energy", range = "melee_range",
+      target = "enemy", requires_cp = true,
+      effect = function(state, p, _, ev)
+        player_damage_hogger(state, p,
+          model.p("rogue_evis_dmg_per_cp") * p.cp, "ability", ev)
+        p.cp = 0
+      end },
+    { id = "stealth", target = "self",
+      effect = function(state, p) set_stealth(state, p, not p.stealth) end },
+  },
+  priest = {
+    { id = "smite", cost = "priest_smite_mana", cast = "priest_smite_cast",
+      range = "wand_range", target = "enemy", effect = dmg_fx("priest_smite_dmg") },
+    { id = "heal", cost = "priest_heal_mana", cast = "priest_heal_cast",
+      target = "ally", effect = heal_fx("priest_heal_amount") },
+  },
+  mage = {
+    { id = "fireball", cost = "mage_fireball_mana", cast = "mage_fireball_cast",
+      range = "wand_range", target = "enemy", effect = dmg_fx("mage_fireball_dmg") },
+    { id = "frostarmor", target = "self",
+      effect = function(_, p) p.frost_armor = true end },
+  },
+  warlock = {
+    { id = "bolt", cost = "warlock_bolt_mana", cast = "warlock_bolt_cast",
+      range = "wand_range", target = "enemy", effect = dmg_fx("warlock_bolt_dmg") },
+    { id = "imp", cost = "warlock_imp_mana", cast = "warlock_imp_cast",
+      target = "self",
+      effect = function(state, p)
+        if p.imp_id and state.npcs[p.imp_id] then return end
+        local npc = world.add_npc(state, "imp", p.x + 20, p.y + 20,
+          model.p("imp_hp"), p.id)
+        p.imp_id = npc.id
+        -- "zieht kurz Aggro" (GDD 8.2): kleiner Startimpuls auf der Threat-Liste
+        state.hogger.threat[npc.id] = 5
+      end },
+  },
+  druid = {
+    { id = "wrath", cost = "druid_wrath_mana", cast = "druid_wrath_cast",
+      range = "wand_range", target = "enemy", effect = dmg_fx("druid_wrath_dmg") },
+    { id = "touch", cost = "druid_touch_mana", cast = "druid_touch_cast",
+      target = "ally", effect = heal_fx("druid_touch_heal") },
+  },
+}
+S.ABILITIES = ABILITIES -- fuer Renderer (Buttons) und Bots
+
+local function is_mana_class(p)
+  return model.classes[p.class].resource == "mana"
+end
+
+local function spend(state, p, cost)
+  p.resource = p.resource - cost
+  if cost > 0 and is_mana_class(p) then
+    p.last_cast_t = state.time -- Fuenf-Sekunden-Regel (GDD 8.1)
   end
+end
+
+local function ally_target(state, p)
+  local t = state.players[p.target]
+  if t and t.alive then return t end
+  return p
+end
+
+local function try_ability(state, p, slot, ev)
+  if p.gcd > 0 or p.cast then return end
+  local spec = ABILITIES[p.class] and ABILITIES[p.class][slot]
+  if not spec then return end
+  if spec.cd_field and p[spec.cd_field] > 0 then return end
+  if spec.requires_cp and p.cp < 1 then return end
+  local cost = spec.cost and model.p(spec.cost) or 0
+  if p.resource < cost then return end
+  if spec.target == "enemy" and spec.range
+     and not enemy_in_range(state, p, model.p(spec.range)) then return end
+  if p.stealth and spec.id ~= "stealth" then
+    set_stealth(state, p, false) -- bricht beim Angriff (GDD 8.2)
+  end
+  if spec.cast then
+    p.cast = { slot = slot, t_left = model.p(spec.cast),
+               total = model.p(spec.cast),
+               target = spec.target == "ally" and ally_target(state, p).id or nil }
+    p.gcd = model.p("gcd")
+    return
+  end
+  spend(state, p, cost)
+  if spec.cd_field then p[spec.cd_field] = model.p(spec.cd) end
+  spec.effect(state, p, spec.target == "ally" and ally_target(state, p) or nil, ev)
+  p.gcd = model.p("gcd")
 end
 
 local function finish_cast(state, p, ev)
   local c = p.cast
   p.cast = nil
-  if c.ability == "smite" then
-    if p.resource >= model.p("priest_smite_mana")
-       and enemy_in_range(state, p, model.p("wand_range")) then
-      p.resource = p.resource - model.p("priest_smite_mana")
-      p.last_cast_t = state.time
-      player_damage_hogger(state, p, model.p("priest_smite_dmg"), "ability", ev)
-    end
-  elseif c.ability == "heal" then
-    local target = state.players[c.target]
-    if target and target.alive and p.resource >= model.p("priest_heal_mana") then
-      p.resource = p.resource - model.p("priest_heal_mana")
-      p.last_cast_t = state.time
-      heal_player(state, p, target, model.p("priest_heal_amount"), ev)
-    end
+  local spec = ABILITIES[p.class] and ABILITIES[p.class][c.slot]
+  if not spec then return end
+  local cost = spec.cost and model.p(spec.cost) or 0
+  if p.resource < cost then return end
+  if spec.target == "enemy" and spec.range
+     and not enemy_in_range(state, p, model.p(spec.range)) then return end
+  local target
+  if spec.target == "ally" then
+    target = c.target and state.players[c.target] or nil
+    if not (target and target.alive) then target = p end
   end
+  spend(state, p, cost)
+  spec.effect(state, p, target, ev)
 end
 
 -- ---------------------------------------------------------------------------
@@ -214,7 +315,7 @@ local function player_tick(state, p, inp, ev)
     -- Wiederbelebung: auf Klassenicon stehen, 2-s-Channel (GDD 5)
     if moving then p.revive = nil end
     if not p.revive then
-      for slot = 1, #world.CLASSES_M2 do
+      for slot = 1, #world.CLASSES do
         local ix, iy = world.class_icon_pos(slot)
         if world.dist(p.x, p.y, ix, iy) <= ICON_RADIUS then
           p.revive = { slot = slot, t_left = model.p("revive_channel") }
@@ -224,14 +325,27 @@ local function player_tick(state, p, inp, ev)
     else
       p.revive.t_left = p.revive.t_left - DT
       if p.revive.t_left <= 0 then
-        local class = world.CLASSES_M2[p.revive.slot]
+        local class = world.CLASSES[p.revive.slot]
         if p.class ~= class then
           events.push(ev, state.tick, "class_change", p.id, class, nil, nil)
         end
         p.class = class
+        -- Rasse je Wiederbelebung regelkonform ausgewuerfelt (GDD 5), kosmetisch
+        p.race = model.roll_race(class, state.rng:next())
+        local race_idx = 1
+        for i, r in ipairs(model.RACES) do
+          if r == p.race then race_idx = i end
+        end
         p.max_hp = model.hp_for_class(class)
         p.hp = p.max_hp
-        p.resource = (class == "warrior") and 0 or model.p("mana_max")
+        local res = model.classes[class].resource
+        p.resource = (res == "rage") and 0
+                     or (res == "energy") and model.p("energy_max")
+                     or model.p("mana_max")
+        p.cp = 0
+        p.stealth = false
+        p.seal_hits = 0
+        p.frost_armor = false
         p.alive = true
         p.ghost = false
         p.revive = nil
@@ -239,7 +353,7 @@ local function player_tick(state, p, inp, ev)
         p.next_auto = 0
         p.shout_until = 0
         p.bleed_t = 0
-        events.push(ev, state.tick, "revive", p.id, class, 0, nil)
+        events.push(ev, state.tick, "revive", p.id, class, race_idx, nil)
       end
     end
     p.prev_mask = mask
@@ -248,6 +362,7 @@ local function player_tick(state, p, inp, ev)
 
   -- lebend --------------------------------------------------------------
   local speed = model.p("move_speed_alive")
+  if p.stealth then speed = speed * model.p("rogue_stealth_speed") end
   if moving then
     p.x, p.y = map.clamp(p.x + dx * speed * DT, p.y + dy * speed * DT)
     if p.cast then p.cast = nil end -- Bewegung bricht den Cast
@@ -264,12 +379,16 @@ local function player_tick(state, p, inp, ev)
     end
   end
 
-  -- Mana: Fuenf-Sekunden-Regel (GDD 8.1)
-  if p.class ~= "warrior" then
+  -- Ressourcen (GDD 8.1): Mana mit Fuenf-Sekunden-Regel, Energie 10/s
+  local res_type = model.classes[p.class].resource
+  if res_type == "mana" then
     if state.time - p.last_cast_t >= model.p("five_sec_rule_wait") then
       p.resource = math.min(model.p("mana_max"),
         p.resource + model.p("mana_regen_rate") * DT)
     end
+  elseif res_type == "energy" then
+    p.resource = math.min(model.p("energy_max"),
+      p.resource + model.p("energy_regen_rate") * DT)
   end
 
   if p.gcd > 0 then p.gcd = p.gcd - DT end
@@ -284,20 +403,28 @@ local function player_tick(state, p, inp, ev)
   -- Faehigkeiten per Flanke (ADR-002)
   if input.pressed(mask, p.prev_mask, input.AB1) then try_ability(state, p, 1, ev) end
   if input.pressed(mask, p.prev_mask, input.AB2) then try_ability(state, p, 2, ev) end
+  if input.pressed(mask, p.prev_mask, input.AB3) then try_ability(state, p, 3, ev) end
 
-  -- Autohit / Autoschuss / Zauberstab
+  -- Autohit / Autoschuss / Zauberstab (GDD 8.1); nicht aus Verstohlenheit
   p.next_auto = p.next_auto - DT
-  if p.next_auto <= 0 and not p.cast then
+  if p.next_auto <= 0 and not p.cast and not p.stealth then
+    local attack = model.classes[p.class].attack
     local range, dmg
-    if p.class == "hunter" then
+    if attack == "shot" then
       range, dmg = model.p("autoshot_range"), model.p("autoshot_dmg")
-    elseif p.class == "priest" then
+    elseif attack == "wand" then
       range, dmg = model.p("wand_range"), model.p("wand_dmg")
     else
       range, dmg = model.p("melee_range"), model.p("autohit_melee_dmg")
+      if p.seal_hits > 0 then -- Siegel der Rechtschaffenheit (GDD 8.2)
+        dmg = dmg + model.p("paladin_seal_bonus_dmg")
+      end
     end
     if p.target == world.HOGGER_ID and enemy_in_range(state, p, range) then
       p.next_auto = model.p("autohit_interval")
+      if attack ~= "shot" and attack ~= "wand" and p.seal_hits > 0 then
+        p.seal_hits = p.seal_hits - 1
+      end
       player_damage_hogger(state, p, dmg, "autohit", ev)
     end
   end
@@ -306,21 +433,93 @@ local function player_tick(state, p, inp, ev)
 end
 
 -- ---------------------------------------------------------------------------
+-- NPC-Tick (M3: Wichtel; spaeter Mobs/Adds)
+-- ---------------------------------------------------------------------------
+local function remove_npc(state, npc)
+  state.hogger.threat[npc.id] = nil
+  local owner = state.players[npc.owner or 0]
+  if owner and owner.imp_id == npc.id then owner.imp_id = nil end
+  state.npcs[npc.id] = nil
+end
+
+local function npc_tick(state, npc, ev)
+  if npc.kind ~= "imp" then return end
+  local owner = state.players[npc.owner]
+  if not owner or not owner.alive then
+    remove_npc(state, npc)
+    return
+  end
+  -- folgt dem Meister
+  local d = world.dist(npc.x, npc.y, owner.x, owner.y)
+  if d > 80 then
+    local step_len = math.min(model.p("move_speed_alive") * DT, d)
+    npc.x = npc.x + (owner.x - npc.x) / d * step_len
+    npc.y = npc.y + (owner.y - npc.y) / d * step_len
+  end
+  -- Feuerblitz (GDD 8.2)
+  npc.next_auto = npc.next_auto - DT
+  local h = state.hogger
+  if npc.next_auto <= 0 and h.hp > 0 and h.state ~= "reset"
+     and world.dist(npc.x, npc.y, h.x, h.y) <= model.p("wand_range") then
+    npc.next_auto = model.p("imp_interval")
+    local dmg = model.p("imp_dmg")
+    h.hp = h.hp - dmg
+    h.threat[npc.id] = (h.threat[npc.id] or 0) + dmg
+    if h.state == "idle" then h.state = "combat" end
+    -- Fress-Schwelle: Schaden zaehlt, der Wichtel ist aber kein
+    -- "verschiedener Spieler" (GDD 9.2)
+    if h.eating and h.eating.phase == "channel" then
+      local e = h.eating
+      e.dmg_accum = e.dmg_accum + dmg
+      if e.dmg_accum >= model.eat_dmg_threshold(state.n_scale) then
+        h.eating = nil
+        h.eat_cd = model.p("eat_cd")
+        events.push(ev, state.tick, "eat_interrupt", "hogger", nil, e.hitter_count, nil)
+      end
+    end
+    events.push(ev, state.tick, "damage", npc.id, "hogger", dmg, nil)
+  end
+end
+
+-- deterministische NPC-Reihenfolge: numerische IDs, nie pairs()
+local function each_npc(state, fn)
+  for id = world.NPC_ID_BASE, 250 do
+    local npc = state.npcs[id]
+    if npc then fn(npc) end
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- Hogger-Tick (GDD 9, v2.6 inkl. Cleave)
 -- ---------------------------------------------------------------------------
+-- Ziel: hoechste Bedrohung im Nahkampf, sonst hoechste gesamt (GDD 9.4);
+-- Verstohlene ignoriert er (GDD 8.2); Wichtel sind gueltige Ziele
 local function pick_hogger_target(state)
   local h = state.hogger
   local melee_r = model.p("melee_range")
   local best_melee, bm_threat, best_any, ba_threat = nil, -1, nil, -1
-  for _, p in ipairs(state.players) do
-    local th = h.threat[p.id]
-    if p.alive and th and th > 0 then
-      local d = world.dist(p.x, p.y, h.x, h.y)
-      if d <= melee_r and th > bm_threat then best_melee, bm_threat = p, th end
-      if th > ba_threat then best_any, ba_threat = p, th end
+  local function consider(e)
+    local th = h.threat[e.id]
+    if th and th > 0 then
+      local d = world.dist(e.x, e.y, h.x, h.y)
+      if d <= melee_r and th > bm_threat then best_melee, bm_threat = e, th end
+      if th > ba_threat then best_any, ba_threat = e, th end
     end
   end
+  for _, p in ipairs(state.players) do
+    if p.alive and not p.stealth then consider(p) end
+  end
+  each_npc(state, consider)
   return best_melee or best_any, best_melee ~= nil
+end
+
+local function hogger_damage_npc(state, npc, amount, ev)
+  npc.hp = npc.hp - amount
+  events.push(ev, state.tick, "damage", "hogger", npc.id, amount, nil)
+  if npc.hp <= 0 then
+    events.push(ev, state.tick, "add_death", npc.id, nil, nil, nil)
+    remove_npc(state, npc)
+  end
 end
 
 local function hogger_move_towards(state, tx, ty, speed)
@@ -484,7 +683,7 @@ local function hogger_tick(state, ev)
     local far, far_d = nil, 0
     for _, p in ipairs(state.players) do
       local th = h.threat[p.id]
-      if p.alive and th and th > 0
+      if p.alive and not p.stealth and th and th > 0
          and world.dist(p.x, p.y, map.hill.x, map.hill.y) <= model.p("hogger_leash_radius") then
         local d = world.dist(p.x, p.y, h.x, h.y)
         if d > far_d then far, far_d = p, d end
@@ -509,8 +708,8 @@ local function hogger_tick(state, ev)
     return
   end
 
-  -- Vicious Slice (GDD 9.2)
-  if h.slice_cd <= 0 then
+  -- Vicious Slice (GDD 9.2) — nur auf Spieler, kein Krit
+  if h.slice_cd <= 0 and not target.kind then
     h.slice_cd = model.p("hogger_slice_cd")
     hogger_damage_player(state, target, model.p("hogger_slice_dmg"), "slice", ev)
     if target.alive then
@@ -523,24 +722,39 @@ local function hogger_tick(state, ev)
   -- Autohit + Rundumschlag (v2.6)
   if h.next_auto <= 0 then
     h.next_auto = model.p("hogger_autohit_interval")
-    hogger_damage_player(state, target, model.p("hogger_autohit_dmg"), "autohit", ev)
+    if target.kind then
+      hogger_damage_npc(state, target, model.p("hogger_autohit_dmg"), ev)
+    else
+      hogger_damage_player(state, target, model.p("hogger_autohit_dmg"), "autohit", ev)
+    end
     local extra = model.cleave_targets(math.max(1, state.n_scale)) - 1
     if extra > 0 then
       -- deterministische Reihenfolge: nach Bedrohung, dann ID
       local cands = {}
       for _, q in ipairs(state.players) do
-        if q.alive and q ~= target and (h.threat[q.id] or 0) > 0
+        if q.alive and not q.stealth and q ~= target
+           and (h.threat[q.id] or 0) > 0
            and world.dist(q.x, q.y, h.x, h.y) <= model.p("melee_range") then
           cands[#cands + 1] = q
         end
       end
+      each_npc(state, function(npc)
+        if npc ~= target and (h.threat[npc.id] or 0) > 0
+           and world.dist(npc.x, npc.y, h.x, h.y) <= model.p("melee_range") then
+          cands[#cands + 1] = npc
+        end
+      end)
       table.sort(cands, function(a, b)
         local ta, tb = h.threat[a.id] or 0, h.threat[b.id] or 0
         if ta ~= tb then return ta > tb end
         return a.id < b.id
       end)
       for i = 1, math.min(extra, #cands) do
-        hogger_damage_player(state, cands[i], model.p("hogger_autohit_dmg"), "autohit", ev)
+        if cands[i].kind then
+          hogger_damage_npc(state, cands[i], model.p("hogger_autohit_dmg"), ev)
+        else
+          hogger_damage_player(state, cands[i], model.p("hogger_autohit_dmg"), "autohit", ev)
+        end
       end
     end
   end
@@ -586,6 +800,7 @@ function S.step(state, inputs)
   for _, p in ipairs(state.players) do
     player_tick(state, p, inputs[p.id], ev)
   end
+  each_npc(state, function(npc) npc_tick(state, npc, ev) end)
   hogger_tick(state, ev)
 
   if state.hogger.hp <= 0 then

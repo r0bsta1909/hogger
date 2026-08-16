@@ -18,7 +18,7 @@ local app = {
   mode = "host", name = "spieler", join_ip = nil, seed = nil,
   bots = 0, headless = false, test = false,
   net = nil, render = nil, panel = nil, floating = nil,
-  cooldown_view = { 0, 0 }, cooldown_max = { 1, 1 },
+  cooldown_view = { 0, 0, 0 }, cooldown_max = { 1, 1, 1 },
   last_try = 0,
 }
 
@@ -87,6 +87,7 @@ local function local_input_frame()
   if kb.isDown("space") then mask = mask + input.JUMP end
   if kb.isDown("1") then mask = mask + input.AB1 end
   if kb.isDown("2") then mask = mask + input.AB2 end
+  if kb.isDown("3") then mask = mask + input.AB3 end
   local w, h = love.graphics.getDimensions()
   local mx, my = love.mouse.getPosition()
   local angle = math.atan2(my - h / 2, mx - w / 2) + math.pi / 2
@@ -173,7 +174,7 @@ function love.update(dt)
   app.net:update(dt, inp)
 
   -- lokale Cooldown-Anzeige (nur Optik; Wahrheit liegt beim Host)
-  for i = 1, 2 do
+  for i = 1, 3 do
     if app.cooldown_view[i] > 0 then
       app.cooldown_view[i] = math.max(0, app.cooldown_view[i] - dt)
     end
@@ -207,7 +208,7 @@ function love.draw()
     return
   end
   local cds = {}
-  for i = 1, 2 do
+  for i = 1, 3 do
     cds[i] = app.cooldown_max[i] > 0
       and app.cooldown_view[i] / app.cooldown_max[i] or 0
   end
@@ -230,7 +231,7 @@ function love.keypressed(key)
   elseif key == "kp-" or key == "-" then
     app.render:set_zoom(app.render.zoom + 1)
     if app.net.send_zoom then app.net:send_zoom(app.render.zoom) end
-  elseif key == "1" or key == "2" then
+  elseif key == "1" or key == "2" or key == "3" then
     local slot = tonumber(key)
     -- lokale Cooldown-Optik: GCD bzw. Raptor-CD
     local me = app.view and app.view.players[app.view.me]

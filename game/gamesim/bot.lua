@@ -31,7 +31,7 @@ function M.decide(state, pid)
 
   if p.ghost then
     -- zum zugeteilten Klassenicon laufen und stehenbleiben (Channel)
-    local slot = ((pid - 1) % #world.CLASSES_M2) + 1
+    local slot = ((pid - 1) % #world.CLASSES) + 1
     local ix, iy = world.class_icon_pos(slot)
     if world.dist(p.x, p.y, ix, iy) <= 30 then
       return { mask = 0, facing = 0 }
@@ -41,21 +41,36 @@ function M.decide(state, pid)
 
   -- lebend: auf Klassenreichweite an Hogger heran, dann Faehigkeiten
   local h = state.hogger
+  local attack = model.classes[p.class] and model.classes[p.class].attack or "melee"
   local range = model.p("melee_range")
-  if p.class == "hunter" then range = model.p("autoshot_range") end
-  if p.class == "priest" then range = model.p("wand_range") end
+  if attack == "shot" then range = model.p("autoshot_range") end
+  if attack == "wand" or p.class == "druid" then range = model.p("wand_range") end
 
   local d = world.dist(p.x, p.y, h.x, h.y)
   local mask = 0
   if d > range * 0.9 then
     mask = move_mask_towards(p.x, p.y, h.x, h.y, 8)
   else
-    -- Faehigkeit 1 als Flanke: Bit nur jeden 30. Tick setzen
-    if state.tick % 30 == 0 then mask = mask + input.AB1 end
-    -- Priester: Selbstheilung unter 50 % (Faehigkeit 2)
-    if p.class == "priest" and p.hp < 0.5 * p.max_hp
-       and state.tick % 30 == 15 then
+    local low_hp = p.hp < 0.5 * p.max_hp
+    local cls = p.class
+    -- Flanken: Bits nur in einzelnen Ticks setzen
+    if cls == "warrior" or cls == "hunter" or cls == "mage"
+       or cls == "warlock" or cls == "druid" or cls == "rogue" then
+      if state.tick % 30 == 0 then mask = mask + input.AB1 end
+    end
+    if cls == "priest" then
+      if low_hp and state.tick % 30 == 15 then mask = mask + input.AB2
+      elseif state.tick % 30 == 0 then mask = mask + input.AB1 end
+    end
+    if cls == "paladin" then
+      if low_hp and state.tick % 30 == 15 then mask = mask + input.AB1
+      elseif state.tick % 30 == 0 then mask = mask + input.AB2 end
+    end
+    if cls == "rogue" and (p.cp or 0) >= 5 and state.tick % 30 == 15 then
       mask = mask + input.AB2
+    end
+    if cls == "warlock" and state.tick % 600 == 30 then
+      mask = mask + input.AB2 -- Wichtel nachbeschwoeren (wirkt nur ohne Wichtel)
     end
     -- WoW-Spieler huepfen permanent (GDD 4.1)
     if state.tick % 90 == 45 then mask = mask + input.JUMP end
