@@ -215,7 +215,7 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 
 | Wert | Formel/Zahl | Anmerkung |
 |---|---|---|
-| **HP** | 430 × N − 950 (affin, v2.6) | N=5: 1.200 · N=10: 3.350 · N=40: 16.250 — der Sockel bildet den Kleingruppen-Overhead ab |
+| **HP** | 430 × N − 950 (affin, v2.6), mindestens 120 × N | N=5: 1.200 · N=10: 3.350 · N=40: 16.250 — der Sockel bildet den Kleingruppen-Overhead ab; die Untergrenze fängt Wartelobbys unter der Design-Spanne (N<3) ab |
 | Autohit | 30 Schaden alle 1,8 s | Stoff stirbt in 2, Platte in 3 Hits |
 | Kritchance | 5 %, ×2 (= 60) | oneshottet alles außer voller Platte — der "WAS?!"-Moment |
 | Tempo | 155 px/s | Weglaufen verzögert, rettet nicht |
@@ -231,7 +231,7 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 
 | Größe | Formel | N=5 | N=10 | N=20 | N=40 |
 |---|---|---|---|---|---|
-| Hogger HP | 430 × N − 950 | 1.200 | 3.350 | 7.650 | 16.250 |
+| Hogger HP | max(430 × N − 950; 120 × N) | 1.200 | 3.350 | 7.650 | 16.250 |
 | Fress-Heilung/Kanal | 12 % Max-HP | 144 | 402 | 918 | 1.950 |
 | Unterbrecher | ceil(N/10)+2 | 3 | 3 | 4 | 6 |
 | Cleave-Ziele | ceil(N/5) | 1 | 2 | 4 | 8 |

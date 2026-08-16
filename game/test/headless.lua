@@ -51,12 +51,32 @@ function T.run()
   end
 
   local DT = model.TICK_DT
-  local sim_seconds = 150
+  -- adaptiv: mindestens 150 s; auf langsamen CI-Runnern verbinden die
+  -- Bot-Clients spaeter, dann laeuft der Test bis 420 s weiter, statt an
+  -- einer festen Frist zu flaken (macOS-Runner, 2026-08-16)
+  local min_seconds, max_seconds = 150, 420
   local rejoined = false
   local old_pid_of_c2 = nil
   local max_body = 0
+  local function outcome_counts()
+    local try_starts, revives, damage_evs = 0, 0, 0
+    for _, line in ipairs(log_lines) do
+      if line:find('"ev":"try_start"') then try_starts = try_starts + 1 end
+      if line:find('"ev":"revive"') then revives = revives + 1 end
+      if line:find('"ev":"damage"') then damage_evs = damage_evs + 1 end
+    end
+    return try_starts, revives, damage_evs
+  end
 
-  for iter = 1, math.floor(sim_seconds / DT) do
+  local iter = 0
+  while true do
+    iter = iter + 1
+    if iter > math.floor(max_seconds / DT) then break end
+    if iter > math.floor(min_seconds / DT)
+       and iter % math.floor(5 / DT) == 1 then
+      local ts, rv, dm = outcome_counts()
+      if ts >= 2 and rv >= 4 and dm > 50 then break end
+    end
     -- Host: eigener Spieler laeuft als Bot
     local host_inp = bot.decide(host.state, host.local_pid)
     host:update(DT, host_inp)
@@ -122,12 +142,7 @@ function T.run()
   end
 
   -- Ergebnis-Pruefungen
-  local try_starts, revives, damage_evs = 0, 0, 0
-  for _, line in ipairs(log_lines) do
-    if line:find('"ev":"try_start"') then try_starts = try_starts + 1 end
-    if line:find('"ev":"revive"') then revives = revives + 1 end
-    if line:find('"ev":"damage"') then damage_evs = damage_evs + 1 end
-  end
+  local try_starts, revives, damage_evs = outcome_counts()
   ok(try_starts >= 2, "Voller Try inkl. Try-Uebergang (" .. try_starts .. " Starts)")
   ok(revives >= 4, "Clients beleben sich ueber das Netz wieder (" .. revives .. ")")
   ok(damage_evs > 50, "Kampf laeuft ueber das Netz (" .. damage_evs .. " Treffer)")
