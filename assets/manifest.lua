@@ -128,4 +128,7 @@ return {
   snd_wipe_sting      = { art = "blip", freq = 233, dauer = 0.9, datei = "snd_wipe_sting.ogg" },
   -- 16: DER Schrei — einzige Voice-Line, Eigenproduktion (Rob/TTS/Suno)
   snd_leeroy_scream   = { art = "blip", freq = 350, dauer = 1.0, gain = 1.4, datei = "snd_leeroy_scream.ogg" },
+  -- 17: Charge des Echos bei der Questuebergabe (Ruestungsrasseln/Ansturm).
+  -- Ausdruecklich NICHT der Schrei — der gehoert dem Raid-Leeroy (GDD 10.2)
+  snd_echo_charge     = { art = "blip", freq = 180, dauer = 0.5, gain = 0.9, datei = "snd_echo_charge.ogg" },
 }
