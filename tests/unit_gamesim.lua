@@ -639,3 +639,55 @@ do
   T.eq(r.seal_hits, 0, "Tod: Siegel-Ladungen sind weg")
   T.eq(r.cp, 0, "Tod: Combopunkte sind weg")
 end
+
+-- Leerlauf-Patrouille (Runde 5, Issue #87): Mobs spazieren deterministisch
+-- in kleinem Radius um ihren Spawn; Radius 0 schaltet ab. Kein RNG-Kanal.
+do
+  local function idle_world()
+    local st = world.new(7)
+    world.add_player(st, "zaungast", { quest_done = true })
+    world.begin_try(st, {})
+    local p = st.players[1]
+    local g = map.graveyard()
+    p.x, p.y = g.x, g.y -- weit weg von jedem Aggro-Radius
+    return st
+  end
+
+  local st = idle_world()
+  for _ = 1, math.ceil(10 / model.TICK_DT) do step.step(st, {}) end
+  local moved, within = false, true
+  local pr = model.p("mob_patrol_radius")
+  for _, id in pairs(st.mob_by_slot) do
+    local n = st.npcs[id]
+    if n and n.state == "idle" then
+      local d = world.dist(n.x, n.y, n.spawn_x, n.spawn_y)
+      if d > 1 then moved = true end
+      if d > pr + 5 then within = false end
+    end
+  end
+  T.ok(moved, "Patrouille: die Mobs stehen nicht mehr nur herum")
+  T.ok(within, "Patrouille: niemand verlaesst den kleinen Radius")
+
+  -- Determinismus: gleicher Aufbau, gleicher Spaziergang
+  local st2 = idle_world()
+  for _ = 1, math.ceil(10 / model.TICK_DT) do step.step(st2, {}) end
+  local same = true
+  for slot, id in pairs(st.mob_by_slot) do
+    local a, b = st.npcs[id], st2.npcs[st2.mob_by_slot[slot]]
+    if a and b and (a.x ~= b.x or a.y ~= b.y) then same = false end
+  end
+  T.ok(same, "Patrouille: deterministisch (kein RNG-Kanal, CLAUDE.md)")
+
+  -- Radius 0 = aus
+  local r0 = model.params.mob_patrol_radius.wert
+  model.params.mob_patrol_radius.wert = 0
+  local st3 = idle_world()
+  for _ = 1, math.ceil(5 / model.TICK_DT) do step.step(st3, {}) end
+  local still = true
+  for _, id in pairs(st3.mob_by_slot) do
+    local n = st3.npcs[id]
+    if n and world.dist(n.x, n.y, n.spawn_x, n.spawn_y) > 0.5 then still = false end
+  end
+  model.params.mob_patrol_radius.wert = r0
+  T.ok(still, "Patrouille: Radius 0 schaltet sie ab")
+end

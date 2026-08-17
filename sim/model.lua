@@ -169,6 +169,9 @@ M.params = {
   murloc_hp              = p(12, 5, 40, 1, "7.2"),
   murloc_dmg             = p(5, 1, 15, 1, "7.2"),
   mob_attack_interval    = p(2.0, 0.5, 4.0, 0.5, "7.2"),
+  -- Leerlauf-Patrouille (Runde 5, Issue #87): 0 = aus
+  mob_patrol_radius      = p(60, 0, 200, 5, "7.2"),
+  mob_patrol_speed       = p(45, 10, 140, 5, "7.2"),
   xp_per_mob             = p(1, 0, 5, 1, "7.3"),
   xp_level2              = p(400, 100, 1000, 50, "7.3"),
 
@@ -206,6 +209,12 @@ M.params = {
   floating_text_max      = p(30, 10, 60, 5, "4.1"),
   floating_text_duration = p(1.5, 0.5, 4.0, 0.25, "4.1"),
 }
+
+-- GDD-Stand jedes Parameters, eingefroren beim Laden: das F10-Panel mutiert
+-- M.params in-place, der CSV-Export (GDD 17.6, Issue #82) braucht die
+-- Abweichung vom Default.
+M.defaults = {}
+for k, e in pairs(M.params) do M.defaults[k] = e.wert end
 
 -- bequemer Wertzugriff: M.p("hogger_hp_coeff") -> 120
 function M.p(key)

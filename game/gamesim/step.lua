@@ -644,10 +644,10 @@ end
 local function mob_tick(state, npc, ev)
   local typ = npc.kind
   local speed = model.p("move_speed_alive")
-  local function move_towards(tx, ty)
+  local function move_towards(tx, ty, spd)
     local d = world.dist(npc.x, npc.y, tx, ty)
     if d < 2 then return end
-    local step_len = math.min(speed * DT, d)
+    local step_len = math.min((spd or speed) * DT, d)
     npc.x = npc.x + (tx - npc.x) / d * step_len
     npc.y = npc.y + (ty - npc.y) / d * step_len
   end
@@ -695,6 +695,23 @@ local function mob_tick(state, npc, ev)
           npc.state = "combat"
           npc.target_pid = p.id
           break
+        end
+      end
+    end
+    if npc.state == "idle" then
+      -- Kleine Patrouille um den Spawn (Runde 5, Issue #87): wirkt
+      -- lebendig, ohne einen RNG-Kanal anzufassen (CLAUDE.md) — Wegpunkt
+      -- und Gehpausen kommen deterministisch aus Mob-Id und Sim-Zeit.
+      -- Radius << Leash (450 px), der Reset kann nie anspringen.
+      local pr = model.p("mob_patrol_radius")
+      if pr > 0 then
+        local period = 3 + npc.id % 4 -- nicht alle im Gleichschritt
+        local k = math.floor(state.time / period)
+        if k % 2 == 0 then -- gehen, stehen, gehen ...
+          local ang = npc.id * 2.399 + k * 1.7
+          move_towards(npc.spawn_x + math.cos(ang) * pr,
+                       npc.spawn_y + math.sin(ang) * pr,
+                       model.p("mob_patrol_speed"))
         end
       end
     end

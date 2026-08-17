@@ -555,6 +555,7 @@ function love.update(dt)
     app.stats:update(dt)
     if not app.stats.visible then app.stats = nil end
   end
+  if app.panel then app.panel:update(dt) end -- Key-Repeat (Issue #81)
   if app.victory then
     app.victory:update(dt)
     -- REVANCHE gedrueckt, der naechste Durchlauf laeuft: Sequenz beenden
@@ -829,6 +830,8 @@ end
 
 function love.mousepressed(mx, my, button)
   if app.headless then return end
+  -- Tuning-Panel zuerst: Export-Knopf, und Klicks im Panel setzen kein Ziel
+  if app.panel and app.panel:mousepressed(mx, my) then return end
   if app.dialog and app.dialog.visible then
     if app.dialog:mousepressed(mx, my) then
       app.dialog = nil
@@ -851,10 +854,14 @@ function love.mousepressed(mx, my, button)
     end
   end
   if app.victory then
-    if app.victory:mousepressed(mx, my) == "revanche" then
+    local r = app.victory:mousepressed(mx, my)
+    if r == "revanche" then
       -- REVANCHE (GDD 11): jeder darf druecken, der Host fuehrt aus
       if app.mode == "host" then app.net:revanche()
       else app.net:send_revanche() end
+    elseif r == "logout" then
+      -- Ausloggen (#85): beendet das Spiel; love.quit() raeumt das Netz ab
+      love.event.quit(0)
     end
     return
   end
