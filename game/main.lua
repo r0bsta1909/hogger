@@ -558,6 +558,7 @@ function love.update(dt)
     app.stats:update(dt)
     if not app.stats.visible then app.stats = nil end
   end
+  if app.panel then app.panel:update(dt) end -- Key-Repeat (Issue #81)
   if app.victory then
     app.victory:update(dt)
     -- REVANCHE gedrueckt, der naechste Durchlauf laeuft: Sequenz beenden
@@ -824,6 +825,8 @@ end
 
 function love.mousepressed(mx, my)
   if app.headless then return end
+  -- Tuning-Panel zuerst: Export-Knopf, und Klicks im Panel setzen kein Ziel
+  if app.panel and app.panel:mousepressed(mx, my) then return end
   if app.dialog and app.dialog.visible then
     if app.dialog:mousepressed(mx, my) then
       app.dialog = nil
