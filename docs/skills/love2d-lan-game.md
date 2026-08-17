@@ -1,22 +1,30 @@
 ---
 name: love2d-lan-game
-description: Erprobte Architektur- und Netcode-Muster für LÖVE2D-Spiele mit LAN-Multiplayer in jeder Konstellation — 1v1-Sportspiel, Arena-Shooter, Koop, persistente Welt/MMORPG-artig — plus Zero-Config-Discovery und Turniermodus. Laden bei jedem Projekt mit LÖVE/love2d + Netzwerk (ENet, luasocket, Snapshots, Lockstep-Frage, Skalierungsfragen), LAN-Party-Betrieb oder integriertem Turniersystem — vor der ersten Architekturentscheidung und vor der ersten Zeile Netzcode.
+description: Erprobte Architektur-, Netcode- und Auslieferungsmuster für LÖVE2D-Spiele mit LAN-Multiplayer in jeder Konstellation — 1v1-Sportspiel, Arena-Shooter, Koop-Zerg bis 40 Spieler, persistente Welt/MMORPG-artig — plus Zero-Config-Discovery, Turniermodus, Asset-Pipeline von Platzhalter bis Final, Release-Bau von .love/.exe/.app und CI-Zuschnitt auf gehosteten Runnern. Laden bei jedem Projekt mit LÖVE/love2d + Netzwerk (ENet, luasocket, Snapshots, Lockstep-Frage, Skalierungsfragen), LAN-Party-Betrieb, Turniersystem, Headless-Balancing-Sim, Asset- oder Packaging-Fragen sowie bei GitHub-Actions-Matrix und Minutenverbrauch — vor der ersten Architekturentscheidung, vor der ersten Zeile Netzcode und vor dem Aufsetzen der CI.
 ---
 
 # LÖVE2D-Spiel für LAN und Turnier — destillierte Learnings
 
-Quelle: ein vollständig durchgezogenes Projekt (Arcade-Sportspiel, Win + macOS, 20-Teilnehmer-Turnier,
-zwei echte LAN-Abende). Alles hier ist gebaut, gemessen oder teuer schiefgegangen — nichts ist Theorie.
+Quellen: **zwei** vollständig durchgezogene Projekte.
+
+- **P1 — Arcade-Sportspiel** (Win + macOS, 2–8 Spieler/Match, 20-Teilnehmer-Turnier, zwei echte
+  LAN-Abende). Ursprung von §1–§10.
+- **P2 — Koop-Zerg gegen einen Boss** (Win + macOS, 5–40 Spieler, ~50 Entitäten, 60-Hz-Vollzustand,
+  Balancing per Headless-Sim, Asset-Pipeline von Platzhalter bis Final, Release-Pipeline für
+  `.love`/`.exe`/`.app`). Ursprung von §11–§13 und der Messwerte in §3.1.
+
+Alles hier ist gebaut, gemessen oder teuer schiefgegangen — nichts ist Theorie.
 Punkte mit **[gemessen]** sind Fallen, die erst im echten Betrieb auffielen.
 
-**Geltungsbereich:** Die gemessene Hülle ist: kleiner Weltzustand (zweistellige Bytezahl pro
-Snapshot), 2–8 aktive Spieler pro Match, LAN-RTT < 5 ms. §1, §2, §4, §5, §7–§10 gelten
-**genre-unabhängig** für jedes LÖVE2D-LAN-Projekt — die Fallen dort hängen an Plattform, Lua 5.1
-und ENet/LuaSocket, nicht am Spieltyp. §6 gilt, sobald ein Turnier gebraucht wird (und sein
-Event-Log-Muster generalisiert auf jede persistente Welt). Nur die Snapshot-Strategie in §3
-ist skalenabhängig; §3.1 gibt die Eskalationsleiter für größere Welten. Abschnitte mit
-**[abgeleitet]** sind aus den gemessenen Prinzipien gefolgert, aber nicht selbst im Betrieb
-verifiziert — dort gilt §10 doppelt: erst messen, dann eskalieren.
+**Geltungsbereich:** Die gemessene Hülle ist inzwischen: kleiner Weltzustand (bis ~700 B pro
+Snapshot), **bis 40 gleichzeitige Spieler**, LAN-RTT < 5 ms. §1, §2, §4, §5, §7–§13 gelten
+**genre-unabhängig** für jedes LÖVE2D-LAN-Projekt — die Fallen dort hängen an Plattform, Lua 5.1,
+ENet/LuaSocket und der Werkzeugkette, nicht am Spieltyp. §6 gilt, sobald ein Turnier gebraucht
+wird (und sein Event-Log-Muster generalisiert auf jede persistente Welt). Nur die
+Snapshot-Strategie in §3 ist skalenabhängig; §3.1 gibt die Eskalationsleiter und seit P2 einen
+gemessenen Anker bei 40 Spielern. Abschnitte mit **[abgeleitet]** sind aus den gemessenen
+Prinzipien gefolgert, aber nicht selbst im Betrieb verifiziert — dort gilt §10 doppelt: erst
+messen, dann eskalieren.
 
 ## 1. Reihenfolge: Fundament vor Netcode
 
@@ -124,9 +132,19 @@ Einzelpaketverluste werden unsichtbar. Fehlt Input zum Tick: **letzte Maske wied
 (Repeat-Last), nicht Null-Input — sonst ruckelt die Figur bei jedem Verlust zum Stillstand.
 Jitter-Puffer klein halten (~2 Ticks): Latenz ist teurer als seltene Vertauschung. Input-Delay 0 im LAN.
 
-### 3.1 Skalierung über die gemessene Hülle hinaus **[abgeleitet]**
+### 3.1 Skalierung über die gemessene Hülle hinaus **[Stufe 0 gemessen, Stufen 2–4 abgeleitet]**
 
-Für größere Welten (viele Entitäten, > 8 Spieler, MMORPG-artig) bleibt die Architektur
+**[gemessen] P2, der Anker bei 40 Spielern:** 40 echte ENet-Clients, ~50 Entitäten,
+60-Hz-Vollzustand ohne jede Optimierung, 10-Minuten-Lauf mit Zufallsbewegung und
+Fähigkeits-Spam. Ergebnis: Host-Tickdauer **Mittel 0,44 ms, p95 0,60 ms, p99 0,77 ms,
+max 11,9 ms** gegen ein Gate von 16,6 ms; Upstream **20,7 Mbit/s**; Lua-Heap stabil bei ~12 MB.
+**Stufe 0 der Leiter trägt bis dahin** — keine Entkopplung der Snapshot-Rate, kein
+Relevanzfilter, keine Delta-Kompression. Wer bei dieser Größenordnung optimiert, optimiert
+ohne Messung. Der p95 liegt eine Größenordnung unter dem Budget: der Kopf nach oben ist groß,
+und der erste Engpass wird die Sim sein, nicht das Packen (der Snapshot ist für alle Clients
+identisch und wird **einmal pro Tick** gepackt — Packkosten wachsen nicht mit N).
+
+Für größere Welten (viele Entitäten, > 40 Spieler, MMORPG-artig) bleibt die Architektur
 dieselbe — Host-autoritativ, Clients senden Inputs, Lockstep bleibt aus denselben Gründen
 unerreichbar. Was sich ändert, ist nur die Snapshot-Strategie. **Eskalationsleiter — jede
 Stufe erst betreten, wenn die Rechnung oder Messung es verlangt, nie prophylaktisch:**
@@ -176,6 +194,24 @@ ENet für Spiel/Lobby (reliable + unreliable Kanäle), LuaSocket-UDP **nur** fü
   je Richtung ~16 ms, die im Overlay wie Netzlatenz aussehen (App-RTT 77 ms bei ENet-RTT 20 ms).
   **`flush()` am Frame-Ende**, nachdem alle Ticks gefahren sind.
 - **ENet-Peer-Timeout auf ~5000 ms** setzen — der Default (30 s) lässt tote Slots im LAN minutenlang stehen.
+- **[gemessen] `lua-enet` wirft aus `host:service()` einen harten Lua-Fehler** („Error during
+  service"), sobald der UDP-Socket irgendetwas meldet — auf macOS genügt dafür die
+  **Firewall-Nachfrage bei einer unsignierten App** oder eine kurz wegfallende Schnittstelle.
+  Ohne Absicherung beendet ein einzelner Socket-Fehler den ganzen Prozess: das Spiel stirbt in
+  dem Moment, in dem der Gast den Firewall-Dialog noch vor sich hat. Gegenmittel ist ein
+  **Netz-Guard in reinem Lua**, durch den `service`, `flush`, `send`, `broadcast`, `timeout`
+  **und** `host_create`/`connect` laufen: Fehler werden geschluckt und gezählt (höchstens einer
+  je Frame, sonst zählt die Service-Schleife denselben Fehler mehrfach), erst **~2 s
+  ununterbrochener** Fehler gelten als Verbindungsverlust, und **ein einziger Erfolg setzt die
+  Uhr zurück** — bestätigt der Nutzer die Firewall-Nachfrage, läuft das Spiel einfach weiter.
+  Die Service-Schleife bricht beim ersten Fehler ab, statt zu drehen. Reine Lua-Fehlerpolitik
+  heißt: headless testbar (Fälle „Dauerfehler kippt nach 2 s" und „abwechselnd Fehler/Erfolg
+  tötet nie" gehören in die Suite). Der Ausfall endet im **Trennungsdialog des Spiels**, die
+  technische Ursache im Debug-Overlay — nie als Absturz.
+- **[gemessen] Die Peerzahl ist ein Argument von `enet.host_create(addr, peerCount, channels)`,
+  und zu klein dimensioniert fällt sie erst im Stresstest auf.** 32 Peers tragen keine 40
+  Spieler. Mit Reserve dimensionieren (Zielspielerzahl + ~20 %) und die Zahl im Stresstest
+  gegen die echte Zielgröße fahren, nicht gegen die Entwicklungsgröße.
 - **[gemessen] Ein Prozess kann denselben ENet-Port nicht zweimal binden.** Wer gleichzeitig
   zwei Host-Rollen hat (z. B. Turnier-Host + Match-Host): zweiter Wirt auf `*:0` (ephemer),
   tatsächlichen Port mit `host:get_socket_address()` zurücklesen und über die Kontrollverbindung
@@ -374,6 +410,15 @@ Sonderfall, der bei jeder weiteren Socket-Szene neu gebaut werden müsste.
 - **[gemessen] Das gebaute Paket aus einem fremden Verzeichnis testen**, nie aus dem Repo-Wurzel:
   Lua findet `tests/`/`tools/` sonst über den Suchpfad der Arbeitskopie und meldet grün, ohne das
   Paket geprüft zu haben. Testflags gehören zum Quellordner; das Paket wird gespielt.
+  Schärfste Form der Gegenprobe: nach dem Release die **fertige `.exe` aus dem Release
+  herunterladen** und mit `--headless --test` fahren — das prüft Paketwurzel, Suchpfade und
+  angehängtes Archiv in einem Zug (§12).
+- **[gemessen] Integrationstests nie über eine feste Zeitspanne definieren, sondern über ein
+  Ergebnisziel** („bis > 50 Treffer gefallen sind", Deckel als Notausgang). Eine feste Frist ist
+  auf dem eigenen Rechner großzügig und auf einem langsameren oder mitbenutzten CI-Runner
+  zu knapp: derselbe Test lief lokal durch und riss auf dem macOS-Runner die 150-s-Frist mit
+  32 statt > 50 Treffern. Das sieht wie ein Flake aus, ist aber eine Messgröße mit falscher
+  Einheit — Zeit statt Fortschritt.
 - Paketverlust simulieren: Windows `clumsy`, macOS `dnctl/pfctl`, Linux `tc netem`.
 
 ## 9. Betrieb (LAN-Party-Realität)
@@ -408,3 +453,138 @@ Sonderfall, der bei jeder weiteren Socket-Szene neu gebaut werden müsste.
   jeden Vorschlag. Eine Funktion, die einen Absturz oder No-Show nicht übersteht, ist nicht fertig.
 - Lua-5.1-Realität einplanen: kein `string.pack`, kein Integer-Typ, kein `//`; JIT auf Apple Silicon
   aus → Performance dort separat prüfen.
+
+**Zahlen und Balancing (P2, trug den gesamten Zahlenteil):**
+
+- **Alle Spielzahlen in genau einer flachen Tabelle**, je Eintrag `{wert, min, max, schritt,
+  quelle}`. Das Live-Tuning-Panel **generiert sich vollständig daraus** — keine Variable wird je
+  von Hand ins UI gebaut, also kann auch keine vergessen werden. Derselbe Zwang, der die Sim
+  ehrlich hält, macht das Panel gratis.
+- **Headless-Sim vor dem ersten Playtest.** Ein grobes, schnelles Modell (1D-Distanz, 0,1-s-Ticks,
+  kein Pathing) beantwortet Balancing-Fragen in Sekunden statt in LAN-Abenden. Es teilt mit dem
+  Spiel **ausschließlich die Zahlentabelle**, nie die Mechanik — zwei Simulationen, eine
+  Zahlenquelle.
+- **Falsifikationskriterien als automatisches Pass/Fail formulieren**, bevor getunt wird
+  („Siegquote bei N=10 zwischen 60 und 90 %", „der Heil-Maximierer verliert in > 95 % der Läufe").
+  Erst dann ist ein Sweep eine Messung statt einer Meinung. Zu jedem gerissenen Kriterium gehört
+  ein vorher benannter **Stellhebel** — sonst wird beim ersten roten Ergebnis am nächstbesten
+  Wert gedreht.
+- **[gemessen] Deterministisch-homogene Agenten erzeugen Stufenfunktions-Siegquoten.** Ein Band
+  wie „60–90 %" ist erst mit Streuung eine messbare Größe: je Agent ein Skill-Faktor, je Lauf ein
+  gemeinsamer Koordinationsfaktor, beide deterministisch aus dem geloggten Seed. Die Streuung ist
+  Sim-Modellparameter, nicht Spielverhalten — die Sim bleibt reproduzierbar.
+- **Tuning-Protokoll als Ergebnisgedächtnis:** jede Balancing-Änderung mit Datum, **Auslöser** und
+  **Ergebnis** an ein fortlaufendes Kapitel anhängen. Ohne das wird derselbe Wert dreimal in
+  verschiedene Richtungen gedreht, weil niemand mehr weiß, warum er dort steht.
+- **Mensch nur fürs Gefühl.** Alles Messbare (Invarianten, Sweeps, Stresstest, Gates) prüft die
+  Maschine selbst; der Mensch wird mit fertigem Validierungsbericht und **je einer Ein-Satz-Frage
+  pro offenem Punkt** gerufen. Playtest-Zeit ist die knappste Ressource im Projekt.
+- Kleinigkeit mit Zähnen: **GitHub schließt Issues nur über englische Schlüsselwörter**
+  (`closes #12`). Wer Commits und PRs auf Deutsch schreibt, schließt seine Issues von Hand —
+  sonst wächst die Arbeitsschlange still weiter, obwohl alles erledigt ist.
+
+## 11. Asset-Kontrakt: Platzhalter → Final ohne Codeänderung
+
+Ziel: Das Spiel ist ab Tag 1 voll spielbar und testbar, und die finalen Bilder und Sounds
+tauschen sich später ein, **ohne dass eine Zeile Spielcode fasst**. Das entkoppelt die
+Programmierung vollständig von der Kunst — beides ist sonst gegenseitig blockiert.
+
+- **Kein Dateipfad im Spielcode.** Nur logische IDs aus einem Manifest
+  (`id → {datei, maße, anker, frames}`). Ein Pfad im Spielcode ist eine Zusage an ein Dateisystem,
+  die auf der anderen Plattform oder im gepackten Archiv anders lautet.
+- **Platzhalter werden generiert, nie gemalt** — ein Werkzeug erzeugt aus dem Manifest einfarbige
+  Formen in exakt den finalen Maßen, mit Kürzel-Beschriftung. Im Icon-Look ist der generierte
+  Platzhalter dem Final so nah, dass komplette Meilensteine damit spielbar sind. Audio analog:
+  Sinus-Blips; Musik-/Ambience-Slots spielen Stille, bis eine Datei liegt.
+- **Ein Validator prüft jede echte Datei gegen den Kontrakt und läuft in der Testsuite.** Ein
+  falsch geliefertes Final-Asset fällt damit im Test auf, nicht am LAN-Abend.
+- **[gemessen] Der Kontrakt muss echte Menschen-Exporte aushalten, nicht die Idealdatei.** Was
+  real ankam: `icon_krieger.png.png` (Windows blendet bekannte Endungen aus — der Standardfehler,
+  und er wiederholt sich), 500×500 und 696×225 statt der vereinbarten 32×32, ein Icon mit Rand
+  auf breiter Leinwand. Konsequenzen, die alle drei Fälle billig machen:
+  - Der Validator erkennt die **doppelte Endung** und **sagt den korrekten Namen an**, statt nur
+    „unbekannte Datei" zu melden.
+  - Finale Bilder dürfen **größer** sein als das Manifest-Maß, müssen aber quadratisch sein; die
+    Zeichenschicht **normalisiert beim Zeichnen** auf das Manifest-Maß. So bleiben
+    hochauflösende Exporte scharf, und trotzdem steht nirgends im Spielcode eine Bildgröße.
+    Nicht quadratisch = Fehler mit Ansage, nicht stille Verzerrung.
+  - Ein Zuschneide-Werkzeug liegt daneben als **Werkzeug**, nicht als Build- oder Testschritt.
+    Einmalige Reparaturen gehören nicht in die Pipeline, sonst laufen sie ewig mit.
+- **[gemessen] Bildschirmfüllende Flächen `contain` zeichnen, nicht `cover`.** Ein 4:3-Splash auf
+  einem 16:10-Fenster verliert bei `cover` oben und unten Streifen — also genau dort, wo Logo und
+  Ladebalken sitzen. Schwarzer Rand ist hässlicher als nichts und besser als abgeschnitten. Solche
+  Slots im Manifest als „mindestens"-Maß kennzeichnen, damit der Validator sie anders behandelt.
+- Dateinamen strikt klein, keine Umlaute, keine Leerzeichen; Zeilenenden per `.gitattributes` auf
+  LF erzwingen. Beides sind Fallen, die ausschließlich auf der jeweils anderen Plattform zünden.
+
+## 12. Lieferpipeline: ein Tag, drei Pakete
+
+Verteilung am LAN-Abend ist ein Release-Link, kein Ordner im Chat. Ein Tag `v*` baut alles.
+**Die `.love` ist die eine Wahrheit**; `.exe` und `.app` sind dieselbe Datei mit einer
+Laufzeitumgebung davor.
+
+- **Archivwurzel ist der ganze Trick.** `main.lua`/`conf.lua` müssen in der **Wurzel** des
+  ZIPs liegen, daneben die Quellbäume — LÖVEs Zip-Loader löst `require("modul.datei")` gegen die
+  Archivwurzel auf. Wer den Projektordner mitverpackt, bekommt ein Archiv, das lokal funktioniert
+  und gepackt nichts findet. **Im Build danach greifen** (`unzip -l … | grep " main.lua"`, dazu
+  eine tief liegende Moduldatei) — zwei Zeilen, die den häufigsten Paketfehler unmöglich machen.
+- **[gemessen] Auf Windows das Icon setzen, *bevor* die `.love` angehängt wird.** Das
+  Ressourcen-Werkzeug schreibt die PE-Ressourcen neu und wirft angehängte Daten dabei weg — in
+  der falschen Reihenfolge entsteht eine `.exe` mit hübschem Icon und ohne Spiel. Danach die
+  mitgelieferte `love.exe`/`lovec.exe` aus dem Paket **entfernen**, sonst startet der Gast das
+  falsche Programm.
+- **[gemessen] Das `.app`-Bundle mit `zip -y` packen.** Ohne Symlink-Erhalt werden die
+  Frameworks zu Kopien und das Bundle ist kaputt. Dazu die `Info.plist` umschreiben
+  (`CFBundleName`, `CFBundleDisplayName`, `CFBundleIdentifier`, `CFBundleIconFile`) und die
+  Icon-Datei ersetzen, auf die sie zeigt — sonst heißt das Spiel im Dock weiterhin „LÖVE", und
+  die vom Engine-Bundle geerbten Dateityp-Zuordnungen bleiben ebenfalls hängen.
+- **Icons ohne Bildwerkzeug in der Pipeline.** `.ico` (Windows ab Vista) und `.icns` (macOS ab
+  10.7) dürfen PNG-Daten **direkt einbetten**: Kopf schreiben, Bytes anhängen — das sind ~100
+  Zeilen reines Lua. Eine Abhängigkeit weniger in der Pipeline ist eine Fehlerquelle weniger an
+  dem Tag, an dem das Release gebraucht wird.
+- **LÖVE-Version pinnen** (herunterladen statt „was der Runner hat") und ungenutzte Module in
+  `conf.lua` abschalten. Der Build von heute muss in sechs Monaten dasselbe Paket erzeugen.
+- Das Release gegenprüfen, indem die **heruntergeladene** Datei den Selbsttest fährt (§8).
+
+## 13. CI-Ökonomie: die Job-Anzahl ist der Hebel
+
+Cross-Platform-Beweis heißt Matrix, und eine Matrix auf gehosteten Runnern kostet — auf einem
+privaten Repo echtes Geld, überall Wartezeit. **[gemessen] Der Verbrauch hängt fast nur an der
+Job-Anzahl, kaum an der Testdauer:** Abgerechnet wird **pro Job auf die volle Minute aufgerundet
+und erst danach mit dem OS-Faktor multipliziert** (Linux 1×, Windows 2×, macOS 10×). In P2 lief
+eine Fünf-Job-Matrix 26 Sekunden und kostete 24 abgerechnete Minuten — 20 davon für zwei
+macOS-Jobs mit zusammen 21 Sekunden echter Rechenzeit. Mit Triggern auf `push: main` **und**
+`pull_request` zahlte jedes gemergte Feature das doppelt: 48 Minuten pro PR, und ein einziger
+Bautag verbrauchte 98 % eines Monatskontingents.
+
+- **Ein Schnellgate, ein Job.** Alle headless-Stufen laufen nacheinander in **derselben**
+  Linux-Job-Instanz. Das ist zugleich das schnellere Feedback: ~40 s bis rot/grün, während
+  Paketmanager-Installationen in einer Matrix Minuten brauchen. Tests zu beschleunigen bringt
+  dagegen nichts — bei 10–20 s Laufzeit frisst die Aufrundung jede Ersparnis.
+- **Die Matrix daneben, nicht darin.** Ein zweiter Workflow trägt Windows + macOS. Ist das
+  Budget knapp, hängt er an `workflow_dispatch` und einem Label; ist es das nicht, hängt er an
+  jedem PR. Beides ist eine Zeile Unterschied — **diese Zeile gehört mit ihrem Auslöser in einen
+  ADR**, sonst ist nach der nächsten Budgetänderung niemand mehr sicher, warum es so steht.
+- **Ein wöchentlicher `schedule` auf der Matrix** fängt Drift, die keinen Commit hat:
+  Runner-Images, Paketstände, Fremd-Downloads. Zwischen zwei LAN-Abenden pusht niemand, und
+  genau dann fault die Pipeline unbemerkt.
+- **[gemessen] Auf Windows headless testen heißt `lovec.exe`, nicht `love.exe`.** `love.exe` ist
+  ein GUI-Subsystem-Binary ohne angehängte Konsole — die Testausgabe ist unsichtbar. Auf
+  Linux/macOS `SDL_VIDEODRIVER=dummy` setzen. Damit läuft die Integrationsstufe **auf allen drei**
+  Plattformen; auf der Plattform, auf der entwickelt wird, ist sie besonders wertvoll, weil sie
+  als einzige Stufe Pfade, Zeilenenden und Dateizugriff echt anfasst.
+- **Ein Sammel-Gate als Pflicht-Check.** Ein einzelner Job mit `needs` auf die Matrix, der die
+  Ergebnisse prüft, ist der stabile Name für die Branch-Schutzregel. Die Matrix-Namen direkt zu
+  fordern (`test (macos-latest)` …) bricht bei jeder Matrix-Änderung, und der Bruch zeigt sich
+  als unmergebarer PR.
+- **`paths-ignore` und erzwungene Status-Checks vertragen sich nicht.** Ein reiner Doku-PR wartet
+  dann ewig auf einen Check, der nie startet, und lässt sich nicht mergen. Bei kurzer Laufzeit ist
+  Immer-Laufen die einfachere Wahrheit als eine Ausnahmeliste.
+- `concurrency` mit `cancel-in-progress` in jedem Workflow: überholte Läufe sterben, statt bezahlt
+  zu Ende zu laufen.
+- **Branch-Schutz für ein Ein-Personen-Projekt:** PR-Pflicht und Pflicht-Checks ja, aber **null**
+  erforderliche Reviews (sonst blockiert sich der einzige Entwickler selbst) und **kein**
+  `enforce_admins` (sonst gibt es am Partyabend keinen Notausgang).
+- Kostenloser Ausweg, falls das Budget trotzdem klemmt: Ein **öffentliches** Repo hat unbegrenzte
+  Minuten. Für ein Hobbyprojekt ohne Geheimnisse ist das der billigste Hebel von allen — vor dem
+  Umschalten einmal nach Zugangsdaten im Verlauf greifen, danach ist es öffentlich.
