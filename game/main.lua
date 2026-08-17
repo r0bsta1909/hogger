@@ -663,6 +663,11 @@ function love.draw()
     end
     if app.stats then app.stats:draw() end
     if app.victory then app.victory:draw(app.view, to_screen, bw, bh) end
+    -- Raid-Overview, solange die linke STRG-Taste gehalten wird (Runde 6,
+    -- Issue #95): reines Overlay, blockiert keine Eingaben
+    if love.keyboard.isDown("lctrl") then
+      app.render:draw_raid_overview(app.view, bw, bh)
+    end
     if app.panel then app.panel:draw() end
   end
   if app.boot and app.boot:active() and not app.boot:covers_screen() then
@@ -712,6 +717,16 @@ function love.keypressed(key)
         or "Hogger ist schon tot (oder der Try laeuft nicht)"
     else
       app.debug.note = "Nur der Host kann Hogger toeten."
+    end
+    return
+  elseif action == "teleport" then
+    -- Test-Teleport (Runde 6, #100): sofort als Zufallsklasse vor Hogger
+    if app.mode == "host" and app.net and app.net.teleport_self then
+      app.debug.note = app.net:teleport_self()
+        and "Teleportiert — Hogger wartet."
+        or "Teleport ging nicht (Hogger tot oder kein Spieler)."
+    else
+      app.debug.note = "Nur der Host kann sich teleportieren."
     end
     return
   elseif action == "intro" then

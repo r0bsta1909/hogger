@@ -1210,6 +1210,50 @@ local function restart_all(state, ev)
   end
 end
 
+-- Admin-Werkzeug (Runde 6, Issue #100): den Spieler sofort als naechste
+-- Klasse der Rotation wiederbeleben und kurz VOR Hoggers Aggro-Radius
+-- absetzen (Richtung Friedhof) — der Kampf startet kontrolliert, der
+-- Testweg Friedhof -> Huegel entfaellt. Werkzeug, kein Spielinhalt.
+function S.admin_teleport(state, pid)
+  local p = state.players[pid]
+  local h = state.hogger
+  if not p or not h or h.hp <= 0 then return false end
+  local class = model.CLASS_IDS[state.tick % #model.CLASS_IDS + 1]
+  p.class = class
+  p.race = model.roll_race(class, state.rng:next())
+  p.max_hp = model.hp_for_class(class)
+  p.hp = p.max_hp
+  local res = model.classes[class].resource
+  p.resource = (res == "rage") and 0
+               or (res == "energy") and model.p("energy_max")
+               or model.p("mana_max")
+  p.cp = 0
+  p.stealth = false
+  p.seal_hits = 0
+  p.frost_armor = false
+  p.alive = true
+  p.ghost = false
+  p.revive = nil
+  p.cast = nil
+  p.attack_on = false
+  p.last_cast_t = -1000
+  p.next_auto = 0
+  p.shout_until = 0
+  p.bleed_t = 0
+  p.dead_until = 0
+  p.release_wish = nil
+  -- Quest gilt als angenommen (world.accept_quest verlangt den Offer-
+  -- Zustand — das Werkzeug ueberspringt das Onboarding komplett)
+  if (p.quest or 0) < 2 then p.quest = 2 end
+  local g = map.graveyard()
+  local dx, dy = g.x - h.x, g.y - h.y
+  local d = math.max(1, math.sqrt(dx * dx + dy * dy))
+  local dist = model.p("hogger_aggro_radius") + 60
+  p.x, p.y = map.clamp(h.x + dx / d * dist, h.y + dy / d * dist)
+  p.facing = input.facing_towards(p.x, p.y, h.x, h.y)
+  return true
+end
+
 -- Admin-Werkzeug (GDD 4.4, Issue #35): Hogger sofort toeten, damit sich der
 -- Fluchbruch samt Statistik-Tafel und REVANCHE auch allein testen laesst.
 -- Aendert Zustand ausschliesslich hier in step (ADR-002); der regulaere
