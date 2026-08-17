@@ -62,7 +62,7 @@ local stages = {
            "tests.unit_gamesim", "tests.unit_quest", "tests.unit_killcam",
            "tests.unit_statboard", "tests.unit_assets", "tests.unit_netguard",
            "tests.unit_fx", "tests.unit_admin",
-           "tests.unit_release", "tests.unit_errors" },
+           "tests.unit_release", "tests.unit_errors", "tests.unit_panel" },
   determinism = { "tests.determinism" },
 }
 

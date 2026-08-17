@@ -495,7 +495,9 @@ Alle Parameter als **eine flache Tabelle** in `model.lua` (`M.params`, je `{wert
 | Leeroy | Announcer-Drossel (Zeilen/10 s), Bedrohungsfaktor, Kragen-Schwelle (Trys bis Mechanik-Ansage) |
 | UI | Zoom-Stufen (Radien), Floating-Text-Dauer |
 
-Presets speichern/laden (JSON), "Zurück auf GDD-Werte".
+**Bedienung** (Runde 5, Issues #81/#82): Pfeiltasten navigieren und ändern, **gehaltene Tasten wiederholen** (0,35 s Verzögerung, dann ~22 Schritte/s), Shift = ×10. **CSV-Export** per Knopf oder Taste E: schreibt `tuning.csv` mit **nur den vom GDD-Stand abweichenden Werten** (`param;gdd_wert;wert`) in den Save-Ordner (`love.filesystem`, voller Pfad wird im Panel angezeigt) — das ist der Rückkanal, über den ertunte Werte ins Tuning-Protokoll (17.9) und nach `model.lua` zurückfließen. Geänderte Parameter sind in der Liste gelb mit Stern markiert. `M.defaults` friert den GDD-Stand beim Laden ein.
+
+Noch offen: Presets speichern/laden (JSON), "Zurück auf GDD-Werte".
 
 ### 17.7 Autonome Test-Pyramide (ein Befehl, grün/rot)
 
