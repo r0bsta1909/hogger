@@ -113,20 +113,34 @@ function R.evaluate(cells, penalty, ns)
   end
   f[3] = { ok = f3_ok, detail = table.concat(f3_detail, " · ") }
 
-  -- F4: Krits entscheiden nichts (Delta Siegquote an/aus <= 5 pp)
+  -- F4: Krits entscheiden nichts — Delta an/aus <= 5 pp IM MITTEL ueber
+  -- alle Zellen (GDD 13.3, Rob-Entscheid Issue #6). Einzelzellen duerfen
+  -- streuen, solange beide Krit-Welten der Koordinierten im F1-Band
+  -- bleiben. Der alte Checker pruefte je Zelle und war strenger als das GDD.
   local f4_ok, f4_detail = true, {}
+  local delta_sum, delta_cells = 0, 0
   for _, agent in ipairs({ "koordiniert", "unkoordiniert" }) do
     for _, n in ipairs(ns) do
       local a = cell(agent, n, "an")
       local b = cell(agent, n, "aus")
       if a and b then
         local delta = math.abs(a.win_rate - b.win_rate)
+        delta_sum = delta_sum + delta
+        delta_cells = delta_cells + 1
         f4_detail[#f4_detail + 1] = string.format("%s N=%d: %.1f pp",
           agent:sub(1, 2), n, delta * 100)
-        if delta > 0.05 then f4_ok = false end
+        if agent == "koordiniert" then
+          if a.win_rate < 0.60 or a.win_rate > 0.90
+             or b.win_rate < 0.60 or b.win_rate > 0.90 then
+            f4_ok = false
+          end
+        end
       end
     end
   end
+  local f4_mean = delta_cells > 0 and delta_sum / delta_cells or 0
+  if f4_mean > 0.05 then f4_ok = false end
+  table.insert(f4_detail, 1, string.format("Mittel %.1f pp", f4_mean * 100))
   f[4] = { ok = f4_ok, detail = table.concat(f4_detail, " · ") }
 
   -- F5: Median-Siegtry im Fenster 6-13 min (koordiniert)
@@ -144,7 +158,10 @@ function R.evaluate(cells, penalty, ns)
   end
   f[5] = { ok = f5_ok, detail = table.concat(f5_detail, " · ") }
 
-  -- F6: Skalierung fair — Spread der koordinierten Siegquoten <= 15 pp
+  -- F6: Skalierung fair — Spread zwischen kleinstem und groesstem N
+  -- <= 15 pp (GDD 13.3: "zwischen N=5 und N=40"). Der alte Checker nahm
+  -- max-min ueber ALLE N und war strenger als das GDD; die volle Spanne
+  -- bleibt als Zusatzinfo im Detail stehen.
   local lo, hi = 1, 0
   for _, n in ipairs(ns) do
     local s = cell("koordiniert", n, "an")
@@ -152,8 +169,14 @@ function R.evaluate(cells, penalty, ns)
     if wr < lo then lo = wr end
     if wr > hi then hi = wr end
   end
-  f[6] = { ok = (hi - lo) <= 0.15,
-           detail = string.format("Spread %.1f pp", (hi - lo) * 100) }
+  local s_first = cell("koordiniert", ns[1], "an")
+  local s_last = cell("koordiniert", ns[#ns], "an")
+  local spread = math.abs((s_first and s_first.win_rate or 0)
+                          - (s_last and s_last.win_rate or 0))
+  f[6] = { ok = spread <= 0.15,
+           detail = string.format(
+             "Spread N=%d<->N=%d %.1f pp (alle N: %.1f-%.1f %%)",
+             ns[1], ns[#ns], spread * 100, lo * 100, hi * 100) }
 
   -- Turtle-Gate (GDD 17.2 Punkt 4): > 95 % Zeitlimit-Niederlagen in jeder Zelle
   local turtle_ok, turtle_detail = true, {}

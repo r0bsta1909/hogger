@@ -177,7 +177,7 @@ Alle acht Vanilla-Allianz-Klassen sind im Spiel, mit ihren gültigen Rassen-Komb
 | Bewegung als Geist | 210 px/s (150 %) | verkürzt die Todesstrafe |
 | Autohit Nahkampf (weiß) | 2 Schaden alle 2,0 s | **alle Klassen außer Jäger** (Runde 5, Issue #86: der Zauberstab ist gestrichen — OOM-Caster rücken auf und vermöbeln Hogger mit dem Stab). Läuft NICHT von allein: **anschalten per Rechtsklick aufs Ziel, Taste 4 oder irgendeinen Fähigkeitsdruck** (auch einen erfolglosen — der Krieger mit 0 Wut fängt so an). Tod, Wiederbelebung und Verstohlenheit schalten ab |
 | Standard-Aktion **Nahkampf** | kostenlos, kein GCD | eigener Button (Taste 4) in jeder Klassenleiste; tut nichts außer den Autohit anzuschalten — der Vanilla-"Angriff"-Knopf (Runde 5, Issue #86) |
-| Autoschuss (Jäger) | 3 Schaden alle 2,0 s, Reichweite 230 px | die **einzige kostenlose Fernkampf-Autoattack** (Issue #86); läuft weiterhin automatisch. Reichweite 200 → 230 px in Runde 5 (Issue #80) |
+| Autoschuss (Jäger) | 4 Schaden alle 2,0 s, Reichweite 230 px | die **einzige kostenlose Fernkampf-Autoattack** (Issue #86); läuft weiterhin automatisch. Runde 5: Reichweite 200 → 230 px (#80), Schaden 3 → 4 als F1-Ausgleich für den gestrichenen Zauberstab (#86, 17.9) |
 | Zauber-Reichweite (`cast_range`) | 200 px | Reichweite aller Caster-Angriffszauber (Pein/Feuerball/Schattenblitz/Zorn); 120 → 200 px in Runde 5 (Issue #80, "viel zu nah dran"), hieß bis dahin `wand_range` |
 | Nahkampf-Reichweite | 40 px | v2.6 festgeschrieben (Issue #2); Panel-Parameter |
 | Global Cooldown | 1,5 s | drosselt Input-Spam |
@@ -224,13 +224,13 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 
 | Wert | Formel/Zahl | Anmerkung |
 |---|---|---|
-| **HP** | 430 × N − 950 (affin, v2.6), mindestens 120 × N | N=5: 1.200 · N=10: 3.350 · N=40: 16.250 — der Sockel bildet den Kleingruppen-Overhead ab; die Untergrenze fängt Wartelobbys unter der Design-Spanne (N<3) ab |
+| **HP** | 430 × N − 850 (affin; Sockel 950 → 850 in Runde 5, #86), mindestens 120 × N | N=5: 1.300 · N=10: 3.450 · N=40: 16.350 — der Sockel bildet den Kleingruppen-Overhead ab; die Untergrenze fängt Wartelobbys unter der Design-Spanne (N<3) ab |
 | Autohit | 30 Schaden alle 1,8 s | Stoff stirbt in 2, Platte in 3 Hits |
 | Kritchance | 5 %, ×2 (= 60) | oneshottet alles außer voller Platte — der "WAS?!"-Moment |
 | Tempo | 155 px/s | Weglaufen verzögert, rettet nicht |
 | Leash | 600 px | Kiten unmöglich |
 
-- **Rundumschlag (Cleave, ab v2.6):** Hoggers Autohit trifft zusätzlich bis zu `ceil(N/5) − 1` weitere Ziele mit Bedrohung im Nahkampf (insgesamt `ceil(N/5)` Ziele; bei N ≤ 5 reiner Einzelziel-Autohit — kleine Gruppen behalten den Vanilla-Gnoll). Divisor als Panel-Parameter, justierbar (Standard 5 per M1-Sweep). Grund: Hoggers Droh-Durchsatz muss mit N wachsen, sonst überrollen große Raids ohne Zusammenarbeit (M1-Befund, Issue #3); Fiktion: umzingelt drischt er wild um sich.
+- **Rundumschlag (Cleave, ab v2.6):** Hoggers Autohit trifft zusätzlich bis zu `ceil(N/6) − 1` weitere Ziele mit Bedrohung im Nahkampf (insgesamt `ceil(N/6)` Ziele; bei N ≤ 6 reiner Einzelziel-Autohit — kleine Gruppen behalten den Vanilla-Gnoll). Divisor als Panel-Parameter, justierbar (Standard 5 per M1-Sweep; 5 → 6 in Runde 5, #86 — seit dem Zauberstab-Aus stehen OOM-Caster zeitweise im Nahkampf, der alte Divisor fraß bei N=40 die Stoffträger). Grund: Hoggers Droh-Durchsatz muss mit N wachsen, sonst überrollen große Raids ohne Zusammenarbeit (M1-Befund, Issue #3); Fiktion: umzingelt drischt er wild um sich.
 - **Vicious Slice** (alle 12 s aufs aktuelle Ziel): 15 Sofortschaden + Blutung 5/2 s über 6 s — garantiert den Tod Angeschlagener, verhindert Heraus-Heilen.
 - **Rushing Charge** (CD 10 s, v2.6 — mehr Backline-Druck bei großen N): stürmt auf das am weitesten entfernte Ziel mit Bedrohung **innerhalb des Leash-Radius** (Ziele außerhalb sind nie Charge-Ziel — ein einzelner ungünstig stehender Jäger darf keinen Try ruinieren), 25 Schaden + 120 px Knockback, 0,8 s Anlauf mit blinkender Ziellinie auf der Minimap. **Kein Krit möglich.**
 - **Fressen** (CD 20 s, Leiche in 200 px, HP < 90 %): zieht die nächste Leiche mit 1,0-s-Schlepp-Animation heran (schließt den Safe-Death-Exploit, dient als Wind-up), kanalisiert dann 8 s, heilt 1,5 % Max-HP/s (12 % gesamt). **Unterbrechung:** Treffer von `ceil(N/10) + 2` verschiedenen Spielern ODER kumulierter Schaden ≥ 5 % seiner Max-HP während des Kanals (v2.6, Issue #4: die alten Schwellen wurden von beiläufigem Schaden automatisch erfüllt) — die Schadensschwelle skaliert automatisch mit N und verhindert Stalling, wenn nach einem Frontlinien-Wipe kaum noch jemand in Reichweite lebt. **Zählerbalken am Hogger-Icon ("2/4") ist Pflicht-UI** — er lehrt das Wie; dass man während des Fressens angreifen muss, findet die Gruppe selbst heraus (bzw. Leeroy platzt irgendwann der Kragen, Kap. 10). Kein Krit auf Fress-Heilung, keine Krits auf Slice/Charge/DoT-Ticks — Choreo bleibt deterministisch.
@@ -240,10 +240,10 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 
 | Größe | Formel | N=5 | N=10 | N=20 | N=40 |
 |---|---|---|---|---|---|
-| Hogger HP | max(430 × N − 950; 120 × N) | 1.200 | 3.350 | 7.650 | 16.250 |
-| Fress-Heilung/Kanal | 12 % Max-HP | 144 | 402 | 918 | 1.950 |
+| Hogger HP | max(430 × N − 850; 120 × N) | 1.300 | 3.450 | 7.750 | 16.350 |
+| Fress-Heilung/Kanal | 12 % Max-HP | 156 | 414 | 930 | 1.962 |
 | Unterbrecher | ceil(N/10)+2 | 3 | 3 | 4 | 6 |
-| Cleave-Ziele | ceil(N/5) | 1 | 2 | 4 | 8 |
+| Cleave-Ziele | ceil(N/6) | 1 | 2 | 4 | 7 |
 | Adds | floor(N/8) | 0 | 1 | 2 | 5 |
 | Respawn-Timer | clamp(8 + 0,52 × N; 10; 30) s | 10,6 | 13,2 | 18,4 | 28,8 |
 

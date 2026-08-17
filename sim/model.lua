@@ -25,9 +25,12 @@ M.params = {
   -- HP = slope x N - offset (affin, v2.6): der Sockel bildet den
   -- Kleingruppen-Overhead ab; offset=0, slope=120 ergibt die alte Formel
   hogger_hp_slope        = p(430, 100, 800, 10, "9.3"),
-  hogger_hp_offset       = p(950, 0, 3000, 50, "9.3"),
+  -- Offset 950 -> 850 und Cleave-Divisor 5 -> 6 in Runde 5 (#86): der
+  -- gestrichene Zauberstab kostet den Raid Dauer-DPS, die Rekalibrierung
+  -- haelt F1-F6 (Sweep in GDD 17.9)
+  hogger_hp_offset       = p(850, 0, 3000, 50, "9.3"),
   hogger_autohit_dmg     = p(30, 10, 60, 1, "9.2"),
-  hogger_cleave_divisor  = p(5, 2, 40, 1, "9.2"),   -- Cleave-Ziele = ceil(N / Divisor)
+  hogger_cleave_divisor  = p(6, 2, 40, 1, "9.2"),   -- Cleave-Ziele = ceil(N / Divisor)
   hogger_autohit_interval= p(1.8, 1.0, 3.0, 0.1, "9.2"),
   hogger_speed           = p(155, 100, 250, 5, "9.2"),
   hogger_aggro_radius    = p(250, 100, 500, 10, "9.1"),
@@ -64,7 +67,7 @@ M.params = {
   move_speed_ghost       = p(210, 100, 350, 5, "8.1"),
   autohit_melee_dmg      = p(2, 1, 10, 1, "8.1"),
   autohit_interval       = p(2.0, 0.5, 4.0, 0.1, "8.1"),
-  autoshot_dmg           = p(3, 1, 10, 1, "8.1"),
+  autoshot_dmg           = p(4, 1, 10, 1, "8.1"), -- 3 -> 4 in Runde 5 (#86, F1-Ausgleich)
   -- Reichweiten (Runde 5, Issue #80): Caster mussten viel zu nah heran,
   -- der Jaeger bekommt etwas mehr und bleibt die laengste Reichweite
   -- (Vanilla-Verhaeltnis 30:35 yd ~ 200:230 px). cast_range hiess bis
