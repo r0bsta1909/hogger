@@ -149,8 +149,11 @@ function Q:update(dt)
   end
 end
 
--- Taste L: wegblenden und zurueckholen (Issue #62)
+-- Taste L: wegblenden und zurueckholen (Issue #62). Gilt nur noch fuer
+-- Questlog und Lore — die Quest selbst laesst sich nicht mehr wegdruecken,
+-- bevor sie angenommen ist (Issue #83).
 function Q:toggle()
+  if self.mode == "quest" then return false end
   if self.state == "done" then return false end
   self.closed = not self.closed
   return true
@@ -200,9 +203,9 @@ function Q:keypressed(key)
     self.buffer = self.buffer:sub(1, -2)
   elseif key == "return" or key == "kpenter" then
     self:accept()
-  elseif key == "escape" then
-    self.closed = true -- der Knopf oben rechts, nur eben als Taste
   end
+  -- Escape schliesst hier nichts mehr: angenommen wird, und der Name
+  -- ist Pflicht (Issue #83). Ablehnen bleibt grau.
   return true
 end
 
@@ -279,10 +282,7 @@ function Q:mousepressed(mx, my, w, h)
     elseif inside(L.decline, mx, my) then self:lore_next() end
     return true
   end
-  if inside(L.close, mx, my) then
-    self.closed = true
-    return true
-  end
+  -- kein X im Quest-Modus (Issue #83): erst annehmen, dann weiterspielen
   if inside(L.accept, mx, my) then
     self:accept()
     return true
@@ -377,10 +377,13 @@ function Q:draw(view, w, h, to_screen)
     love.graphics.setColor(0.55, 0.52, 0.42, 1)
     love.graphics.print("(kein Questziel, nur Reden)", px + 250, py + 12)
   end
-  love.graphics.setColor(0.75, 0.25, 0.2, 1)
-  love.graphics.rectangle("line", L.close[1], L.close[2], L.close[3], L.close[4], 3, 3)
-  love.graphics.setColor(0.9, 0.5, 0.45, 1)
-  love.graphics.print("X", L.close[1] + 9, L.close[2] + 5)
+  if self.mode ~= "quest" then
+    -- Schliessen-Kreuz nur da, wo es nichts zu entscheiden gibt (Issue #83)
+    love.graphics.setColor(0.75, 0.25, 0.2, 1)
+    love.graphics.rectangle("line", L.close[1], L.close[2], L.close[3], L.close[4], 3, 3)
+    love.graphics.setColor(0.9, 0.5, 0.45, 1)
+    love.graphics.print("X", L.close[1] + 9, L.close[2] + 5)
+  end
 
   local tx, ty, tw = px + 26, py + 60, pw - 52
 
