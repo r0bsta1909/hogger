@@ -8,12 +8,13 @@ local T = _G.T
 -- GDD 9.3: Skalierungstabelle als harte Testfaelle -------------------------
 local table93 = {
   --  N, HP,    Fressheilung, Unterbrecher, Cleave, Adds, Respawn (GDD 9.3)
-  -- HP = 3,5xN^2 + 560xN - 1600 (gerundet; quad-Term seit Runde 6, #96);
-  -- Cleave = ceil(N/6); Respawn FEST 10 s (Rob-Entscheid Runde 6, #96)
-  { 5,   1288,  154.56,  3, 1, 0, 10 },
-  { 10,  4350,  522,     3, 2, 1, 10 },
-  { 20, 11000,  1320,    4, 4, 2, 10 },
-  { 40, 26400,  3168,    6, 7, 5, 10 },
+  -- HP = 3xN^2 + 560xN - 1600 (quad-Term seit Runde 6, #96);
+  -- Unterbrecher = max(3; ceil(N/6)+1); Cleave = ceil(N/6);
+  -- Respawn FEST 10 s (Rob-Entscheid Runde 6, #96)
+  { 5,   1275,  153,   3, 1, 0, 10 },
+  { 10,  4300,  516,   3, 2, 1, 10 },
+  { 20, 10800,  1296,  5, 4, 2, 10 },
+  { 40, 25600,  3072,  8, 7, 5, 10 },
 }
 for _, row in ipairs(table93) do
   local n = row[1]
@@ -28,15 +29,15 @@ end
 -- GDD 9.3: HP-Untergrenze 120 x N unterhalb der Design-Spanne --------------
 T.eq(M.hogger_hp(1), 120, "9.3 HP-Untergrenze N=1 (Solo-Wartelobby)")
 T.eq(M.hogger_hp(2), 240, "9.3 HP-Untergrenze N=2")
-T.eq(M.hogger_hp(4), 696, "9.3 Formel greift ab N=4 (quad-Term, Runde 6)")
+T.eq(M.hogger_hp(4), 688, "9.3 Formel greift ab N=4 (quad-Term, Runde 6)")
 
 -- GDD 7.2: Mob-Slots -------------------------------------------------------
 T.eq(M.mob_slots(5), 5, "7.2 Mob-Slots N=5")
 T.eq(M.mob_slots(40), 12, "7.2 Mob-Slots N=40")
 
 -- GDD 9.2: Fress-Schadensschwelle 5 % Max-HP (v2.6) ------------------------
-T.near(M.eat_dmg_threshold(10), 217.5, "9.2 Fress-Schadensschwelle N=10")
-T.near(M.eat_dmg_threshold(40), 1320, "9.2 Fress-Schadensschwelle N=40")
+T.near(M.eat_dmg_threshold(10), 215, "9.2 Fress-Schadensschwelle N=10")
+T.near(M.eat_dmg_threshold(40), 1280, "9.2 Fress-Schadensschwelle N=40")
 
 -- GDD 13.2: Krit-Ausschluesse ----------------------------------------------
 T.ok(M.can_crit("autohit"), "13.2 Autohit kann kritten")

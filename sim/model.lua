@@ -25,7 +25,7 @@ M.params = {
   -- HP = quad x N^2 + slope x N - offset (mild quadratisch seit Runde 6,
   -- #96): der Sockel bildet den Kleingruppen-Overhead ab, der quad-Term
   -- ersetzt die gestrichene N-Skalierung der Todesstrafe
-  hogger_hp_quad         = p(3.5, 0, 20, 0.5, "9.3"),
+  hogger_hp_quad         = p(3.0, 0, 20, 0.5, "9.3"),
   hogger_hp_slope        = p(560, 100, 800, 10, "9.3"),
   -- Historie: Offset 950 -> 850 in Runde 5 (#86, Zauberstab-Aus); Runde 6
   -- (#96) fixer Respawn -> quad-Term neu, slope/offset nachkalibriert.
@@ -55,7 +55,8 @@ M.params = {
   eat_drag_duration      = p(1.0, 0, 3.0, 0.1, "9.2"),
   eat_channel_duration   = p(8, 2, 20, 1, "9.2"),
   eat_heal_rate          = p(0.015, 0.005, 0.05, 0.001, "9.2"),  -- Anteil Max-HP pro s
-  eat_interrupt_offset   = p(2, 0, 5, 1, "9.3"),                 -- ceil(N/10) + offset (v2.6)
+  eat_interrupt_divisor  = p(6, 2, 20, 1, "9.3"),                -- Unterbrecher = ceil(N/div) + offset
+  eat_interrupt_offset   = p(1, 0, 5, 1, "9.3"),                 -- Runde 6 (#96): 10/2 -> 6/1
   eat_dmg_threshold_pct  = p(0.05, 0.005, 0.15, 0.005, "9.2"),   -- Anteil Max-HP im Kanal (v2.6)
 
   -- Krits (GDD 13.2, je Seite getrennt stellbar)
@@ -364,8 +365,15 @@ function M.eat_heal_per_channel(n)
   return M.eat_heal_per_second(n) * M.p("eat_channel_duration")
 end
 
+-- Unterbrecher-Formel seit Runde 6 (#96): ceil(N/6)+1 statt ceil(N/10)+2 —
+-- oben steiler (N=40: 8 statt 6), N=10 unveraendert bei 3. Grund: der feste
+-- Respawn schenkt auch Unkoordinierten die Materialschlacht; bei grossen N
+-- erfuellten sie die alte Spielerzahl-Bedingung nebenbei (F2 fiel auf 38,6 %).
 function M.eat_interrupters(n)
-  return math.ceil(n / 10) + M.p("eat_interrupt_offset")
+  -- mindestens 3: sonst reissen Kleingruppen die Unterbrechung nebenbei
+  -- und N=5 kippt aus dem F1-Band (gemessen: 89 % statt 76 %)
+  return math.max(3,
+    math.ceil(n / M.p("eat_interrupt_divisor")) + M.p("eat_interrupt_offset"))
 end
 
 function M.eat_dmg_threshold(n)
