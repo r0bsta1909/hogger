@@ -1,7 +1,7 @@
 -- game/ui/victory.lua — Fluchbruch-Sequenz (GDD Kap. 11): Hoggers Icon
 -- zerspringt, Loot-Fenster (Thunderfury-Gag + Zerfledderter Wams), der
--- Glitch laeuft rueckwaerts, kurz der echte Login-Screen ("Du kannst dich
--- jetzt ausloggen."), dann die finale Statistik-Tafel mit REVANCHE-Knopf.
+-- Glitch laeuft rueckwaerts, kurz der echte Login-Screen, dann die finale
+-- Statistik-Tafel mit REVANCHE- und Ausloggen-Knopf (#85).
 -- Die Sim steht waehrenddessen (phase "won"), bis REVANCHE den naechsten
 -- Abend-Durchlauf startet (Try-Zaehler bei 1).
 
@@ -55,18 +55,23 @@ function V:update(dt)
     enter(self, "login")
   elseif self.state == "login" and self.t >= LOGIN_T then
     enter(self, "board")
-    self.panel = stats.new(self.board, { sticky = true, button = "REVANCHE" })
+    self.panel = stats.new(self.board, { sticky = true, buttons = {
+      { id = "revanche", label = "REVANCHE" },
+      { id = "logout", label = "Ausloggen" }, -- beendet das Spiel (#85)
+    } })
   end
   if self.panel then self.panel:update(dt) end
 end
 
--- Rueckgabe "revanche", wenn der Knopf der finalen Tafel gedrueckt wurde
+-- Rueckgabe "revanche" oder "logout", wenn ein Knopf der finalen Tafel
+-- gedrueckt wurde (#85)
 function V:mousepressed(mx, my)
   if self.state == "loot" and self.t >= LOOT_MIN_T then
     enter(self, "unglitch")
     return true
   elseif self.state == "board" and self.panel then
-    if self.panel:mousepressed(mx, my) == "button" then return "revanche" end
+    local r = self.panel:mousepressed(mx, my)
+    if r == "revanche" or r == "logout" then return r end
     return true
   end
   return true -- Sequenz schluckt Klicks (die Welt steht ohnehin)
@@ -134,15 +139,15 @@ local function draw_unglitch(self, w, h)
 end
 
 local function draw_login(self, w, h)
+  -- contain wie beim Start-Splash (Issue #66) — derselbe Helfer, damit die
+  -- beiden Stellen nie wieder auseinanderlaufen (#84). Ausloggen ist jetzt
+  -- ein Knopf auf der Tafel, keine Textzeile mehr (#85).
   local img = assets.get("splash_login")
-  local iw, ih = img:getDimensions()
-  local scale = math.max(w / iw, h / ih)
+  local scale, iw, ih = require("game.ui.boot").splash_scale(img, w, h)
+  love.graphics.setColor(0, 0, 0, 1)
+  love.graphics.rectangle("fill", 0, 0, w, h)
   love.graphics.setColor(1, 1, 1, 1)
   love.graphics.draw(img, w / 2, h / 2, 0, scale, scale, iw / 2, ih / 2)
-  local line = "Du kannst dich jetzt ausloggen."
-  local font = love.graphics.getFont()
-  love.graphics.setColor(0.92, 0.89, 0.78, math.min(1, self.t / 0.8))
-  love.graphics.print(line, w / 2 - font:getWidth(line), h * 0.62, 0, 2, 2)
 end
 
 function V:draw(view, to_screen, w, h)
