@@ -129,7 +129,7 @@ kurzer Anmarsch zum Hogger Hill → Kampf → Tod → Geist freilassen → Geist
 
 - **Ein Try** beginnt mit Leeroys Signal (Kap. 10) und endet mit Hoggers Tod ODER nach **15:00 auf der hochzählenden Uhr** — dann leasht Hogger zurück, heilt voll, Leeroy sagt den Wipe an ("Okay. Das war nichts. Nächster Try."), die Statistik-Tafel erscheint kurz (Kap. 11), der Try-Zähler tickt hoch, weiter geht's. Kein Menü, keine Lobby zwischen Trys — der Fluch macht keine Pausen.
 - **Try-Zähler:** persistiert in session.json und startet beim allerersten Host-Start bei einer zufälligen vierstelligen Zahl (Leeroy zählt ja schon ewig). Angezeigt wird er nur in Leeroys Ansagen und auf der Statistik-Tafel.
-- **Sekundenloop des Spielers:** hinlaufen → 5–15 s Uptime am Boss → Tod → liegen bleiben bis zur Freigabe (Kap. 11) → Geist → Wiederbelebung. **Die Gesamttodesstrafe bleibt die tragende Balancing-Konstante**, per M1-Sim-Sweep fixiert (Kap. 17, v2.6): Respawn-Timer (N-skalierend, 9.3) + 14 s Laufweg = 24,6 s bei N=5 bis 42,8 s bei N=40 — große Raids warten länger, damit die Welle dicht statt endlos wird. Nie nach Gefühl verändern.
+- **Sekundenloop des Spielers:** hinlaufen → 5–15 s Uptime am Boss → Tod → liegen bleiben bis zur Freigabe (Kap. 11) → Geist → Wiederbelebung. **Die Gesamttodesstrafe ist seit Playtest-Runde 6 KONSTANT** (Rob-Entscheid, Issue #96): fester Respawn-Timer 10 s + 14 s Laufweg = **24 s, egal wie viele spielen** — die frühere N-Skalierung des Timers (bis 42,8 s bei N=40) fühlte sich im Test inakzeptabel an. Die Fairness zwischen Gruppengrößen, die der skalierende Timer trug, liegt jetzt im quadratischen Term der Hogger-HP-Formel (9.3); Sweep-Beleg in 17.9. Der Wert 24 s bleibt die tragende Balancing-Konstante — nie nebenbei verändern.
 - **N-Skalierung pro Try:** Hoggers Werte skalieren mit der Anzahl verbundener, wiederbelebbarer Spieler beim Try-Start. Wer mitten im Try joint, spielt sofort mit, zählt aber erst ab dem nächsten Try in die Skalierung. Leaver reduzieren nichts. Leeroy zählt nie mit.
 
 ---
@@ -226,7 +226,7 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 
 | Wert | Formel/Zahl | Anmerkung |
 |---|---|---|
-| **HP** | 430 × N − 850 (affin; Sockel 950 → 850 in Runde 5, #86), mindestens 120 × N | N=5: 1.300 · N=10: 3.450 · N=40: 16.350 — der Sockel bildet den Kleingruppen-Overhead ab; die Untergrenze fängt Wartelobbys unter der Design-Spanne (N<3) ab |
+| **HP** | 3 × N² + 560 × N − 1.600 (mild quadratisch seit Runde 6, #96), mindestens 120 × N | N=5: 1.275 · N=10: 4.300 · N=40: 25.600 — der Sockel bildet den Kleingruppen-Overhead ab, der quadratische Term ersetzt die gestrichene N-Skalierung der Todesstrafe (sonst rollen große Raids per Materialschlacht drüber); die Untergrenze fängt Wartelobbys unter der Design-Spanne (N<3) ab |
 | Autohit | 30 Schaden alle 1,8 s | Stoff stirbt in 2, Platte in 3 Hits |
 | Kritchance | 5 %, ×2 (= 60) | oneshottet alles außer voller Platte — der "WAS?!"-Moment |
 | Tempo | 155 px/s | Weglaufen verzögert, rettet nicht |
@@ -235,21 +235,21 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 - **Rundumschlag (Cleave, ab v2.6):** Hoggers Autohit trifft zusätzlich bis zu `ceil(N/6) − 1` weitere Ziele mit Bedrohung im Nahkampf (insgesamt `ceil(N/6)` Ziele; bei N ≤ 6 reiner Einzelziel-Autohit — kleine Gruppen behalten den Vanilla-Gnoll). Divisor als Panel-Parameter, justierbar (Standard 5 per M1-Sweep; 5 → 6 in Runde 5, #86 — seit dem Zauberstab-Aus stehen OOM-Caster zeitweise im Nahkampf, der alte Divisor fraß bei N=40 die Stoffträger). Grund: Hoggers Droh-Durchsatz muss mit N wachsen, sonst überrollen große Raids ohne Zusammenarbeit (M1-Befund, Issue #3); Fiktion: umzingelt drischt er wild um sich.
 - **Vicious Slice** (alle 12 s aufs aktuelle Ziel): 15 Sofortschaden + Blutung 5/2 s über 6 s — garantiert den Tod Angeschlagener, verhindert Heraus-Heilen.
 - **Rushing Charge** (CD 10 s, v2.6 — mehr Backline-Druck bei großen N): stürmt auf das am weitesten entfernte Ziel mit Bedrohung **innerhalb des Leash-Radius** (Ziele außerhalb sind nie Charge-Ziel — ein einzelner ungünstig stehender Jäger darf keinen Try ruinieren), 25 Schaden + 120 px Knockback, 0,8 s Anlauf mit blinkender Ziellinie auf der Minimap. **Kein Krit möglich.**
-- **Fressen** (CD 20 s, Leiche in 200 px, HP < 90 %): zieht die nächste Leiche mit 1,0-s-Schlepp-Animation heran (schließt den Safe-Death-Exploit, dient als Wind-up), kanalisiert dann 8 s, heilt 1,5 % Max-HP/s (12 % gesamt). **Unterbrechung:** Treffer von `ceil(N/10) + 2` verschiedenen Spielern ODER kumulierter Schaden ≥ 5 % seiner Max-HP während des Kanals (v2.6, Issue #4: die alten Schwellen wurden von beiläufigem Schaden automatisch erfüllt) — die Schadensschwelle skaliert automatisch mit N und verhindert Stalling, wenn nach einem Frontlinien-Wipe kaum noch jemand in Reichweite lebt. **Zählerbalken am Hogger-Icon ("2/4") ist Pflicht-UI** — er lehrt das Wie; dass man während des Fressens angreifen muss, findet die Gruppe selbst heraus (bzw. Leeroy platzt irgendwann der Kragen, Kap. 10). Kein Krit auf Fress-Heilung, keine Krits auf Slice/Charge/DoT-Ticks — Choreo bleibt deterministisch.
+- **Fressen** (CD 20 s, Leiche in 200 px, HP < 90 %): zieht die nächste Leiche mit 1,0-s-Schlepp-Animation heran (schließt den Safe-Death-Exploit, dient als Wind-up), kanalisiert dann 8 s, heilt 1,5 % Max-HP/s (12 % gesamt). **Unterbrechung:** Treffer von `max(3; ceil(N/6) + 1)` verschiedenen Spielern (Runde 6, #96 — die alte `ceil(N/10)+2`-Bedingung erfüllten große unkoordinierte Raids seit dem festen Respawn-Timer nebenbei, F2 kippte) ODER kumulierter Schaden ≥ 5 % seiner Max-HP während des Kanals (v2.6, Issue #4) — die Schadensschwelle skaliert automatisch mit N und verhindert Stalling, wenn nach einem Frontlinien-Wipe kaum noch jemand in Reichweite lebt. **Zählerbalken am Hogger-Icon ("2/4") ist Pflicht-UI** — er lehrt das Wie; dass man während des Fressens angreifen muss, findet die Gruppe selbst heraus (bzw. Leeroy platzt irgendwann der Kragen, Kap. 10). Kein Krit auf Fress-Heilung, keine Krits auf Slice/Charge/DoT-Ticks — Choreo bleibt deterministisch.
 - **Gnoll-Welpen:** `floor(N/8)` Adds (20 HP, 10 Schaden/2 s, kein Krit, kein Respawn im Try) am Hügelfuß — dünnen bei großen Gruppen die Wellen aus und geben Nahkämpfern frühe Erfolgserlebnisse.
 
 ### 9.3 Skalierung (pro Try-Start)
 
 | Größe | Formel | N=5 | N=10 | N=20 | N=40 |
 |---|---|---|---|---|---|
-| Hogger HP | max(430 × N − 850; 120 × N) | 1.300 | 3.450 | 7.750 | 16.350 |
-| Fress-Heilung/Kanal | 12 % Max-HP | 156 | 414 | 930 | 1.962 |
-| Unterbrecher | ceil(N/10)+2 | 3 | 3 | 4 | 6 |
+| Hogger HP | max(3 × N² + 560 × N − 1.600; 120 × N) | 1.275 | 4.300 | 10.800 | 25.600 |
+| Fress-Heilung/Kanal | 12 % Max-HP | 153 | 516 | 1.296 | 3.072 |
+| Unterbrecher | max(3; ceil(N/6)+1) — Runde 6, #96 | 3 | 3 | 5 | 8 |
 | Cleave-Ziele | ceil(N/6) | 1 | 2 | 4 | 7 |
 | Adds | floor(N/8) | 0 | 1 | 2 | 5 |
-| Respawn-Timer | clamp(8 + 0,52 × N; 10; 30) s | 10,6 | 13,2 | 18,4 | 28,8 |
+| Respawn-Timer | **fest 10 s** (Rob-Entscheid Runde 6, #96 — skaliert nicht mehr mit N) | 10 | 10 | 10 | 10 |
 
-**Keine Bots:** Bei kleinem N kompensiert der kurze Respawn-Timer die fehlende Masse — die Welle wird dichter, nicht größer. Der Sieg gehört immer echten Menschen (und Leeroy).
+**Keine Bots:** Der Sieg gehört immer echten Menschen (und Leeroy). Seit dem festen Respawn-Timer (Runde 6) trägt die Hogger-HP-Kurve allein die Fairness zwischen Gruppengrößen.
 
 ### 9.4 Bedrohung
 
@@ -360,7 +360,7 @@ Mittlere DPS pro lebendem Spieler ≈ 3,5 (8-Klassen-Mix mit Jäger-Grundlast); 
 | F5 | Try-Länge trifft das Fenster | Median-Siegtry < 6 min oder > 13 min |
 | F6 | Skalierung ist fair | Siegquoten-Spread zwischen N=5 und N=40 > 15 Prozentpunkte |
 
-Stellhebel: F1/F5 → HP-Koeffizient und DPS-Zahlen; F2/F3 → Fress-Heilrate/Unterbrecher-Formel; F4 → Kritchance (nie den Multiplikator); F6 → Respawn-/Add-Formel. Jede Anpassung ins Tuning-Protokoll (17.9).
+Stellhebel: F1/F5 → HP-Koeffizienten (quad/slope/offset) und DPS-Zahlen; F2/F3 → Fress-Heilrate/Unterbrecher-Formel; F4 → Kritchance (nie den Multiplikator); F6 → HP-quad-Term, Cleave- und Add-Formel (die Respawn-Formel ist seit Runde 6 kein Hebel mehr — der Timer ist per Rob-Entscheid fest, #96). Jede Anpassung ins Tuning-Protokoll (17.9).
 
 ### 13.4 Playtest-Kriterien (Menschen, nur Gefühl — Übergabe nach 17.8)
 
@@ -543,6 +543,8 @@ Menschen erst bei grüner Pyramide. Übergabe: Validierungsbericht + eine Ein-Sa
 | 2026-08-17 | **F1-Rekalibrierung nach Zauberstab-Aus** (#86): `autoshot_dmg` 3 → 4, `hogger_cleave_divisor` 5 → 6, `hogger_hp_offset` 950 → 850 (HP N=5: 1.300 · N=40: 16.350) | F1: der Raid verlor die Zauberstab-Dauer-DPS (~15 % bei N=40 → 33 % Siege trotz Modellfix) | Der Jägeranteil wächst mit N (Zielkomposition 50 %), Autoschuss +1 ersetzt die verlorene Dauer-DPS N-proportional; Cleave-Divisor 6 entlastet nur N=40 (Ziele 8 → 7), der Sockel nur kleine N. **Sweep 96 Zellen × 1000: F1 66,7/83,1/89,8/70,5 % · F2 max 22,2 % · F4-Mittel 2,9 pp (Einzelzellen ≤ 5,6, beide Krit-Welten im Band: N=40 aus 64,9 %) · F5 9,8–12,2 min · F6 N=5↔N=40 3,8 pp · Turtle 100 % Niederlagen — BESTANDEN.** Notiz für den Playtest: N=20 ist mit 89,8 % der Sweet Spot (volle Spanne 23,1 pp) — beobachten, ob sich mittlere Gruppen zu stark fühlen |
 | 2026-08-17 | **F4/F6-Checker an GDD-Wortlaut angeglichen** (sim/report.lua): F4 prüft das Mittel der Krit-Deltas (Rob-Entscheid #6) plus beide Krit-Welten im F1-Band; F6 den Spread N=5↔N=40 statt max−min über alle N | Widerspruch Code ↔ GDD 13.3 (GDD gewinnt, CLAUDE.md) | Kein Zahlen-Tuning; abgesichert durch `tests/unit_report.lua` |
 | 2026-08-17 | **Mob-Patrouille** (Runde 5, #87): `mob_patrol_radius` 60 px (0 = aus), `mob_patrol_speed` 45 px/s | Playtest Rob: Mobs "stehen nur rum", sollen lebendiger wirken | Deterministisch aus Mob-Id und Sim-Zeit, kein RNG-Kanal; Radius weit unter Leash — kein Balancing-Effekt, Aggro/Flucht/Kampf unverändert |
+| 2026-08-17 | **Respawn-Timer fest 10 s** (`respawn_factor` 0, `respawn_base` 10), **HP-Formel affin → mild quadratisch** (3 × N² + 560 × N − 1.600; neuer Panel-Parameter `hogger_hp_quad`) und **Unterbrecher-Formel `ceil(N/10)+2` → `max(3; ceil(N/6)+1)`** (neuer Parameter `eat_interrupt_divisor`) | Rob-Entscheid Runde 6 (#96): die Wartezeit nach dem Tod muss immer gleich sein — ~30 s Gesamtstrafe im Bot-Test waren inakzeptabel. Todesstrafe jetzt konstant 24 s (10 + 14 Laufweg) | Drei Iterationen, alle gemessen: (1) ohne Gegenhebel gewannen N=20/40 zu **100 %** (die N-Skalierung der Todesstrafe war der superlineare Anteil der Schwierigkeit), eine steilere affine Gerade riss F5 → quad-Term. (2) Erster 1000er-Sweep: F1/F3–F6/Turtle bestanden, aber **F2 verletzt** (unkoordiniert N=40: 38,6 %) — die Materialschlacht erfüllt die alte Unterbrecher-Bedingung nebenbei; die Fress-Schadensschwelle ist dort wirkungslos, ein plumper Offset (+1 für alle) riss koordiniert N=10 auf 51 %, mehr Heilrate riss beide. (3) Endstand `max(3; ceil(N/6)+1)` — Spot-Checks (300 Läufe): koordiniert 76,3/78,0/74,7/68,7 % (Krits an), N=40 aus 63,0 %, unkoordiniert ≤ 25,3 %, Spread N=5↔N=40 7,6 pp, Median-Siegtrys 8,7–12,2 min |
+| 2026-08-17 | **Endstand-Verifikation Runde 6** (96 Zellen × 1000 Läufe) | Sweep nach #96 | **ALLE KRITERIEN BESTANDEN:** F1 koordiniert 74,1/73,9/73,6/70,4 % (flacher als je zuvor) · F2 unkoordiniert max. 29,3 % · F4-Mittel 3,7 pp, beide Krit-Welten im Band · F5 9,4–12,2 min · F6 Spread N=5↔N=40 **3,7 pp** · Turtle 100 % Niederlagen. Die konstante 24-s-Todesstrafe trägt |
 
 ---
 
