@@ -34,7 +34,7 @@ Wo GDD und Skill kollidieren (z. B. Snapshot-Strategie: GDD sagt 20 Hz + Interpo
 
 Reihenfolge und Gates stehen in GDD Kap. 15. Kurzform:
 
-- **M0 (zuerst):** Repo initialisieren, CI-Workflow lauffähig machen (`.github/workflows/ci.yml` ist ein Skelett — zum Laufen bringen, ggf. Lua-Setup-Action tauschen; Matrix ubuntu/windows/macos für Stufen 1+3 ist Pflicht), `model.lua` mit vollständiger Parametertabelle aus dem GDD befüllen, Unit-Tests der GDD-Tabellen (9.3 als harte Testfälle) grün.
+- **M0 (erledigt):** Repo initialisiert, CI lauffähig, `model.lua` mit vollständiger Parametertabelle befüllt, Unit-Tests der GDD-Tabellen (9.3) grün. **CI-Stand seit ADR 003:** `ci.yml` ist ein einzelner Ubuntu-Job (Stufen 1, 3, 4 — das schnelle Gate), die Plattform-Matrix Windows/macOS liegt in `ci-plattform.yml` und läuft an jedem PR, bei Push auf `main`, wöchentlich und auf Zuruf. `main` ist per Branch-Schutz gesichert (Pflicht-Checks `test` und `plattform-gruen`, null Reviews). Beim Ändern der Matrix das Sammel-Gate `plattform-gruen` beibehalten — es ist der Name, an dem die Schutzregel hängt.
 - **M1:** Headless-Sim komplett (GDD 17.2, inkl. Agenten „koordiniert", „unkoordiniert", „Turtle" und Leeroy-Modell), F1–F6 als Pass/Fail, Parameter-Sweep, Validierungsbericht nach `reports/`. **Gate: alle F-Kriterien bestanden, Todesstrafen-Wert fixiert.** Falsifikationen selbstständig per Stellhebel (GDD 13.3) beheben und protokollieren.
 - **M2 (Balancing-MVP):** GDD Kap. 15, Zeile M2. Erst danach Rob für den ersten 5er-LAN-Test rufen.
 - **M3, M4:** wie GDD. Modus 2 (Kap. 18) ist GESPERRT — nur `modus2`-Issues sammeln.
