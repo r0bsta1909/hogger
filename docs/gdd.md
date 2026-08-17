@@ -416,7 +416,11 @@ Unverändert Volley-Dash-Muster: Host-autoritativ, lua-enet, Channel 0 reliable 
 ### 17.0 GitHub-nativer Workflow (ab dem ersten Commit)
 
 1. `main` geschützt und immer grün; jede Änderung als Branch → PR → CI grün → Merge. Claude Code arbeitet über `git` + `gh` (`gh pr create`, `gh run watch`, `gh pr checks`, `gh issue`) und merged nie auf Verdacht.
-2. **CI (`.github/workflows/ci.yml`):** Pyramide-Stufen 1–3 auf Matrix `ubuntu-latest` / `windows-latest` / `macos-latest` (die Matrix IST der Cross-Platform-Beweis); Stufe 4 (fensterloses LÖVE2D, Loopback) auf ubuntu + macos; Stufe 5 nur lokal (CI-Runner sagen nichts über den LAN-Host).
+2. **CI, zweigeteilt (ADR 003 — Actions-Minuten werden pro Job auf die volle Minute aufgerundet und erst dann mit dem OS-Faktor multipliziert, macOS 10×):**
+   - **Schnellgate (`.github/workflows/ci.yml`):** Stufen 1, 3 und 4 in EINEM `ubuntu-latest`-Job, bei jedem PR und jedem Push auf `main`. Ein Job statt fünf, weil die Job-Anzahl der Kostentreiber ist, nicht die Testdauer. `paths-ignore` für `docs/**`, `reports/**`, `**.md`.
+   - **Cross-Platform-Beweis (`.github/workflows/ci-plattform.yml`):** Stufen 1+3 auf `windows-latest` + `macos-latest`, Stufe 4 auf macOS. Läuft per `gh workflow run ci-plattform.yml` (vor LAN-Abend und Release) und bei PRs mit Label `plattform` — also weiterhin die Matrix als Beweis, nur nicht mehr bei jedem Commit.
+   - Stufe 5 nur lokal (CI-Runner sagen nichts über den LAN-Host).
+   - Wird das Repo öffentlich, sind Actions-Minuten frei: dann gehört die Matrix zurück an jeden PR (Revisionsauslöser in ADR 003).
 3. **Releases:** Tag `v*` → Action baut `.love`, `.exe`, `.app` als Release-Artefakte; LAN-Verteilung = Release-Link.
 4. **Issues als Arbeitsschlange** (Labels `balancing`, `gefühl`, `bug`, `modus2`); das Tuning-Protokoll (17.9) bleibt im GDD als Ergebnisgedächtnis.
 5. **Validierungsberichte** als CI-Artefakte plus Kernzahlen als PR-Kommentar (`gh pr comment`).
