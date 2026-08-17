@@ -147,7 +147,9 @@ Eine zusammenhängende Karte (~3×2 Bildschirmradien bei mittlerem Zoom), als Da
 
 ### 7.2 Ambient-Mobs
 
-Weit verstreut, außerhalb der Leash-Zone, nie auf der direkten Friedhof-Hügel-Achse. `4 + floor(N/5)` Spawn-Slots (N=5→5, N=40→12), Respawn 120 s am festen Punkt, leashen an ihren Spawn, kritten mit Standard-5 %:
+Weit verstreut, außerhalb der Leash-Zone, nie auf der direkten Friedhof-Hügel-Achse. `4 + floor(N/5)` Spawn-Slots (N=5→5, N=40→12), Respawn 120 s am festen Punkt, leashen an ihren Spawn, kritten mit Standard-5 %.
+
+**Leerlauf-Patrouille** (Playtest-Runde 5, Issue #87): Im Idle spazieren die Mobs in kleinem Radius um ihren Spawn (`mob_patrol_radius` 60 px, `mob_patrol_speed` 45 px/s, 0 = aus) — gehen, stehen, gehen, damit Elwynn lebendig wirkt statt aufgestellt. Wegpunkte und Gehpausen kommen **deterministisch aus Mob-Id und Sim-Zeit** — kein RNG-Kanal (Zufalls-Regel Kap. 14). Der Radius liegt weit unter der Leash-Distanz; Aggro-, Flucht- und Kampfverhalten bleiben unverändert:
 
 | Mob | HP | Schaden | Verhalten | Detail |
 |---|---|---|---|---|
@@ -490,7 +492,7 @@ Alle Parameter als **eine flache Tabelle** in `model.lua` (`M.params`, je `{wert
 | Krits | Chance und Multiplikator, je Seite getrennt schaltbar (A/B-Gefühlstests) |
 | Spieler | HP je Rüstungsklasse, alle Fähigkeitswerte, Autohit/Zauberstab, Reichweiten, GCD, Tempo lebend/Geist, Fünf-Sekunden-Regel (Wartezeit, Regen-Rate), Bedrohung je Heilung |
 | Loop | Respawn-Formel (Basis, Faktor, Min, Max), Try-Zeitlimit, Wiederbelebungsfeld-Position (Distanz zum Hügel) |
-| Mobs | Slot-Formel, Respawn, HP/Schaden je Typ, XP, Kupfer |
+| Mobs | Slot-Formel, Respawn, HP/Schaden je Typ, Patrouille (Radius, Tempo), XP, Kupfer |
 | Adds | Anzahl-Formel, HP, Schaden |
 | Leeroy | Announcer-Drossel (Zeilen/10 s), Bedrohungsfaktor, Kragen-Schwelle (Trys bis Mechanik-Ansage) |
 | UI | Zoom-Stufen (Radien), Floating-Text-Dauer |
