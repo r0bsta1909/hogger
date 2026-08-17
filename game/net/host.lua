@@ -265,6 +265,11 @@ function H:release_spirit()
   return step.release_spirit(self.state, self.local_pid)
 end
 
+-- Admin (Runde 6, #100): Sofort-Teleport des lokalen Spielers vor Hogger
+function H:teleport_self()
+  return step.admin_teleport(self.state, self.local_pid)
+end
+
 -- Nahkampf des lokalen Spielers anschalten (Issue #86)
 function H:engage()
   return step.engage(self.state, self.local_pid)

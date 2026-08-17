@@ -37,9 +37,35 @@ do
   T.eq(d:keypressed("k"), "kill", "Overlay: K toetet Hogger")
   T.eq(d:keypressed("r"), "intro", "Overlay: R spielt das Intro erneut")
   T.eq(d:keypressed("z"), "realm", "Overlay: Z startet den Realm neu")
+  T.eq(d:keypressed("t"), "teleport", "Overlay: T teleportiert vor Hogger")
   T.eq(d:keypressed("h"), "host", "Overlay: H erzwingt den Host")
   T.eq(d:keypressed("n"), "wipe", "Overlay: N loescht die Session")
   T.eq(d:keypressed("q"), true, "Overlay: fremde Tasten werden geschluckt")
   d:keypressed("escape")
   T.eq(d.visible, false, "Overlay: Escape schliesst")
+end
+
+-- Teleport vor Hogger (Runde 6, Issue #100): sofort lebendig als Klasse
+-- der Rotation, kurz AUSSERHALB der Aggro-Range, Quest implizit angenommen
+do
+  local world2 = require("game.gamesim.world")
+  local st = world2.new(13)
+  world2.add_player(st, "rob", {}) -- Quest noch NICHT angenommen
+  world2.begin_try(st, {})
+  local p = st.players[1]
+  T.eq(p.alive, false, "Teleport: Spieler startet tot am Friedhof")
+  T.eq(step.admin_teleport(st, 1), true, "Teleport: greift")
+  T.ok(p.alive and not p.ghost, "Teleport: sofort lebendig")
+  T.ok(p.class ~= nil and model.classes[p.class] ~= nil,
+    "Teleport: gueltige Klasse (" .. tostring(p.class) .. ")")
+  T.eq(p.hp, model.hp_for_class(p.class), "Teleport: volle HP")
+  T.eq(p.quest, 2, "Teleport: Quest gilt als angenommen (Bewegung frei)")
+  local d = world2.dist(p.x, p.y, st.hogger.x, st.hogger.y)
+  T.ok(d > model.p("hogger_aggro_radius"),
+    string.format("Teleport: ausserhalb der Aggro-Range (%.0f px)", d))
+  T.ok(d < model.p("hogger_aggro_radius") + 120,
+    "Teleport: aber nicht weit weg davon")
+  T.eq(step.admin_teleport(st, 99), false, "Teleport: unbekannte pid prallt ab")
+  st.hogger.hp = 0
+  T.eq(step.admin_teleport(st, 1), false, "Teleport: ohne lebenden Hogger sinnlos")
 end
