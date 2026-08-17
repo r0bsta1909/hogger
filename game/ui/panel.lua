@@ -1,10 +1,13 @@
 -- game/ui/panel.lua — Live-Tuning-Panel (GDD 17.6, F10, Host-only).
 -- Generiert sich VOLLSTAENDIG aus M.params — keine Variable wird je von
 -- Hand ins UI gebaut. Aenderungen wirken live und broadcasten an Clients.
--- Gehaltene Pfeiltasten wiederholen (Issue #81); der CSV-Export legt nur
--- die vom GDD-Stand abweichenden Werte in den Save-Ordner (Issue #82).
--- Steuerlogik ist love-frei (tests/unit_panel.lua); love nur in
--- update/draw/mousepressed-Randschicht.
+-- Seit Runde 6 (#97) zweistufig: Einstieg auf einer groben Kategorienliste
+-- (Hogger, Spieler, Klassen, ...), Enter/Rechts oeffnet die Kategorie,
+-- Backspace fuehrt zurueck. Die Zuordnung ist ABSCHLIESSEND — jeder
+-- Parameter gehoert genau einer Kategorie an (tests/unit_panel.lua).
+-- Gehaltene Pfeiltasten wiederholen (#81); der CSV-Export legt nur die
+-- vom GDD-Stand abweichenden Werte in den Save-Ordner (#82).
+-- Steuerlogik ist love-frei; love nur in update/draw/mousepressed.
 
 local model = require("sim.model")
 
@@ -19,17 +22,66 @@ local REPEAT_KEYS = { "down", "up", "pagedown", "pageup", "left", "right" }
 local CSV_FILE = "tuning.csv"
 P.CSV_FILE = CSV_FILE
 
+-- ---------------------------------------------------------------------------
+-- Kategorien (Runde 6, #97): grob und intuitiv, KEINE Unterkategorien.
+-- Zuordnung: erst Einzel-Ausnahmen (der Loop schneidet quer durch die
+-- GDD-Kapitel), dann die Kapitel-Map. Ein Parameter ohne Treffer landet in
+-- "sonstiges" — und unit_panel laesst die Suite rot werden, wenn das je
+-- passiert: die Liste bleibt abschliessend.
+-- ---------------------------------------------------------------------------
+local KAT_ORDER = { "hogger", "spieler", "klassen", "mobs", "loop",
+                    "krits", "leeroy", "ui", "sim", "sonstiges" }
+local KAT_NAME = {
+  hogger = "Hogger (Kampf, Fressen, Adds)",
+  spieler = "Spieler (Basiswerte, Reichweiten)",
+  klassen = "Klassen (Faehigkeiten)",
+  mobs = "Mobs & Loot",
+  loop = "Loop & Todesstrafe",
+  krits = "Krits",
+  leeroy = "Leeroy & Echo",
+  ui = "UI & Kamera",
+  sim = "Sim-Modell (nur Headless)",
+  sonstiges = "Sonstiges",
+}
+P.KAT_ORDER, P.KAT_NAME = KAT_ORDER, KAT_NAME
+
+local KAT_BY_KEY = {
+  try_time_limit = "loop", release_grace = "loop", revive_channel = "loop",
+  graveyard_to_field_dist = "loop", field_to_hill_dist = "loop",
+}
+local KAT_BY_KAPITEL = {
+  ["9.1"] = "hogger", ["9.2"] = "hogger", ["9.3"] = "hogger",
+  ["8.1"] = "spieler", ["9.4"] = "spieler",
+  ["8.2"] = "klassen",
+  ["7.2"] = "mobs", ["7.3"] = "mobs",
+  ["6"] = "loop", ["7.1"] = "loop", ["5"] = "loop", ["11"] = "loop",
+  ["10"] = "leeroy", ["10.3"] = "leeroy",
+  ["4.1"] = "ui", ["4.2"] = "ui",
+  ["13.2"] = "krits",
+  ["17.2"] = "sim",
+}
+
+function P.category_of(key, kapitel)
+  if key:sub(1, 8) == "respawn_" then return "loop" end
+  return KAT_BY_KEY[key] or KAT_BY_KAPITEL[kapitel] or "sonstiges"
+end
+
 function P.new(apply_fn)
   local self = setmetatable({}, P)
   self.visible = false
   self.apply = apply_fn  -- function(key, value) -> angewendeter Wert
-  self.cursor = 1
+  self.mode = "kats"     -- kats | params
+  self.kat_cursor = 1
+  self.cursors = {}      -- Merkposten je Kategorie
   self.scroll = 0
   self.held = nil        -- gehaltene Repeat-Taste
   self.held_t = 0
   self.note = nil        -- Ergebniszeile des letzten Exports
   self.note_t = 0
+  -- alle Schluessel (fuer den CSV-Export) und je Kategorie sortiert
   self.keys = {}
+  self.by_kat = {}
+  for _, k in ipairs(KAT_ORDER) do self.by_kat[k] = {} end
   local tmp = {}
   for k, e in pairs(model.params) do
     tmp[#tmp + 1] = { key = k, kapitel = e.kapitel }
@@ -38,29 +90,73 @@ function P.new(apply_fn)
     if a.kapitel ~= b.kapitel then return a.kapitel < b.kapitel end
     return a.key < b.key
   end)
-  for i, e in ipairs(tmp) do self.keys[i] = e.key end
+  for i, e in ipairs(tmp) do
+    self.keys[i] = e.key
+    local kat = P.category_of(e.key, e.kapitel)
+    local list = self.by_kat[kat]
+    list[#list + 1] = e.key
+  end
+  -- Kategorien in fester Reihenfolge, leere fallen weg
+  self.kats = {}
+  for _, k in ipairs(KAT_ORDER) do
+    if #self.by_kat[k] > 0 then self.kats[#self.kats + 1] = k end
+  end
   return self
 end
 
-function P:toggle() self.visible = not self.visible end
+function P:toggle()
+  self.visible = not self.visible
+  if self.visible then self.mode = "kats" end
+end
+
+function P:current_kat()
+  return self.kats[self.kat_cursor]
+end
+
+function P:changed_in(kat)
+  local n = 0
+  for _, k in ipairs(self.by_kat[kat]) do
+    if model.params[k].wert ~= model.defaults[k] then n = n + 1 end
+  end
+  return n
+end
 
 -- love-frei: eine Navigations- oder Wertaktion ausfuehren (Tastendruck
 -- UND Wiederholung laufen hier durch)
 function P:action(key, shift)
-  local n = #self.keys
-  if key == "down" then self.cursor = math.min(n, self.cursor + 1)
-  elseif key == "up" then self.cursor = math.max(1, self.cursor - 1)
-  elseif key == "pagedown" then self.cursor = math.min(n, self.cursor + 12)
-  elseif key == "pageup" then self.cursor = math.max(1, self.cursor - 12)
+  if self.mode == "kats" then
+    local n = #self.kats
+    if key == "down" then self.kat_cursor = math.min(n, self.kat_cursor + 1)
+    elseif key == "up" then self.kat_cursor = math.max(1, self.kat_cursor - 1)
+    elseif key == "right" or key == "return" or key == "kpenter" then
+      self.mode = "params"
+      self.scroll = 0
+    else
+      return false
+    end
+    return true
+  end
+  local list = self.by_kat[self:current_kat()]
+  local n = #list
+  local cur = self.cursors[self:current_kat()] or 1
+  if key == "down" then cur = math.min(n, cur + 1)
+  elseif key == "up" then cur = math.max(1, cur - 1)
+  elseif key == "pagedown" then cur = math.min(n, cur + 12)
+  elseif key == "pageup" then cur = math.max(1, cur - 12)
   elseif key == "left" or key == "right" then
-    local k = self.keys[self.cursor]
+    local k = list[cur]
     local e = model.params[k]
     local delta = (key == "right") and e.schritt or -e.schritt
     if shift then delta = delta * 10 end
     self.apply(k, e.wert + delta)
+  elseif key == "backspace" then
+    self.mode = "kats"
+    self.scroll = 0
+    return true
   else
     return false
   end
+  self.cursors[self:current_kat()] = cur
   return true
 end
 
@@ -81,8 +177,8 @@ function P:repeat_step(held, dt)
   return fires
 end
 
--- love-frei: CSV nur mit den Abweichungen vom GDD-Stand (Issue #82).
--- Rueckgabe: Inhalt, Anzahl geaenderter Parameter.
+-- love-frei: CSV nur mit den Abweichungen vom GDD-Stand (Issue #82) —
+-- ueber ALLE Kategorien hinweg.
 function P:csv()
   local out = { "param;gdd_wert;wert" }
   for _, k in ipairs(self.keys) do
@@ -174,8 +270,10 @@ function P:draw()
   love.graphics.rectangle("fill", px, py, pw, ph, 4, 4)
   love.graphics.setColor(0.78, 0.63, 0.28, 1)
   love.graphics.rectangle("line", px, py, pw, ph, 4, 4)
-  -- kurz genug, um nicht unter den Export-Knopf zu laufen
-  love.graphics.print("TUNING (F10)  halten wiederholt, Shift = x10", px + 12, py + 8)
+  local title = self.mode == "kats"
+    and "TUNING (F10)  Enter oeffnet"
+    or ("TUNING > " .. (KAT_NAME[self:current_kat()] or "?"))
+  love.graphics.print(title, px + 12, py + 8)
 
   -- Export-Knopf oben rechts (Issue #82)
   local bx, by, bw, bh = export_rect(w, h)
@@ -188,39 +286,66 @@ function P:draw()
   local font = love.graphics.getFont()
   local line_h = font:getHeight() + 4
   local top = py + 32
-  local list_h = ph - 40 - (self.note_t > 0 and 22 or 0)
-  local visible_rows = math.floor(list_h / line_h)
-  if self.cursor - self.scroll > visible_rows then
-    self.scroll = self.cursor - visible_rows
-  elseif self.cursor <= self.scroll then
-    self.scroll = self.cursor - 1
-  end
 
-  for row = 1, visible_rows do
-    local i = row + self.scroll
-    local k = self.keys[i]
-    if not k then break end
-    local e = model.params[k]
-    local y = top + (row - 1) * line_h
-    if i == self.cursor then
-      love.graphics.setColor(0.78, 0.63, 0.28, 0.25)
-      love.graphics.rectangle("fill", px + 6, y - 2, pw - 12, line_h)
+  if self.mode == "kats" then
+    -- Kategorienliste: Name, Parameterzahl, Zahl der Abweichungen
+    for i, kat in ipairs(self.kats) do
+      local y = top + (i - 1) * (line_h + 6)
+      if i == self.kat_cursor then
+        love.graphics.setColor(0.78, 0.63, 0.28, 0.25)
+        love.graphics.rectangle("fill", px + 6, y - 2, pw - 12, line_h + 4)
+      end
+      love.graphics.setColor(0.92, 0.89, 0.80, 1)
+      love.graphics.print(KAT_NAME[kat], px + 16, y)
+      local changed = self:changed_in(kat)
+      local info = string.format("%d Werte", #self.by_kat[kat])
+      if changed > 0 then info = info .. string.format("   %d *", changed) end
+      love.graphics.setColor(changed > 0 and 0.95 or 0.55,
+        changed > 0 and 0.85 or 0.52, changed > 0 and 0.4 or 0.45, 1)
+      love.graphics.printf(info, px + pw - 190, y, 178, "right")
     end
-    love.graphics.setColor(0.55, 0.52, 0.45, 1)
-    love.graphics.print(e.kapitel, px + 12, y)
-    -- geaenderte Werte heben sich ab: gelber Schluessel, Stern
-    local changed = e.wert ~= model.defaults[k]
-    if changed then love.graphics.setColor(0.95, 0.85, 0.4, 1)
-    else love.graphics.setColor(0.92, 0.89, 0.80, 1) end
-    love.graphics.print(k .. (changed and " *" or ""), px + 64, y)
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.printf(string.format("%g", e.wert), px + pw - 130, y, 118, "right")
+    love.graphics.setColor(0.45, 0.42, 0.35, 1)
+    love.graphics.print("Hoch/Runter waehlen, Enter/Rechts oeffnen, E = CSV",
+      px + 12, py + ph - 22)
+  else
+    local kat = self:current_kat()
+    local list = self.by_kat[kat]
+    local cursor = self.cursors[kat] or 1
+    local list_h = ph - 40 - 22
+    local visible_rows = math.floor(list_h / line_h)
+    if cursor - self.scroll > visible_rows then
+      self.scroll = cursor - visible_rows
+    elseif cursor <= self.scroll then
+      self.scroll = cursor - 1
+    end
+    for row = 1, visible_rows do
+      local i = row + self.scroll
+      local k = list[i]
+      if not k then break end
+      local e = model.params[k]
+      local y = top + (row - 1) * line_h
+      if i == cursor then
+        love.graphics.setColor(0.78, 0.63, 0.28, 0.25)
+        love.graphics.rectangle("fill", px + 6, y - 2, pw - 12, line_h)
+      end
+      love.graphics.setColor(0.55, 0.52, 0.45, 1)
+      love.graphics.print(e.kapitel, px + 12, y)
+      local changed = e.wert ~= model.defaults[k]
+      if changed then love.graphics.setColor(0.95, 0.85, 0.4, 1)
+      else love.graphics.setColor(0.92, 0.89, 0.80, 1) end
+      love.graphics.print(k .. (changed and " *" or ""), px + 64, y)
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.printf(string.format("%g", e.wert), px + pw - 130, y, 118, "right")
+    end
+    love.graphics.setColor(0.45, 0.42, 0.35, 1)
+    love.graphics.print("links/rechts aendern (halten wiederholt), Shift = x10, Backspace zurueck",
+      px + 12, py + ph - 22)
   end
 
   -- Ergebniszeile des Exports (voller Pfad zum Zurueckspielen an Claude)
   if self.note_t > 0 and self.note then
     love.graphics.setColor(0.55, 0.70, 0.40, math.min(1, self.note_t))
-    love.graphics.print(self.note, px + 12, py + ph - 22)
+    love.graphics.print(self.note, px + 12, py + ph - 40)
   end
 end
 
