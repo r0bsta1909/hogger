@@ -1,5 +1,6 @@
 ---
 name: love2d-lan-game
+user-invocable: true
 description: Erprobte Architektur-, Netcode- und Auslieferungsmuster für LÖVE2D-Spiele mit LAN-Multiplayer in jeder Konstellation — 1v1-Sportspiel, Arena-Shooter, Koop-Zerg bis 40 Spieler, persistente Welt/MMORPG-artig — plus Zero-Config-Discovery, Turniermodus, Asset-Pipeline von Platzhalter bis Final, Release-Bau von .love/.exe/.app und CI-Zuschnitt auf gehosteten Runnern. Laden bei jedem Projekt mit LÖVE/love2d + Netzwerk (ENet, luasocket, Snapshots, Lockstep-Frage, Skalierungsfragen), LAN-Party-Betrieb, Turniersystem, Headless-Balancing-Sim, Asset- oder Packaging-Fragen sowie bei GitHub-Actions-Matrix und Minutenverbrauch — vor der ersten Architekturentscheidung, vor der ersten Zeile Netzcode und vor dem Aufsetzen der CI.
 ---
 
