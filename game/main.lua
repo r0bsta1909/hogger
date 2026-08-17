@@ -663,6 +663,11 @@ function love.draw()
     end
     if app.stats then app.stats:draw() end
     if app.victory then app.victory:draw(app.view, to_screen, bw, bh) end
+    -- Raid-Overview, solange die linke STRG-Taste gehalten wird (Runde 6,
+    -- Issue #95): reines Overlay, blockiert keine Eingaben
+    if love.keyboard.isDown("lctrl") then
+      app.render:draw_raid_overview(app.view, bw, bh)
+    end
     if app.panel then app.panel:draw() end
   end
   if app.boot and app.boot:active() and not app.boot:covers_screen() then
