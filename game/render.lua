@@ -173,6 +173,101 @@ function R:toast(text)
   if #self.toasts > 5 then table.remove(self.toasts) end
 end
 
+-- Raid-Overview (Runde 6, Issue #95): love-freie Zeilenaufbereitung —
+-- wer ist dabei, welche Klasse, lebend/Geist/tot. Sortierung: Lebende,
+-- dann Geister, dann Tote; innerhalb alphabetisch.
+function R.raid_rows(view)
+  local rows = {}
+  local names = view.names or {}
+  local alive_n, ghost_n, dead_n = 0, 0, 0
+  for pid, p in pairs(view.players) do
+    local status, detail
+    if p.alive then
+      status = "lebend"
+      alive_n = alive_n + 1
+      local maxhp = p.class and model.hp_for_class(p.class) or 0
+      detail = maxhp > 0
+        and math.floor((p.hp or 0) / maxhp * 100 + 0.5) or nil
+    elseif p.ghost then
+      status = "geist"
+      ghost_n = ghost_n + 1
+    else
+      status = "tot"
+      dead_n = dead_n + 1
+      detail = p.dead_rest -- Restsekunden bis zur Freigabe (GDD 11)
+    end
+    rows[#rows + 1] = { pid = pid, name = names[pid] or ("#" .. pid),
+                        class = p.class, leeroy = p.is_leeroy,
+                        status = status, detail = detail }
+  end
+  local ORD = { lebend = 1, geist = 2, tot = 3 }
+  table.sort(rows, function(a, b)
+    if ORD[a.status] ~= ORD[b.status] then return ORD[a.status] < ORD[b.status] end
+    return a.name:lower() < b.name:lower()
+  end)
+  return rows, alive_n, ghost_n, dead_n
+end
+
+-- Das Overlay selbst: sichtbar, solange STRG gehalten wird (main fragt die
+-- Taste ab). Reine Anzeige — es blockiert keinerlei Eingaben.
+function R:draw_raid_overview(view, w, h)
+  local rows, alive_n, ghost_n, dead_n = R.raid_rows(view)
+  if #rows == 0 then return end
+  local PER_COL, ROW_H, COL_W = 14, 20, 236
+  local cols = math.max(1, math.ceil(#rows / PER_COL))
+  local pw = cols * COL_W + 24
+  local ph = 66 + math.min(#rows, PER_COL) * ROW_H + 12
+  local px0 = (w - pw) / 2
+  local py0 = math.max(36, (h - ph) / 2)
+  love.graphics.setColor(0.07, 0.07, 0.11, 0.93)
+  love.graphics.rectangle("fill", px0, py0, pw, ph, 6, 6)
+  love.graphics.setColor(0.78, 0.63, 0.28, 1)
+  love.graphics.setLineWidth(2)
+  love.graphics.rectangle("line", px0, py0, pw, ph, 6, 6)
+  love.graphics.setLineWidth(1)
+  local font = love.graphics.getFont()
+  love.graphics.setColor(0.95, 0.85, 0.4, 1)
+  love.graphics.print("Schlachtzug", px0 + 12, py0 + 8, 0, 1.4, 1.4)
+  -- Zusammenfassung in eigener Zeile — kollidiert so nie mit dem Titel
+  local summary = string.format("%d lebend   %d Geister   %d tot",
+    alive_n, ghost_n, dead_n)
+  love.graphics.setColor(0.75, 0.72, 0.62, 1)
+  love.graphics.print(summary, px0 + 12, py0 + 32)
+  for i, r in ipairs(rows) do
+    local col = math.floor((i - 1) / PER_COL)
+    local x = px0 + 12 + col * COL_W
+    local y = py0 + 58 + ((i - 1) % PER_COL) * ROW_H
+    -- Klassenicon (oder grauer Kreis vor der ersten Wiederbelebung)
+    if r.class and CLASS_ICON[r.class] then
+      local icon = CLASS_ICON[r.class]
+      assets.draw(icon, x + 8, y + 8, 16 / assets.size(icon),
+        r.status == "lebend" and 1 or 0.45)
+    else
+      love.graphics.setColor(0.35, 0.35, 0.35, 0.8)
+      love.graphics.circle("fill", x + 8, y + 8, 7)
+    end
+    -- Name: Klassenfarbe lebend, gedimmt sonst; Leeroy in Gold
+    local col_name = r.leeroy and { 0.95, 0.78, 0.2 }
+      or (r.class and CLASS_COL[r.class]) or { 0.8, 0.8, 0.75 }
+    local dim = (r.status == "lebend") and 1 or 0.55
+    love.graphics.setColor(col_name[1] * dim, col_name[2] * dim, col_name[3] * dim, 1)
+    love.graphics.print(r.name, x + 20, y)
+    -- Status rechtsbuendig: HP-Prozent / Geist / tot (Restsekunden)
+    local txt, tc
+    if r.status == "lebend" then
+      txt = (r.detail or 0) .. "%"
+      tc = (r.detail or 0) <= 35 and { 0.9, 0.35, 0.3 } or { 0.55, 0.8, 0.55 }
+    elseif r.status == "geist" then
+      txt, tc = "Geist", { 0.55, 0.65, 0.9 }
+    else
+      txt = (r.detail and r.detail > 0) and ("tot " .. r.detail .. "s") or "tot"
+      tc = { 0.6, 0.56, 0.45 }
+    end
+    love.graphics.setColor(tc[1], tc[2], tc[3], 1)
+    love.graphics.print(txt, x + COL_W - 16 - font:getWidth(txt), y)
+  end
+end
+
 function R:zoom_radius()
   return model.p("zoom_radius_" .. self.zoom)
 end
@@ -697,6 +792,9 @@ function R:draw(view, ui)
     love.graphics.setColor(0.6, 0.56, 0.45, 1)
     love.graphics.print(string.format("Kupfer %d   Plunder %d",
       me.kupfer or 0, me.plunder or 0), 14, 70)
+    -- Hinweis auf das Raid-Overview (Runde 6, Issue #95)
+    love.graphics.setColor(0.45, 0.42, 0.35, 1)
+    love.graphics.print("STRG fuer Raid-Overview", 14, 88)
   end
 
   -- Oben rechts: Zielfenster, Ziel des Ziels, Buff-Leiste (GDD 4.3)
