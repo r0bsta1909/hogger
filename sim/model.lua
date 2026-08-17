@@ -22,13 +22,15 @@ end
 
 M.params = {
   -- Hogger (GDD 9.2 / 9.3)
-  -- HP = slope x N - offset (affin, v2.6): der Sockel bildet den
-  -- Kleingruppen-Overhead ab; offset=0, slope=120 ergibt die alte Formel
-  hogger_hp_slope        = p(430, 100, 800, 10, "9.3"),
-  -- Offset 950 -> 850 und Cleave-Divisor 5 -> 6 in Runde 5 (#86): der
-  -- gestrichene Zauberstab kostet den Raid Dauer-DPS, die Rekalibrierung
-  -- haelt F1-F6 (Sweep in GDD 17.9)
-  hogger_hp_offset       = p(850, 0, 3000, 50, "9.3"),
+  -- HP = quad x N^2 + slope x N - offset (mild quadratisch seit Runde 6,
+  -- #96): der Sockel bildet den Kleingruppen-Overhead ab, der quad-Term
+  -- ersetzt die gestrichene N-Skalierung der Todesstrafe
+  hogger_hp_quad         = p(3.5, 0, 20, 0.5, "9.3"),
+  hogger_hp_slope        = p(560, 100, 800, 10, "9.3"),
+  -- Historie: Offset 950 -> 850 in Runde 5 (#86, Zauberstab-Aus); Runde 6
+  -- (#96) fixer Respawn -> quad-Term neu, slope/offset nachkalibriert.
+  -- F1-F6-Belege: Sweeps in GDD 17.9.
+  hogger_hp_offset       = p(1600, 0, 3000, 50, "9.3"),
   hogger_autohit_dmg     = p(30, 10, 60, 1, "9.2"),
   hogger_cleave_divisor  = p(6, 2, 40, 1, "9.2"),   -- Cleave-Ziele = ceil(N / Divisor)
   hogger_autohit_interval= p(1.8, 1.0, 3.0, 0.1, "9.2"),
@@ -144,8 +146,11 @@ M.params = {
   druid_touch_mana       = p(35, 5, 100, 5, "8.2"),
 
   -- Loop / Todesstrafe (GDD 6, 7.1, 9.3)
-  respawn_base           = p(8, 0, 30, 1, "9.3"),
-  respawn_factor         = p(0.52, 0, 1.0, 0.01, "9.3"),
+  -- Rob-Entscheid Runde 6 (#96): der Respawn-Timer ist FEST — er skaliert
+  -- nicht mehr mit N (factor 0). Die F6-Fairness liegt seitdem auf den
+  -- N-Hebeln Cleave/Adds (17.9).
+  respawn_base           = p(10, 0, 30, 1, "9.3"),
+  respawn_factor         = p(0, 0, 1.0, 0.01, "9.3"),
   respawn_min            = p(10, 0, 30, 1, "9.3"),
   respawn_max            = p(30, 5, 60, 1, "9.3"),
   try_time_limit         = p(900, 300, 1800, 60, "6"),
@@ -341,9 +346,14 @@ end
 -- Untergrenze 120 x N: unterhalb der Design-Spanne (N < ~3, z. B. Host
 -- wartet allein auf Mitspieler) wuerde die affine Formel degenerieren
 -- (N=1: 430-950 -> 1 HP, Hogger stirbt an einem Schlag)
+-- HP-Formel seit Runde 6 (#96) mild quadratisch: der feste Respawn-Timer
+-- nahm der Schwierigkeit ihren superlinearen Anteil (Todesstrafe skalierte
+-- mit N) — der quad-Term bringt ihn zurueck, sonst rollen grosse Raids per
+-- Materialschlacht drueber (Sweep: N=20/40 bei 100 % Siegen).
 function M.hogger_hp(n)
-  return math.max(120 * n,
-    M.p("hogger_hp_slope") * n - M.p("hogger_hp_offset"))
+  return math.max(120 * n, math.floor(
+    M.p("hogger_hp_quad") * n * n
+    + M.p("hogger_hp_slope") * n - M.p("hogger_hp_offset") + 0.5))
 end
 
 function M.eat_heal_per_second(n)

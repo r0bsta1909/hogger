@@ -7,13 +7,13 @@ local T = _G.T
 
 -- GDD 9.3: Skalierungstabelle als harte Testfaelle -------------------------
 local table93 = {
-  --  N, HP,    Fressheilung, Unterbrecher, Cleave, Adds, Respawn (GDD 9.3, v2.6)
-  -- HP = 430 x N - 850; Cleave = ceil(N/6); Respawn = clamp(8+0,52N; 10; 30)
-  -- Offset und Cleave-Divisor rekalibriert in Runde 5 (#86, 17.9)
-  { 5,   1300,  156,  3, 1, 0, 10.6 },
-  { 10,  3450,  414,  3, 2, 1, 13.2 },
-  { 20,  7750,  930,  4, 4, 2, 18.4 },
-  { 40, 16350, 1962,  6, 7, 5, 28.8 },
+  --  N, HP,    Fressheilung, Unterbrecher, Cleave, Adds, Respawn (GDD 9.3)
+  -- HP = 3,5xN^2 + 560xN - 1600 (gerundet; quad-Term seit Runde 6, #96);
+  -- Cleave = ceil(N/6); Respawn FEST 10 s (Rob-Entscheid Runde 6, #96)
+  { 5,   1288,  154.56,  3, 1, 0, 10 },
+  { 10,  4350,  522,     3, 2, 1, 10 },
+  { 20, 11000,  1320,    4, 4, 2, 10 },
+  { 40, 26400,  3168,    6, 7, 5, 10 },
 }
 for _, row in ipairs(table93) do
   local n = row[1]
@@ -28,15 +28,15 @@ end
 -- GDD 9.3: HP-Untergrenze 120 x N unterhalb der Design-Spanne --------------
 T.eq(M.hogger_hp(1), 120, "9.3 HP-Untergrenze N=1 (Solo-Wartelobby)")
 T.eq(M.hogger_hp(2), 240, "9.3 HP-Untergrenze N=2")
-T.eq(M.hogger_hp(4), 870, "9.3 affine Formel greift ab N=4")
+T.eq(M.hogger_hp(4), 696, "9.3 Formel greift ab N=4 (quad-Term, Runde 6)")
 
 -- GDD 7.2: Mob-Slots -------------------------------------------------------
 T.eq(M.mob_slots(5), 5, "7.2 Mob-Slots N=5")
 T.eq(M.mob_slots(40), 12, "7.2 Mob-Slots N=40")
 
 -- GDD 9.2: Fress-Schadensschwelle 5 % Max-HP (v2.6) ------------------------
-T.near(M.eat_dmg_threshold(10), 172.5, "9.2 Fress-Schadensschwelle N=10")
-T.near(M.eat_dmg_threshold(40), 817.5, "9.2 Fress-Schadensschwelle N=40")
+T.near(M.eat_dmg_threshold(10), 217.5, "9.2 Fress-Schadensschwelle N=10")
+T.near(M.eat_dmg_threshold(40), 1320, "9.2 Fress-Schadensschwelle N=40")
 
 -- GDD 13.2: Krit-Ausschluesse ----------------------------------------------
 T.ok(M.can_crit("autohit"), "13.2 Autohit kann kritten")
@@ -164,13 +164,11 @@ for _, n in ipairs({ 5, 10, 20, 40 }) do
 end
 T.ok(M.max_mob_kills_per_try(40) <= 120, "7.3 Richtwert ~100 Mob-Kills pro Try haelt")
 
--- GDD 6: Todesstrafe im fixierten Korridor (M1: 24,6 s bei N=5 bis 42,8 s bei N=40)
-T.near(M.death_penalty(5), 24.6, "6 Todesstrafe N=5")
-T.near(M.death_penalty(40), 42.8, "6 Todesstrafe N=40")
+-- GDD 6: Todesstrafe ist seit Runde 6 KONSTANT (Rob-Entscheid #96):
+-- fester Respawn-Timer 10 s + Laufweg 14 s = 24 s, egal wie viele spielen
 for _, n in ipairs({ 5, 10, 20, 40 }) do
-  local pen = M.death_penalty(n)
-  T.ok(pen >= 24 and pen <= 45,
-    string.format("6 Todesstrafe plausibel (N=%d: %.1f s)", n, pen))
+  T.near(M.death_penalty(n), 24,
+    string.format("6 Todesstrafe konstant 24 s (N=%d)", n))
 end
 
 -- GDD 17.6: Parametertabelle strukturell vollstaendig ----------------------
