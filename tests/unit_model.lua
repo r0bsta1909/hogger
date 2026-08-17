@@ -8,11 +8,12 @@ local T = _G.T
 -- GDD 9.3: Skalierungstabelle als harte Testfaelle -------------------------
 local table93 = {
   --  N, HP,    Fressheilung, Unterbrecher, Cleave, Adds, Respawn (GDD 9.3, v2.6)
-  -- HP = 430 x N - 950; Cleave = ceil(N/5); Respawn = clamp(8+0,52N; 10; 30)
-  { 5,   1200,  144,  3, 1, 0, 10.6 },
-  { 10,  3350,  402,  3, 2, 1, 13.2 },
-  { 20,  7650,  918,  4, 4, 2, 18.4 },
-  { 40, 16250, 1950,  6, 8, 5, 28.8 },
+  -- HP = 430 x N - 850; Cleave = ceil(N/6); Respawn = clamp(8+0,52N; 10; 30)
+  -- Offset und Cleave-Divisor rekalibriert in Runde 5 (#86, 17.9)
+  { 5,   1300,  156,  3, 1, 0, 10.6 },
+  { 10,  3450,  414,  3, 2, 1, 13.2 },
+  { 20,  7750,  930,  4, 4, 2, 18.4 },
+  { 40, 16350, 1962,  6, 7, 5, 28.8 },
 }
 for _, row in ipairs(table93) do
   local n = row[1]
@@ -27,15 +28,15 @@ end
 -- GDD 9.3: HP-Untergrenze 120 x N unterhalb der Design-Spanne --------------
 T.eq(M.hogger_hp(1), 120, "9.3 HP-Untergrenze N=1 (Solo-Wartelobby)")
 T.eq(M.hogger_hp(2), 240, "9.3 HP-Untergrenze N=2")
-T.eq(M.hogger_hp(4), 770, "9.3 affine Formel greift ab N=4")
+T.eq(M.hogger_hp(4), 870, "9.3 affine Formel greift ab N=4")
 
 -- GDD 7.2: Mob-Slots -------------------------------------------------------
 T.eq(M.mob_slots(5), 5, "7.2 Mob-Slots N=5")
 T.eq(M.mob_slots(40), 12, "7.2 Mob-Slots N=40")
 
 -- GDD 9.2: Fress-Schadensschwelle 5 % Max-HP (v2.6) ------------------------
-T.near(M.eat_dmg_threshold(10), 167.5, "9.2 Fress-Schadensschwelle N=10")
-T.near(M.eat_dmg_threshold(40), 812.5, "9.2 Fress-Schadensschwelle N=40")
+T.near(M.eat_dmg_threshold(10), 172.5, "9.2 Fress-Schadensschwelle N=10")
+T.near(M.eat_dmg_threshold(40), 817.5, "9.2 Fress-Schadensschwelle N=40")
 
 -- GDD 13.2: Krit-Ausschluesse ----------------------------------------------
 T.ok(M.can_crit("autohit"), "13.2 Autohit kann kritten")
@@ -57,9 +58,12 @@ T.near(M.threat_for(20, true), 15, "9.4 1 Heilung = 0,75 Bedrohung")
 T.eq(M.p("move_speed_alive"), 140, "8.1 Tempo lebend")
 T.eq(M.p("move_speed_ghost"), 210, "8.1 Tempo Geist (150%)")
 T.eq(M.p("autohit_melee_dmg"), 2, "8.1 Nahkampf-Autohit")
-T.eq(M.p("autoshot_dmg"), 3, "8.1 Autoschuss")
-T.eq(M.p("autoshot_range"), 200, "8.1 Autoschuss-Reichweite")
-T.eq(M.p("wand_range"), 120, "8.1 Zauberstab-Reichweite")
+T.eq(M.p("autoshot_dmg"), 4, "8.1 Autoschuss (3 -> 4 in Runde 5, #86)")
+T.eq(M.p("autoshot_range"), 230, "8.1 Autoschuss-Reichweite (Runde 5, #80)")
+T.eq(M.p("cast_range"), 200, "8.1 Zauber-Reichweite der Caster (Runde 5, #80)")
+T.ok(M.p("autoshot_range") > M.p("cast_range"),
+  "8.1 der Jaeger bleibt die laengste Reichweite (Vanilla 35 vs 30 yd)")
+T.eq(M.params.wand_dmg, nil, "8.1 der Zauberstab ist gestrichen (#86)")
 T.eq(M.p("gcd"), 1.5, "8.1 GCD")
 T.eq(M.p("crit_chance_player"), 0.05, "13.2 Kritchance Spieler")
 T.eq(M.p("crit_mult_hogger"), 2.0, "13.2 Kritmultiplikator Hogger")
@@ -110,9 +114,11 @@ local expected_kits = {
   warlock = { "Schattenblitz", "Wichtel beschwoeren" },
   druid   = { "Zorn", "Heilende Beruehrung" },
 }
+-- Seit Runde 5 (Issue #86): der Jaeger hat die einzige Fernkampf-
+-- Autoattack, alle anderen schlagen im Nahkampf (Zauberstab gestrichen)
 local expected_attack = {
   warrior = "melee", paladin = "melee", hunter = "shot", rogue = "melee",
-  priest = "wand", mage = "wand", warlock = "wand", druid = "melee",
+  priest = "melee", mage = "melee", warlock = "melee", druid = "melee",
 }
 for class_id, kit in pairs(expected_kits) do
   local c = M.classes[class_id]

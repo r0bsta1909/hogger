@@ -151,7 +151,7 @@ function A.make(name, run)
     agent.initial_class = function(r, i) return HEALERS[1 + (i % #HEALERS)] end
     agent.desired_range = function(r, p)
       if p.is_leeroy then return nil end -- Leeroy kaempft normal im Nahkampf
-      return model.p("wand_range")
+      return model.p("cast_range")
     end
     agent.no_auto = function(r, p) return not p.is_leeroy end
     agent.act = function(r, p)

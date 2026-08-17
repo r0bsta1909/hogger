@@ -13,7 +13,7 @@ local REQUIRED = {
   "snd_melee_hit",                                     -- 5
   "snd_cast_loop", "snd_impact_fire", "snd_impact_shadow",
   "snd_impact_holy", "snd_impact_frost",               -- 6
-  "snd_wand", "snd_shot",                              -- 7
+  "snd_shot",                                          -- 7 (snd_wand fiel mit Issue #86 weg)
   "snd_shout", "snd_stealth", "snd_imp_summon",        -- 8
   "snd_crit",                                          -- 9
   "snd_hogger_growl", "snd_hogger_schmatzen",

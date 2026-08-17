@@ -60,6 +60,7 @@ local function kill_player(state, p, ev, was_crit, cause)
   p.hp = 0
   p.cast = nil
   p.revive = nil
+  p.attack_on = false -- der naechste Anlauf beginnt friedlich (Issue #86)
   -- mit dem Tod ist jede Aura weg, Buff wie Debuff (Issue #71) — sonst
   -- laeuft Hoggers Blutung im Geist weiter und steht in der Leiste
   p.stealth = false
@@ -274,6 +275,8 @@ end
 
 local function set_stealth(state, p, on)
   p.stealth = on
+  -- Verstohlenheit schaltet den Angriff ab (Vanilla; Issue #86)
+  if on then p.attack_on = false end
 end
 
 local function dmg_fx(param)
@@ -336,19 +339,19 @@ local ABILITIES = {
   },
   priest = {
     { id = "smite", cost = "priest_smite_mana", cast = "priest_smite_cast",
-      range = "wand_range", target = "enemy", effect = dmg_fx("priest_smite_dmg") },
+      range = "cast_range", target = "enemy", effect = dmg_fx("priest_smite_dmg") },
     { id = "heal", cost = "priest_heal_mana", cast = "priest_heal_cast",
       target = "ally", effect = heal_fx("priest_heal_amount") },
   },
   mage = {
     { id = "fireball", cost = "mage_fireball_mana", cast = "mage_fireball_cast",
-      range = "wand_range", target = "enemy", effect = dmg_fx("mage_fireball_dmg") },
+      range = "cast_range", target = "enemy", effect = dmg_fx("mage_fireball_dmg") },
     { id = "frostarmor", target = "self",
       effect = function(_, p) p.frost_armor = true end },
   },
   warlock = {
     { id = "bolt", cost = "warlock_bolt_mana", cast = "warlock_bolt_cast",
-      range = "wand_range", target = "enemy", effect = dmg_fx("warlock_bolt_dmg") },
+      range = "cast_range", target = "enemy", effect = dmg_fx("warlock_bolt_dmg") },
     { id = "imp", cost = "warlock_imp_mana", cast = "warlock_imp_cast",
       target = "self",
       effect = function(state, p)
@@ -362,7 +365,7 @@ local ABILITIES = {
   },
   druid = {
     { id = "wrath", cost = "druid_wrath_mana", cast = "druid_wrath_cast",
-      range = "wand_range", target = "enemy", effect = dmg_fx("druid_wrath_dmg") },
+      range = "cast_range", target = "enemy", effect = dmg_fx("druid_wrath_dmg") },
     { id = "touch", cost = "druid_touch_mana", cast = "druid_touch_cast",
       target = "ally", effect = heal_fx("druid_touch_heal") },
   },
@@ -510,6 +513,7 @@ local function player_tick(state, p, inp, ev)
         p.alive = true
         p.ghost = false
         p.revive = nil
+        p.attack_on = false
         p.last_cast_t = -1000
         p.next_auto = 0
         p.shout_until = 0
@@ -570,31 +574,33 @@ local function player_tick(state, p, inp, ev)
     if p.cast.t_left <= 0 then finish_cast(state, p, ev) end
   end
 
-  -- Faehigkeiten per Flanke (ADR-002)
-  if input.pressed(mask, p.prev_mask, input.AB1) then try_ability(state, p, 1, ev) end
-  if input.pressed(mask, p.prev_mask, input.AB2) then try_ability(state, p, 2, ev) end
-  if input.pressed(mask, p.prev_mask, input.AB3) then try_ability(state, p, 3, ev) end
+  -- Faehigkeiten per Flanke (ADR-002). Jeder Faehigkeitsdruck schaltet
+  -- zugleich den Nahkampf-Autohit an (Issue #86) — auch wenn der Versuch
+  -- an Kosten/Reichweite scheitert: der Krieger mit 0 Wut faengt sonst
+  -- nie an zu schlagen, und Bots/Leeroy druecken ohnehin regelmaessig.
+  if input.pressed(mask, p.prev_mask, input.AB1) then p.attack_on = true try_ability(state, p, 1, ev) end
+  if input.pressed(mask, p.prev_mask, input.AB2) then p.attack_on = true try_ability(state, p, 2, ev) end
+  if input.pressed(mask, p.prev_mask, input.AB3) then p.attack_on = true try_ability(state, p, 3, ev) end
 
-  -- Autohit / Autoschuss / Zauberstab (GDD 8.1); nicht aus Verstohlenheit
+  -- Autoattacks (GDD 8.1, Runde 5 / Issue #86): der Jaeger-Autoschuss ist
+  -- die einzige kostenlose Fernkampf-Autoattack und laeuft automatisch;
+  -- der Nahkampf-Autohit aller anderen muss angeschaltet sein
+  -- (Rechtsklick, Taste 4 oder Faehigkeitsdruck). Nicht aus Verstohlenheit.
   p.next_auto = p.next_auto - DT
   if p.next_auto <= 0 and not p.cast and not p.stealth then
     local attack = model.classes[p.class].attack
-    local range, dmg
-    if attack == "shot" then
-      range, dmg = model.p("autoshot_range"), model.p("autoshot_dmg")
-    elseif attack == "wand" then
-      range, dmg = model.p("wand_range"), model.p("wand_dmg")
-    else
-      range, dmg = model.p("melee_range"), model.p("autohit_melee_dmg")
+    if attack == "shot"
+       and enemy_in_reach(state, p, model.p("autoshot_range")) then
+      p.next_auto = model.p("autohit_interval")
+      player_damage_enemy(state, p, model.p("autoshot_dmg"), "autohit", ev)
+    elseif attack == "melee" and p.attack_on
+           and enemy_in_reach(state, p, model.p("melee_range")) then
+      local dmg = model.p("autohit_melee_dmg")
       if p.seal_hits > 0 then -- Siegel der Rechtschaffenheit (GDD 8.2)
         dmg = dmg + model.p("paladin_seal_bonus_dmg")
-      end
-    end
-    if enemy_in_reach(state, p, range) then
-      p.next_auto = model.p("autohit_interval")
-      if attack ~= "shot" and attack ~= "wand" and p.seal_hits > 0 then
         p.seal_hits = p.seal_hits - 1
       end
+      p.next_auto = model.p("autohit_interval")
       player_damage_enemy(state, p, dmg, "autohit", ev)
     end
   end
@@ -787,7 +793,7 @@ local function npc_tick(state, npc, ev)
   npc.next_auto = npc.next_auto - DT
   local h = state.hogger
   if npc.next_auto <= 0 and h.hp > 0 and h.state ~= "reset"
-     and world.dist(npc.x, npc.y, h.x, h.y) <= model.p("wand_range") then
+     and world.dist(npc.x, npc.y, h.x, h.y) <= model.p("cast_range") then
     npc.next_auto = model.p("imp_interval")
     local dmg = model.p("imp_dmg")
     h.hp = h.hp - dmg
@@ -846,6 +852,16 @@ function S.release_spirit(state, pid)
   if not p or p.alive or p.ghost then return false end
   if p.dead_until > 0 then return false end
   p.release_wish = true
+  return true
+end
+
+-- Nahkampf anschalten (Issue #86): Rechtsklick auf Hogger/Mob, Taste 4
+-- oder der Nahkampf-Knopf. Der Autohit laeuft dann von selbst weiter,
+-- bis Tod, Wiederbelebung oder Verstohlenheit ihn abschalten.
+function S.engage(state, pid)
+  local p = state.players[pid]
+  if not p or not p.alive then return false end
+  p.attack_on = true
   return true
 end
 

@@ -14,11 +14,37 @@ local HUGE = math.huge
 -- ---------------------------------------------------------------------------
 -- Hilfen
 -- ---------------------------------------------------------------------------
+-- Wunschabstand zum Boss. Seit Runde 5 (Issue #86) gibt es keinen
+-- Zauberstab mehr: Caster stehen auf Zauberreichweite, solange das Mana
+-- fuer ihren Angriffszauber reicht, und ruecken OOM zum Stab-Vermoebeln
+-- in den Nahkampf auf (mit Mana ziehen sie sich wieder zurueck). Die
+-- Sim-Agenten schalten ihren Autohit per Definition an (im Spiel:
+-- Rechtsklick/Taste 4). Erster Modellversuch "alle Caster dauerhaft im
+-- Nahkampf" ist falsifiziert: Hoggers Cleave frisst bei grossen N die
+-- Heiler, N=40 fiel von ~74 % auf 4 % Siege (17.9).
+-- Stab-Phase (#86) nur fuer die reinen Schadens-Caster: OOM -> rein und
+-- PRUEGELN, bis der Pool sich ueber die Fuenf-Sekunden-Regel erholt hat
+-- (waehrenddessen kein Cast, sonst greift die FSR nie); erst mit halbem
+-- Pool wieder raus. Modell-Iterationen (17.9): alle Caster dauerhaft im
+-- Nahkampf -> N=40 bei 4 % (Cleave frisst die Heiler); Pendeln nach jedem
+-- Zauber -> 23 %; Stab-Phase auch fuer Priester -> Heiler-Ausfall, 22 %.
+-- Priester bleiben deshalb auf Zauberreichweite (Heil-Mana ist wertvoller
+-- als 1 DPS Stab), der Druide steht im Modell wie eh und je im Nahkampf.
+local CASTER_NUKE_COST = {
+  mage = "mage_fireball_mana", warlock = "warlock_bolt_mana",
+}
 local function desired_range(p)
   local attack = model.classes[p.class].attack
   if attack == "shot" then return model.p("autoshot_range") end
-  if attack == "wand" then return model.p("wand_range") end
-  return model.p("melee_range")
+  if p.class == "priest" then return model.p("cast_range") end
+  local nuke = CASTER_NUKE_COST[p.class]
+  if not nuke then return model.p("melee_range") end
+  if p.want_melee then
+    if p.resource >= 0.5 * model.p("mana_max") then p.want_melee = false end
+  elseif p.resource < model.p(nuke) then
+    p.want_melee = true
+  end
+  return p.want_melee and model.p("melee_range") or model.p("cast_range")
 end
 E.desired_range = desired_range
 
@@ -89,6 +115,7 @@ local function spawn_player(run, p, at_range)
   p.seal_hits = 0
   p.has_frost_armor = (p.class == "mage")
   p.imp_alive = false
+  p.want_melee = false -- Stab-Phase (#86) endet mit dem Tod
   p.add_idx = nil
   -- Adds fangen fruehe Ankommende ab (1v1), solange welche leben
   for ai = 1, #run.adds do
@@ -528,6 +555,13 @@ local function player_tick(run, p, dt)
   if p.d > want then
     p.d = math.max(want, p.d - model.p("move_speed_alive") * dt)
     if p.d > want then return end -- noch unterwegs
+  elseif p.d < want - 1 and CASTER_NUKE_COST[p.class] then
+    -- NUR die OOM-Caster-Pendelei (#86): wieder Mana -> zurueck auf
+    -- Zauberreichweite. Alle anderen bleiben stehen, wo sie sind —
+    -- insbesondere Jaeger schiessen aus jeder Distanz <= Wunschabstand
+    -- weiter, statt nach jeder Hogger-Bewegung nachzuruecken.
+    p.d = math.min(want, p.d + model.p("move_speed_alive") * dt)
+    if p.d < want then return end -- noch unterwegs
   end
 
   -- Cast abschliessen
@@ -542,20 +576,24 @@ local function player_tick(run, p, dt)
     end
   end
 
-  -- Agent entscheidet (Faehigkeiten, Heilziele)
-  run.agent.act(run, p)
-  if not p.alive then return end
+  -- Agent entscheidet (Faehigkeiten, Heilziele) — nicht in der Stab-Phase:
+  -- dort wird gepruegelt und regeneriert (FSR), nicht gecastet (#86)
+  if not p.want_melee then
+    run.agent.act(run, p)
+    if not p.alive then return end
+  end
 
   -- Autohit / Autoschuss / Zauberstab (Agent darf unterdruecken, z. B. Turtle)
   if not p.cast and run.t >= p.next_auto
      and not (run.agent.no_auto and run.agent.no_auto(run, p)) then
     local attack = model.classes[p.class].attack
-    p.next_auto = run.t + model.p("autohit_interval")
     if attack == "shot" then
+      p.next_auto = run.t + model.p("autohit_interval")
       E.player_damage_hogger(run, p, model.p("autoshot_dmg"), "autohit")
-    elseif attack == "wand" then
-      E.player_damage_hogger(run, p, model.p("wand_dmg"), "autohit")
-    else
+    elseif p.d <= model.p("melee_range") then
+      -- Nahkampf nur im Nahkampf: ein Caster auf Zauberreichweite
+      -- schlaegt nicht aus 200 px zu (seit #86 gibt es keinen Stab mehr)
+      p.next_auto = run.t + model.p("autohit_interval")
       local dmg = model.p("autohit_melee_dmg")
       if p.seal_hits > 0 then
         dmg = dmg + model.p("paladin_seal_bonus_dmg")

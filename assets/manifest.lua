@@ -73,6 +73,8 @@ return {
   ab_imp        = { form = "quadrat", groesse = 40, farbe = { 0.75, 0.35, 0.85 }, kuerzel = "WI", datei = "ab_imp.png" },
   ab_wrath      = { form = "quadrat", groesse = 40, farbe = { 0.95, 0.60, 0.25 }, kuerzel = "ZO", datei = "ab_wrath.png" },
   ab_touch      = { form = "quadrat", groesse = 40, farbe = { 0.45, 0.85, 0.45 }, kuerzel = "HB", datei = "ab_touch.png" },
+  -- Standard-Aktion Nahkampf, jede Klasse (Runde 5, Issue #86)
+  ab_melee      = { form = "quadrat", groesse = 40, farbe = { 0.75, 0.72, 0.65 }, kuerzel = "NK", datei = "ab_melee.png" },
 
   -- =========================================================================
   -- Sounds — vollstaendige Liste aus GDD Kap. 12, eine ID je Position.
@@ -98,8 +100,7 @@ return {
   snd_impact_shadow   = { art = "blip", freq = 180, dauer = 0.14, datei = "snd_impact_shadow.ogg" },
   snd_impact_holy     = { art = "blip", freq = 660, dauer = 0.12, datei = "snd_impact_holy.ogg" },
   snd_impact_frost    = { art = "blip", freq = 440, dauer = 0.12, datei = "snd_impact_frost.ogg" },
-  -- 7: OOM-Stochern und Jaeger
-  snd_wand            = { art = "blip", freq = 700, dauer = 0.07, datei = "snd_wand.ogg" },
+  -- 7: Jaeger-Autoschuss (der Zauberstab-Slot fiel mit Issue #86 weg)
   snd_shot            = { art = "blip", freq = 500, dauer = 0.07, datei = "snd_shot.ogg" },
   -- 8: Klassen-Signaturen
   snd_shout           = { art = "blip", freq = 250, dauer = 0.3, datei = "snd_shout.ogg" },

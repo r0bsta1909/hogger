@@ -40,12 +40,17 @@ function M.decide(state, pid)
     return { mask = move_mask_towards(p.x, p.y, ix, iy, 8), facing = face }
   end
 
-  -- lebend: auf Klassenreichweite an Hogger heran, dann Faehigkeiten
+  -- lebend: auf Klassenreichweite an Hogger heran, dann Faehigkeiten.
+  -- Caster stehen auf Zauberreichweite, solange Mana da ist; ohne Mana
+  -- ruecken sie zum Stab-Vermoebeln in den Nahkampf auf (Issue #86)
   local h = state.hogger
   local attack = model.classes[p.class] and model.classes[p.class].attack or "melee"
   local range = model.p("melee_range")
   if attack == "shot" then range = model.p("autoshot_range") end
-  if attack == "wand" or p.class == "druid" then range = model.p("wand_range") end
+  local CASTER = { priest = true, mage = true, warlock = true, druid = true }
+  if CASTER[p.class] and (p.resource or 0) >= 20 then
+    range = model.p("cast_range")
+  end
 
   local d = world.dist(p.x, p.y, h.x, h.y)
   local mask = 0

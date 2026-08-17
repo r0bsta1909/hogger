@@ -152,6 +152,7 @@ do
   T.ok(kob ~= nil and kob.kind == "kobold", "step: Slot 3 ist ein Kobold")
   p.x, p.y = kob.x + 20, kob.y
   world.set_target(st, 1, kob_id, {})
+  T.ok(step.engage(st, 1), "step: Nahkampf anschalten geht (Issue #86)")
   local xp_before = p.xp
   local evs = {}
   for _ = 1, math.ceil(60 / model.TICK_DT) do
@@ -329,6 +330,7 @@ do
     q.class, q.race = "warrior", "mensch"
     q.max_hp, q.hp = model.hp_for_class("warrior"), model.hp_for_class("warrior")
     q.x, q.y = st.hogger.x, st.hogger.y - 20 -- Hogger liegt genau suedlich
+    q.attack_on = true -- Nahkampf angeschaltet (Issue #86)
     local hp0 = st.hogger.hp
     for _ = 1, 300 do
       st.players[1].x, st.players[1].y = st.hogger.x, st.hogger.y - 20
@@ -353,6 +355,46 @@ do
   T.ok(q.cast ~= nil, "facing: Cast startet mit Ziel im Blick")
   step.step(st, { [1] = { mask = 0, facing = 0 } })
   T.eq(q.cast, nil, "facing: Wegdrehen bricht den laufenden Cast ab")
+end
+
+-- Nahkampf will angeschaltet werden (Runde 5, Issue #86): ohne Anschalten
+-- kein Autohit, ein Faehigkeitsdruck schaltet an (auch ohne Ressource),
+-- der Tod schaltet wieder ab
+do
+  local st = world.new(7)
+  world.add_player(st, "w", { quest_done = true })
+  world.begin_try(st, {})
+  local q = st.players[1]
+  q.alive, q.ghost = true, false
+  q.class, q.race = "warrior", "mensch"
+  q.max_hp, q.hp = model.hp_for_class("warrior"), model.hp_for_class("warrior")
+  q.resource = 0 -- Krieger startet ohne Wut (GDD 8.1)
+  -- Uebungsziel: der passive Kobold (Slot 3) — Hogger wuerde zurueckhauen
+  local kob = st.npcs[st.mob_by_slot[3]]
+  kob.hp = 999
+  world.set_target(st, 1, kob.id, {})
+  local function tick(mask)
+    q.x, q.y = kob.x + 10, kob.y
+    step.step(st, { [1] = { mask = mask,
+      facing = input.facing_towards(q.x, q.y, kob.x, kob.y) } })
+  end
+  local hp0 = kob.hp
+  for _ = 1, 200 do tick(0) end
+  T.eq(kob.hp, hp0, "engage: ohne Anschalten kein Autohit")
+  -- Heroischer Stoss ohne Wut: der Versuch scheitert, schaltet aber an
+  tick(input.AB1)
+  T.ok(q.attack_on, "engage: Faehigkeitsdruck schaltet an, auch ohne Wut")
+  for _ = 1, 200 do tick(0) end
+  T.ok(kob.hp < hp0, "engage: angeschaltet laeuft der Autohit")
+  -- der Tod schaltet wieder ab: neben Hogger ueberlebt niemand lange
+  q.hp = 1
+  for _ = 1, 1800 do
+    q.x, q.y = st.hogger.x, st.hogger.y - 20
+    step.step(st, { [1] = { mask = 0, facing = 128 } })
+    if not q.alive then break end
+  end
+  T.ok(not q.alive, "engage: Testspieler ist gefallen")
+  T.eq(q.attack_on, false, "engage: der Tod schaltet den Angriff ab")
 end
 
 -- Das Echo drueckt die Quest auf, Leeroy wartet darauf (GDD Kap. 5 / 10.3,
@@ -510,6 +552,7 @@ do
   T.ok(boar ~= nil, "Mob: Wildschwein vorhanden")
   boar.x, boar.y = p.x + 10, p.y
   p.target = boar.id
+  p.attack_on = true -- Nahkampf angeschaltet (Issue #86)
   p.facing = input.facing_towards(p.x, p.y, boar.x, boar.y)
   local hp0 = boar.hp
   for _ = 1, 200 do
@@ -555,6 +598,7 @@ do
     target.state = "idle"
     q.x, q.y = target.x + 10, target.y
     q.target = target.id
+    q.attack_on = true -- Nahkampf angeschaltet (Issue #86)
     q.next_auto = 0
     q.shout_until = with_shout and (st2.time + 10) or 0
     local before_hp = target.hp
