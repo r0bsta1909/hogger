@@ -203,6 +203,12 @@ M.params = {
   floating_text_duration = p(1.5, 0.5, 4.0, 0.25, "4.1"),
 }
 
+-- GDD-Stand jedes Parameters, eingefroren beim Laden: das F10-Panel mutiert
+-- M.params in-place, der CSV-Export (GDD 17.6, Issue #82) braucht die
+-- Abweichung vom Default.
+M.defaults = {}
+for k, e in pairs(M.params) do M.defaults[k] = e.wert end
+
 -- bequemer Wertzugriff: M.p("hogger_hp_coeff") -> 120
 function M.p(key)
   local entry = M.params[key]

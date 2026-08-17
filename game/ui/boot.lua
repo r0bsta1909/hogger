@@ -138,6 +138,7 @@ local function splash_scale(img, w, h)
   local iw, ih = img:getDimensions()
   return math.min(w / iw, h / ih), iw, ih
 end
+B.splash_scale = splash_scale -- eine Wahrheit; auch victory.lua zeichnet damit (#84)
 
 local function draw_splash(self, w, h)
   local img = assets.get("splash_login")

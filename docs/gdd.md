@@ -303,7 +303,7 @@ Die Zeilen sind Text (Sprechblase + Einblendung), gesprochen vom Echo. Einzige V
 - **Statistik-Tafel** (nach jedem Try-Ende und beim Sieg, WoW-Panel-Stil, ~10 s, wegklickbar), zweispaltig:
   - **Hogger:** Gesamtschaden · Spieler getötet · davon kritisch zerschmettert · Leichen gefressen · geheilte HP · Unterbrechungen kassiert · Charges · Rest-HP (bei Wipe groß: "Er hatte noch 4 %.").
   - **Schlachtzug:** Meister Schaden (Name + Wert) · Am häufigsten gestorben · Meiste Zeit als Geist · Am häufigsten gefressen worden · Heal-Aggro-Tode · Meiste Unterbrechungen · Meiste Mob-Kills · Reichster Spieler (Kupfer) · Erster Tod des Trys · Von einem Wildschwein getötet (Name) · Meiste Sprünge (Name + Zahl — "der Zappelphilipp") · ggf. Statistik-Titel ("der Gefressene", "die Geisterstimme", "der Unvorsichtige", "der Zweite").
-- **Fluchbruch (Sieg):** Hoggers Icon zerspringt, Sieg-Fanfare. Loot-Fenster: "Thunderfury, Gesegnete Klinge des Windsuchers — Dropchance: 0,0000 %. Nicht gedroppt." plus "Zerfledderter Wams" (2 Kupfer, Zufalls-Roll — folgenloser RNG, erlaubt). Leeroy: letzte Zeilen, der Fluch bricht — **der Glitch läuft rückwärts**, die Minimap zerreißt, und für einen Moment erscheint der echte Login-Screen mit der Zeile "Du kannst dich jetzt ausloggen." Danach die finale Statistik-Tafel mit REVANCHE-Button (startet den nächsten Abend-Durchlauf, Try-Zähler bei 1 — der Fluch ist gebrochen, ab jetzt zergt man freiwillig).
+- **Fluchbruch (Sieg):** Hoggers Icon zerspringt, Sieg-Fanfare. Loot-Fenster: "Thunderfury, Gesegnete Klinge des Windsuchers — Dropchance: 0,0000 %. Nicht gedroppt." plus "Zerfledderter Wams" (2 Kupfer, Zufalls-Roll — folgenloser RNG, erlaubt). Leeroy: letzte Zeilen, der Fluch bricht — **der Glitch läuft rückwärts**, die Minimap zerreißt, und für einen Moment erscheint der echte Login-Screen (contain-skaliert wie beim Start, schwarzer Rand — Playtest-Runde 5, Issue #84). Danach die finale Statistik-Tafel mit zwei Buttons: **REVANCHE** (startet den nächsten Abend-Durchlauf, Try-Zähler bei 1 — der Fluch ist gebrochen, ab jetzt zergt man freiwillig) und **Ausloggen** (beendet das Spiel; ersetzt die frühere Textzeile "Du kannst dich jetzt ausloggen." — Runde 5, Issue #85).
 
 ---
 
@@ -497,7 +497,9 @@ Alle Parameter als **eine flache Tabelle** in `model.lua` (`M.params`, je `{wert
 | Leeroy | Announcer-Drossel (Zeilen/10 s), Bedrohungsfaktor, Kragen-Schwelle (Trys bis Mechanik-Ansage) |
 | UI | Zoom-Stufen (Radien), Floating-Text-Dauer |
 
-Presets speichern/laden (JSON), "Zurück auf GDD-Werte".
+**Bedienung** (Runde 5, Issues #81/#82): Pfeiltasten navigieren und ändern, **gehaltene Tasten wiederholen** (0,35 s Verzögerung, dann ~22 Schritte/s), Shift = ×10. **CSV-Export** per Knopf oder Taste E: schreibt `tuning.csv` mit **nur den vom GDD-Stand abweichenden Werten** (`param;gdd_wert;wert`) in den Save-Ordner (`love.filesystem`, voller Pfad wird im Panel angezeigt) — das ist der Rückkanal, über den ertunte Werte ins Tuning-Protokoll (17.9) und nach `model.lua` zurückfließen. Geänderte Parameter sind in der Liste gelb mit Stern markiert. `M.defaults` friert den GDD-Stand beim Laden ein.
+
+Noch offen: Presets speichern/laden (JSON), "Zurück auf GDD-Werte".
 
 ### 17.7 Autonome Test-Pyramide (ein Befehl, grün/rot)
 
