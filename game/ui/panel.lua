@@ -174,8 +174,8 @@ function P:draw()
   love.graphics.rectangle("fill", px, py, pw, ph, 4, 4)
   love.graphics.setColor(0.78, 0.63, 0.28, 1)
   love.graphics.rectangle("line", px, py, pw, ph, 4, 4)
-  love.graphics.print("TUNING (F10)  links/rechts aendern (halten wiederholt), Shift = x10",
-    px + 12, py + 8)
+  -- kurz genug, um nicht unter den Export-Knopf zu laufen
+  love.graphics.print("TUNING (F10)  halten wiederholt, Shift = x10", px + 12, py + 8)
 
   -- Export-Knopf oben rechts (Issue #82)
   local bx, by, bw, bh = export_rect(w, h)
