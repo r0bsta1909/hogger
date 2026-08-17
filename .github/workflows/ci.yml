@@ -1,62 +1,39 @@
-# CI: Test-Pyramide Stufe 1 (Unit) + Stufe 3 (Determinismus) auf allen drei
-# Plattformen — die Matrix IST der Cross-Platform-Beweis (GDD 17.0).
-# Die leafo/gh-actions-lua-Action aus dem Skelett wurde ersetzt: Paketmanager-
-# LuaJIT je OS ist robuster (Windows: dasselbe MSI wie auf dem Dev-Rechner).
-# Stufe 2 (Sim, Minuten) laeuft bei Balancing-PRs; Stufe 4 folgt ab M2.
+# CI-Schnellgate: Test-Pyramide Stufe 1 (Unit), Stufe 3 (Determinismus) und
+# Stufe 4 (headless LOEVE, Loopback) in EINEM Linux-Job.
+#
+# Warum ein Job statt fuenf (ADR 003): GitHub rechnet Actions-Minuten pro Job
+# auf die volle Minute AUF und multipliziert danach mit dem OS-Faktor
+# (Linux 1x, Windows 2x, macOS 10x). Die alte 5-Job-Matrix lief 26 Sekunden
+# und kostete 24 abgerechnete Minuten — 20 davon allein fuer zwei macOS-Jobs
+# mit zusammen 21 Sekunden echter Rechenzeit. Nicht kuerzere Tests sparen,
+# sondern weniger Jobs.
+#
+# Der Cross-Platform-Beweis (GDD 17.0 Punkt 2) ist nicht gestrichen, sondern
+# verschoben: ci-plattform.yml faehrt die volle Matrix vor jedem Release-Tag,
+# auf Zuruf und bei PRs mit Label `plattform`.
 name: ci
 on:
   push:
     branches: [main]
+    paths-ignore: ["docs/**", "reports/**", "**.md"]
   pull_request:
+    paths-ignore: ["docs/**", "reports/**", "**.md"]
+
+# Ueberholte Laeufe sterben sofort, statt bezahlt zu Ende zu laufen.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: LuaJIT einrichten (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y luajit
-      - name: LuaJIT einrichten (macOS)
-        if: runner.os == 'macOS'
-        run: brew install luajit
-      - name: LuaJIT einrichten (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $url = "https://github.com/DevelopersCommunity/cmake-luajit/releases/download/v2.1.19907/LuaJIT-2.1.19907-win64.msi"
-          Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\luajit.msi"
-          Start-Process msiexec.exe -ArgumentList "/i","$env:TEMP\luajit.msi","/qn" -Wait
-          Add-Content $env:GITHUB_PATH "$env:LOCALAPPDATA\Programs\LuaJIT\bin"
-      - name: "Stufe 1: Unit"
-        run: luajit tests/run_all.lua --stage unit
-      - name: "Stufe 3: Determinismus"
-        run: luajit tests/run_all.lua --stage determinism
-
-  stufe4:
-    # Integration: Host + Bot-Clients in-process, fensterlos (GDD 17.0/17.7)
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: LOEVE einrichten (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y love
-      - name: LOEVE einrichten (macOS)
-        if: runner.os == 'macOS'
-        run: brew install --cask love
+      - name: LuaJIT und LOEVE einrichten
+        # Ein apt-Aufruf: jeder zusaetzliche Schritt kostet Sekunden, und
+        # Sekunden werden hier zu ganzen Minuten aufgerundet.
+        run: sudo apt-get update && sudo apt-get install -y luajit love
+      - name: "Stufe 1+3: Unit und Determinismus"
+        run: luajit tests/run_all.lua --stage all
       - name: "Stufe 4: Integration (headless, Loopback)"
-        shell: bash
-        run: |
-          export SDL_VIDEODRIVER=dummy
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            "/Applications/love.app/Contents/MacOS/love" game --headless --test
-          else
-            love game --headless --test
-          fi
+        run: SDL_VIDEODRIVER=dummy love game --headless --test

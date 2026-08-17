@@ -1,0 +1,71 @@
+# Cross-Platform-Beweis (GDD 17.0 Punkt 2): Stufen 1+3 auf Windows und macOS,
+# Stufe 4 auf macOS. Linux deckt das Schnellgate in ci.yml bei jedem PR ab.
+#
+# Bewusst NICHT bei jedem Push und auch nicht bei jedem Release-Tag: ein Lauf
+# dieser Datei kostet 22 abgerechnete Minuten (Windows 1 Min x 2, macOS
+# 2 x 1 Min x 10) — bei 26 Sekunden echter Rechenzeit. Siehe ADR 003.
+#
+# Aufgerufen wird er deshalb absichtlich:
+#   - `gh workflow run ci-plattform.yml` vor einem LAN-Abend oder Release,
+#   - oder durch das Label `plattform` an einem PR, der Plattformcode anfasst
+#     (Dateipfade, Zeilenenden, love.filesystem, Netzcode, Binaerformate).
+#
+# SOBALD DAS REPO OEFFENTLICH IST, sind Actions-Minuten unbegrenzt frei —
+# dann gehoert die Abdeckung zurueck in die Breite: den schedule-Block unten
+# einkommentieren und `pull_request` um den Standardfall erweitern (das if im
+# Job entfernen). Das ist der Revisionsauslöser aus ADR 003.
+name: ci-plattform
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  # schedule:
+  #   - cron: "0 4 * * 1"   # montags 04:00 UTC — erst aktivieren, wenn frei
+
+concurrency:
+  group: ci-plattform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Bei PRs nur mit Label; ein uebersprungener Job kostet keine Minute.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'plattform')
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: LuaJIT einrichten (macOS)
+        if: runner.os == 'macOS'
+        run: brew install luajit
+      - name: LuaJIT einrichten (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $url = "https://github.com/DevelopersCommunity/cmake-luajit/releases/download/v2.1.19907/LuaJIT-2.1.19907-win64.msi"
+          Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\luajit.msi"
+          Start-Process msiexec.exe -ArgumentList "/i","$env:TEMP\luajit.msi","/qn" -Wait
+          Add-Content $env:GITHUB_PATH "$env:LOCALAPPDATA\Programs\LuaJIT\bin"
+      - name: "Stufe 1+3: Unit und Determinismus"
+        run: luajit tests/run_all.lua --stage all
+
+  stufe4:
+    # Integration: Host + Bot-Clients in-process, fensterlos (GDD 17.0/17.7).
+    # Nur macOS — Linux laeuft im Schnellgate, Windows hat kein LOEVE-Paket
+    # ohne Zusatzdownload und traegt hier nichts Zusaetzliches bei.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'plattform')
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: LOEVE einrichten (macOS)
+        run: brew install --cask love
+      - name: "Stufe 4: Integration (headless, Loopback)"
+        run: |
+          export SDL_VIDEODRIVER=dummy
+          "/Applications/love.app/Contents/MacOS/love" game --headless --test
