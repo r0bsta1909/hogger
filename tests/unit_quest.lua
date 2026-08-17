@@ -40,15 +40,19 @@ T.eq(q.state, "done", "angenommener Name schliesst das Fenster")
 T.eq(q.accepted, "Robbertdere", "bestaetigter Name gemerkt")
 T.eq(q:blocking(), false, "danach gehen Eingaben wieder ins Spiel")
 
--- Wegklicken und wieder oeffnen (das Echo bleibt anklickbar)
+-- Kein Ausweg mehr (Issue #83): weder Escape noch X noch Taste L schliessen
+-- die Quest — angenommen wird, und der Name ist Pflicht.
 do
   local w = quest.new("Rob")
   w:update(2.0)
   T.eq(w.buffer, "Rob", "Vorbelegung mit dem gemerkten Namen")
   w:keypressed("escape")
-  T.eq(w:blocking(), false, "weggeklickt schluckt keine Tasten mehr")
-  w:reopen()
-  T.ok(w:blocking(), "Echo anklicken oeffnet es wieder")
+  T.ok(w:blocking(), "Escape schliesst die Quest nicht mehr (#83)")
+  T.eq(w:toggle(), false, "Taste L blendet die Quest nicht mehr weg")
+  local L = w:layout(1280, 720)
+  w:mousepressed(L.close[1] + 5, L.close[2] + 5, 1280, 720)
+  T.ok(w:blocking(), "Klick auf die alte X-Position prallt ab")
+  T.ok(w:visible(), "das Fenster bleibt sichtbar, bis angenommen wird")
 end
 
 -- Der Text gehoert dem ECHO, nicht dem Raid-Leeroy (Issue #52)
@@ -58,16 +62,8 @@ T.ok(#quest.GOALS >= 2, "Questziele sind benannt")
 local goals = table.concat(quest.GOALS, " ")
 T.ok(goals:find("Hogger") ~= nil, "Questziel nennt Hogger")
 
--- Taste L: wegblenden und zurueckholen (Issue #62)
-do
-  local w = quest.new()
-  w:update(2.0)
-  T.eq(w:toggle(), true, "L blendet weg")
-  T.eq(w:visible(), false, "weggeblendet ist unsichtbar")
-  T.eq(w:blocking(), false, "und schluckt keine Tasten")
-  w:toggle()
-  T.ok(w:visible(), "L holt es zurueck")
-end
+-- Taste L: wegblenden und zurueckholen gilt nur noch fuers Questlog
+-- (Issue #62, eingeschraenkt durch #83 — siehe Log-Block unten)
 
 -- Questlog nach der Annahme: nur Anzeige, blockiert nichts (Issue #62)
 do
