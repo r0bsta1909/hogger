@@ -719,6 +719,16 @@ function love.keypressed(key)
       app.debug.note = "Nur der Host kann Hogger toeten."
     end
     return
+  elseif action == "teleport" then
+    -- Test-Teleport (Runde 6, #100): sofort als Zufallsklasse vor Hogger
+    if app.mode == "host" and app.net and app.net.teleport_self then
+      app.debug.note = app.net:teleport_self()
+        and "Teleportiert — Hogger wartet."
+        or "Teleport ging nicht (Hogger tot oder kein Spieler)."
+    else
+      app.debug.note = "Nur der Host kann sich teleportieren."
+    end
+    return
   elseif action == "intro" then
     replay_intro()
     return
