@@ -8,16 +8,20 @@
 # mit zusammen 21 Sekunden echter Rechenzeit. Nicht kuerzere Tests sparen,
 # sondern weniger Jobs.
 #
-# Der Cross-Platform-Beweis (GDD 17.0 Punkt 2) ist nicht gestrichen, sondern
-# verschoben: ci-plattform.yml faehrt die volle Matrix vor jedem Release-Tag,
-# auf Zuruf und bei PRs mit Label `plattform`.
+# Der Cross-Platform-Beweis (GDD 17.0 Punkt 2) laeuft daneben in
+# ci-plattform.yml (Windows + macOS) — seit das Repo oeffentlich ist, wieder
+# an jedem PR. Dieses Gate bleibt trotzdem ein einzelner Linux-Job: es meldet
+# in ~40 s rot oder gruen, waehrend brew und der LOEVE-Download drueben
+# Minuten brauchen. Schnelles Feedback zuerst, vollstaendiger Beweis daneben.
+#
+# Kein paths-ignore: In Kombination mit erzwungenen Status-Checks (Branch-
+# Schutz auf main) wuerde ein reiner Doku-PR ewig auf einen Check warten, der
+# nie startet. Bei 40 s Laufzeit ist Immer-Laufen die einfachere Wahrheit.
 name: ci
 on:
   push:
     branches: [main]
-    paths-ignore: ["docs/**", "reports/**", "**.md"]
   pull_request:
-    paths-ignore: ["docs/**", "reports/**", "**.md"]
 
 # Ueberholte Laeufe sterben sofort, statt bezahlt zu Ende zu laufen.
 concurrency:
