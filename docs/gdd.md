@@ -75,7 +75,7 @@ Das gesamte Spiel findet in einem einzigen Look statt — 2D, ausschließlich Ic
 - **HP/Mana/Energie/Wut anderer Spieler und Gegner** werden als Mini-Balken direkt am jeweiligen Icon angezeigt. Geister anderer Spieler sind halbtransparente Versionen ihres Klassenicons; der eigene Pfeil ist im Geist-Zustand blass-bläulich (zusätzlich zum Vollbild-Filter).
 - **Totensicht als Zustand:** Solange der eigene Charakter tot ist, liegt der bläuliche Entsättigungsfilter über dem gesamten Bild (Referenz `totensicht.png`) plus Geister-Wind und Audio-Tiefpass. Mit der Wiederbelebung springt die Welt in normale Elwynn-Farben zurück — dieser Farbwechsel ist das stärkste Zustands-Feedback des Spiels und braucht keinerlei Text.
 - **Floating Combat Text** an den Icons — die Zahlen sind der Witz und bleiben maximal sichtbar. **Die Richtung ist ablesbar** (Playtest 2026-08-16): eigener ausgeteilter Schaden weiß, selbst erlittener Schaden rot, fremder Schaden gedämpft grau, Heilung grün; **Krits groß mit Ausrufezeichen** und Punch-Sound — gold, wenn man sie austeilt, glutrot, wenn man sie kassiert. Ein erlittener Treffer legt zusätzlich einen kurzen roten Rand an die Innenkante des Kreises.
-- **Angriffe sind sichtbar, nicht nur ihre Zahlen** (Playtest 2026-08-16): jeder Treffer erzeugt für ~0,2 s ein Symbol von der Quelle zum Ziel — Geschoss in Schulfarbe (Feuer orange, Schatten violett, Heilig weißgold, Natur grün), Jäger-Pfeil als Spur, Zauberstab als fahlblauer Blitz, Nahkampf als kurzer Schlagbogen am Ziel, Charge breiter, Heilung als aufsteigender Ring. Weiterhin ausschließlich Symbole, keine Sprites; Effekt-Budget wie beim Floating Text. Die Zuordnung kommt aus dem Feld `art` des Schadensereignisses (17.3), nicht aus geratenen Schadenshöhen.
+- **Angriffe sind sichtbar, nicht nur ihre Zahlen** (Playtest 2026-08-16): jeder Treffer erzeugt für ~0,2 s ein Symbol von der Quelle zum Ziel — Geschoss in Schulfarbe (Feuer orange, Schatten violett, Heilig weißgold, Natur grün), Jäger-Pfeil als Spur, Nahkampf als kurzer Schlagbogen am Ziel (seit Runde 5 auch der Stabschlag der Caster — den Zauberstab-Blitz gibt es nicht mehr, Issue #86), Charge breiter, Heilung als aufsteigender Ring. Weiterhin ausschließlich Symbole, keine Sprites; Effekt-Budget wie beim Floating Text. Die Zuordnung kommt aus dem Feld `art` des Schadensereignisses (17.3), nicht aus geratenen Schadenshöhen.
 - **Render-Hierarchie (Pflicht gegen Icon-Gulasch bei N≥20), von unten nach oben:** Boden/Pfad → Deko-Schädel → mechanische Leichen → Geister (kleiner, gedimmt — dauerhaft 10–15 Geister sind gewolltes Hintergrundrauschen) → lebende Spieler-Icons → Leeroy → Mobs/Adds → Hogger → Floating Text → Ring-UI. Dazu ein **Floating-Text-Budget**: maximal ~30 gleichzeitige Texte, priorisiert eigene Ereignisse und Krits, der Rest wird still verworfen (Objekt-Pool, kein GC-Druck).
 - **Springen (Leertaste):** rein fürs Gefühl, null Mechanik — kein Ausweichen, keine Kollisionsänderung, keine Reichweitenänderung. Feedback: WoW-Sprunglaut + Landegeräusch, der eigene Pfeil macht einen kurzen Hüpfer (Scale-Bounce + Mini-Schatten), und **die Klassenicons anderer Spieler im Sichtfeld hüpfen mit**, wenn deren Spieler springt (Jump-Flag im Snapshot, 1 Bit pro Entität). WoW-Spieler hüpfen permanent — wenn 15 Icons auf dem Weg zum Hügel synchron hoppeln, ist das Feel geliefert. Der Host zählt Sprünge pro Spieler mit; die Zahl landet auf der Statistik-Tafel.
 
@@ -83,7 +83,7 @@ Das gesamte Spiel findet in einem einzigen Look statt — 2D, ausschließlich Ic
 
 Am Ring der Minimap sitzen ausschließlich funktionale Elemente im Add-on-Button-Stil:
 
-- **Unten mittig: die Fähigkeiten der aktuellen Klasse** als runde Buttons mit Cooldown-Sweep und Tastenkürzeln (1–4). Nie mehr Buttons als die Klasse Fähigkeiten hat.
+- **Unten mittig: die Fähigkeiten der aktuellen Klasse** als runde Buttons mit Cooldown-Sweep und Tastenkürzeln (1–4). Nie mehr Buttons als die Klasse Fähigkeiten hat — plus, seit Runde 5 (Issue #86), ganz rechts der Button der Standard-Aktion **Nahkampf** (Taste 4, jede Klasse).
 - **Zoom + / −** am Ring (klassische Minimap-Position), zusätzlich Mausrad. **Zoom ist eine Informationsmechanik:** drei Stufen; herauszoomen zeigt mehr Karte, aber kleinere Icons und Balken (Übersicht gegen Lesbarkeit). Die maximale Stufe zeigt nie die ganze Karte — wer wissen will, was am Hügel passiert, muss hinlaufen oder als Geist zusehen.
 - **Die Uhr** an ihrer originalen Minimap-Position, **zählt pro Try von 0:00 hoch.**
 - **XP-Leiste als dünner Bogen an der Innenkante des Minimap-Kreises** — dezent, aber ablesbar; füllt sich im Uhrzeigersinn. Tooltip bei Hover: "Noch 399 Erfahrung bis Stufe 2."
@@ -175,9 +175,10 @@ Alle acht Vanilla-Allianz-Klassen sind im Spiel, mit ihren gültigen Rassen-Komb
 |---|---|---|
 | Bewegung lebend | 140 px/s | Referenz |
 | Bewegung als Geist | 210 px/s (150 %) | verkürzt die Todesstrafe |
-| Autohit Nahkampf (weiß) | 2 Schaden alle 2,0 s | Krieger, Paladin, Schurke, Druide |
-| Autoschuss (Jäger) | 3 Schaden alle 2,0 s, Reichweite 200 px | ersetzt den Nahkampf-Autohit; stärkste manalose Dauer-Distanz-DPS |
-| Autohit Zauberstab | 2 Schaden alle 2,0 s, Reichweite 120 px | Priester, Magier, Hexenmeister — OOM-Caster stochern auf Distanz weiter, müssen aber näher ran als der Jäger und bleiben Charge-gefährdet |
+| Autohit Nahkampf (weiß) | 2 Schaden alle 2,0 s | **alle Klassen außer Jäger** (Runde 5, Issue #86: der Zauberstab ist gestrichen — OOM-Caster rücken auf und vermöbeln Hogger mit dem Stab). Läuft NICHT von allein: **anschalten per Rechtsklick aufs Ziel, Taste 4 oder irgendeinen Fähigkeitsdruck** (auch einen erfolglosen — der Krieger mit 0 Wut fängt so an). Tod, Wiederbelebung und Verstohlenheit schalten ab |
+| Standard-Aktion **Nahkampf** | kostenlos, kein GCD | eigener Button (Taste 4) in jeder Klassenleiste; tut nichts außer den Autohit anzuschalten — der Vanilla-"Angriff"-Knopf (Runde 5, Issue #86) |
+| Autoschuss (Jäger) | 3 Schaden alle 2,0 s, Reichweite 230 px | die **einzige kostenlose Fernkampf-Autoattack** (Issue #86); läuft weiterhin automatisch. Reichweite 200 → 230 px in Runde 5 (Issue #80) |
+| Zauber-Reichweite (`cast_range`) | 200 px | Reichweite aller Caster-Angriffszauber (Pein/Feuerball/Schattenblitz/Zorn); 120 → 200 px in Runde 5 (Issue #80, "viel zu nah dran"), hieß bis dahin `wand_range` |
 | Nahkampf-Reichweite | 40 px | v2.6 festgeschrieben (Issue #2); Panel-Parameter |
 | Global Cooldown | 1,5 s | drosselt Input-Spam |
 | Frontbogen | 180° (Panel-Parameter `facing_arc_deg`) | Vanilla-authentisch: Angriffe gehen nur durch, wenn das Ziel **vor** einem liegt; Wegdrehen bricht einen laufenden Zauber ab (wie Bewegung). Die Blickrichtung folgt der Maus (4.1) und war bis zum Playtest 2026-08-16 rein kosmetisch. 360° schaltet die Regel ab |
@@ -201,7 +202,9 @@ Alle acht Vanilla-Allianz-Klassen sind im Spiel, mit ihren gültigen Rassen-Komb
 | **Hexenmeister** | Mensch, Gnom | Schattenblitz: 2,0 s Cast, 8 Schaden, 25 Mana | Wichtel beschwören: 3 s Cast, 30 Mana; Wichtel: 15 HP, Feuerblitz 2 Schaden/2 s, zieht kurz Aggro | — | Pseudo-Tank-Pet kauft Sekunden |
 | **Druide** | Nachtelf | Zorn: 1,5 s Cast, 6 Schaden, 20 Mana | Heilende Berührung: 3,0 s Cast, heilt 30, 35 Mana | — | Hybrid: pro Leben entweder Schaden ODER zwei große Heals — nie beides gut |
 
-**Design-Absicht pro Kit (testbar):** Erwartetes Verhalten — Jäger liefern die Grundlast auf Maximaldistanz, Schurken übernehmen Fress-Unterbrechung, Krieger/Paladine bilden die Köderfront, Magier positionieren sich absichtlich als Charge-Ziel für den Slow, Caster verwalten ihr Manabudget pro Leben. **Falsifiziert**, wenn im Playtest ≥6 von 8 Klassen identisch gespielt werden — dann Kit-Unterschiede verschärfen.
+**Standard-Aktion Nahkampf (Runde 5, Issue #86):** Zusätzlich zu ihrem Kit hat **jede Klasse** den Button "Nahkampf" (Taste 4, kostenlos, kein GCD): er schaltet den Nahkampf-Autohit an (8.1) — dasselbe erledigen Rechtsklick aufs Ziel oder jeder Fähigkeitsdruck. Beim Jäger bleibt der Autoschuss davon unberührt.
+
+**Design-Absicht pro Kit (testbar):** Erwartetes Verhalten — Jäger liefern die Grundlast auf Maximaldistanz, Schurken übernehmen Fress-Unterbrechung, Krieger/Paladine bilden die Köderfront, Magier positionieren sich absichtlich als Charge-Ziel für den Slow, Caster verwalten ihr Manabudget pro Leben — und wer OOM ist, rückt auf und vermöbelt Hogger mit dem Stab (Issue #86). **Falsifiziert**, wenn im Playtest ≥6 von 8 Klassen identisch gespielt werden — dann Kit-Unterschiede verschärfen.
 
 ---
 
@@ -317,7 +320,7 @@ Vollständige Liste — jede Position hat einen Zweck, nichts weiter aufnehmen:
 | 4 | Schritte auf Gras (1 Loop) | lebende Bewegung; Geister sind lautlos |
 | 5 | Nahkampf-Hit (1×) | alle weißen Treffer + Heroischer Stoß/Finsterer Stoß |
 | 6 | Zauber-Cast-Loop (1×) + 4 Impacts (Feuer, Schatten, Heilig, Frost-Buff) | alle Casts der drei Casterklassen + Paladin |
-| 7 | Zauberstab-Schuss (1×), Bogen-/Gewehrschuss (1×) | OOM-Stochern, Jäger-Autoschuss |
+| 7 | Bogen-/Gewehrschuss (1×) | Jäger-Autoschuss. (Der Zauberstab-Slot fiel in Runde 5 mit dem Zauberstab selbst, Issue #86 — OOM-Caster schlagen jetzt zu, Nr. 5) |
 | 8 | Schlachtruf (1×), Stealth-Ein/Aus (1×), Wichtel-Beschwörung (1×) | Klassen-Signaturen mit Spielinformation |
 | 9 | Krit-Punch (1×) | beide Seiten |
 | 10 | Hogger: Growl (Aggro), Schmatzen (kartenweit — IST die Fress-Telegraphie), Charge-Roar, Todesschrei | Boss-Lesbarkeit |
@@ -402,7 +405,7 @@ Unverändert Volley-Dash-Muster: Host-autoritativ, lua-enet, Channel 0 reliable 
 
 ## 16. Offene Designfragen (Playtest)
 
-1. **Charge-Zielregel:** "Weitester mit Bedrohung" bestraft primär Jäger (200 px) und OOM-Stoff-Caster (120 px). Beobachten, ob das lacht oder frustet; Alternative (zufällig aus Top-3-Bedrohung) wäre ein weiterer RNG-Punkt und bleibt in der Hinterhand.
+1. **Charge-Zielregel:** "Weitester mit Bedrohung" bestraft primär Jäger (230 px) und Stoff-Caster (200 px, seit Runde 5). Beobachten, ob das lacht oder frustet; Alternative (zufällig aus Top-3-Bedrohung) wäre ein weiterer RNG-Punkt und bleibt in der Hinterhand.
 2. **Klassenkonvergenz:** Sim-Metrik Klassenverteilung der Siegläufe — kippt alles auf "alle Jäger", müssen die anderen Kits über Zahlen (nicht neue Fähigkeiten) attraktiver werden.
 3. **Zoom-Stufen:** Drei Stufen Startwert; das `zoom_change`-Log entscheidet, ob es zwei oder vier werden.
 4. **Leeroy-Frequenz:** Announcer-Dichte (max. 1 Zeile / 10 s Startwert) — nervt er ab Try 5? Drossel-Parameter liegt im Tuning-Panel.
@@ -488,7 +491,7 @@ Alle Parameter als **eine flache Tabelle** in `model.lua` (`M.params`, je `{wert
 | Hogger | HP-Steigung und HP-Sockel (HP = Steigung × N − Sockel), Autohit-Schaden/-Intervall, Cleave-Divisor, Tempo, Slice-Werte, Charge-CD/-Schaden/-Anlauf, Leash |
 | Fressen | Heilrate, Kanaldauer, CD, Zugradius, Zugdauer, Unterbrecher-Offset, Schadensschwelle (% Max-HP) |
 | Krits | Chance und Multiplikator, je Seite getrennt schaltbar (A/B-Gefühlstests) |
-| Spieler | HP je Rüstungsklasse, alle Fähigkeitswerte, Autohit/Zauberstab, Reichweiten, GCD, Tempo lebend/Geist, Fünf-Sekunden-Regel (Wartezeit, Regen-Rate), Bedrohung je Heilung |
+| Spieler | HP je Rüstungsklasse, alle Fähigkeitswerte, Autohit/Autoschuss, Reichweiten (`melee_range`, `cast_range`, `autoshot_range`), GCD, Tempo lebend/Geist, Fünf-Sekunden-Regel (Wartezeit, Regen-Rate), Bedrohung je Heilung |
 | Loop | Respawn-Formel (Basis, Faktor, Min, Max), Try-Zeitlimit, Wiederbelebungsfeld-Position (Distanz zum Hügel) |
 | Mobs | Slot-Formel, Respawn, HP/Schaden je Typ, XP, Kupfer |
 | Adds | Anzahl-Formel, HP, Schaden |

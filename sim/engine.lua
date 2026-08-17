@@ -14,10 +14,13 @@ local HUGE = math.huge
 -- ---------------------------------------------------------------------------
 -- Hilfen
 -- ---------------------------------------------------------------------------
+-- Wunschabstand zum Boss. Seit Runde 5 (Issue #86) gibt es keinen
+-- Zauberstab mehr: alle ausser dem Jaeger stehen im Nahkampf — wie es der
+-- Druide im Modell schon immer tat; die Sim-Agenten schalten ihren
+-- Autohit per Definition an (im Spiel: Rechtsklick/Taste 4).
 local function desired_range(p)
   local attack = model.classes[p.class].attack
   if attack == "shot" then return model.p("autoshot_range") end
-  if attack == "wand" then return model.p("wand_range") end
   return model.p("melee_range")
 end
 E.desired_range = desired_range
@@ -553,8 +556,6 @@ local function player_tick(run, p, dt)
     p.next_auto = run.t + model.p("autohit_interval")
     if attack == "shot" then
       E.player_damage_hogger(run, p, model.p("autoshot_dmg"), "autohit")
-    elseif attack == "wand" then
-      E.player_damage_hogger(run, p, model.p("wand_dmg"), "autohit")
     else
       local dmg = model.p("autohit_melee_dmg")
       if p.seal_hits > 0 then

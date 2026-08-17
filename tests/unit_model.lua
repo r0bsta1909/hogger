@@ -58,8 +58,11 @@ T.eq(M.p("move_speed_alive"), 140, "8.1 Tempo lebend")
 T.eq(M.p("move_speed_ghost"), 210, "8.1 Tempo Geist (150%)")
 T.eq(M.p("autohit_melee_dmg"), 2, "8.1 Nahkampf-Autohit")
 T.eq(M.p("autoshot_dmg"), 3, "8.1 Autoschuss")
-T.eq(M.p("autoshot_range"), 200, "8.1 Autoschuss-Reichweite")
-T.eq(M.p("wand_range"), 120, "8.1 Zauberstab-Reichweite")
+T.eq(M.p("autoshot_range"), 230, "8.1 Autoschuss-Reichweite (Runde 5, #80)")
+T.eq(M.p("cast_range"), 200, "8.1 Zauber-Reichweite der Caster (Runde 5, #80)")
+T.ok(M.p("autoshot_range") > M.p("cast_range"),
+  "8.1 der Jaeger bleibt die laengste Reichweite (Vanilla 35 vs 30 yd)")
+T.eq(M.params.wand_dmg, nil, "8.1 der Zauberstab ist gestrichen (#86)")
 T.eq(M.p("gcd"), 1.5, "8.1 GCD")
 T.eq(M.p("crit_chance_player"), 0.05, "13.2 Kritchance Spieler")
 T.eq(M.p("crit_mult_hogger"), 2.0, "13.2 Kritmultiplikator Hogger")
@@ -110,9 +113,11 @@ local expected_kits = {
   warlock = { "Schattenblitz", "Wichtel beschwoeren" },
   druid   = { "Zorn", "Heilende Beruehrung" },
 }
+-- Seit Runde 5 (Issue #86): der Jaeger hat die einzige Fernkampf-
+-- Autoattack, alle anderen schlagen im Nahkampf (Zauberstab gestrichen)
 local expected_attack = {
   warrior = "melee", paladin = "melee", hunter = "shot", rogue = "melee",
-  priest = "wand", mage = "wand", warlock = "wand", druid = "melee",
+  priest = "melee", mage = "melee", warlock = "melee", druid = "melee",
 }
 for class_id, kit in pairs(expected_kits) do
   local c = M.classes[class_id]

@@ -10,15 +10,16 @@ local function fx1(class, attack, art)
   return r.fx and r.fx[1]
 end
 
--- Caster: Zauber in Schulfarbe, Autoangriff als fahler Stab-Blitz
-local fb = fx1("mage", "wand", "ability")
+-- Caster: Zauber in Schulfarbe; der Autoangriff ist seit Runde 5 ein
+-- Nahkampf-Slash — den Zauberstab gibt es nicht mehr (Issue #86)
+local fb = fx1("mage", "melee", "ability")
 T.eq(fb.form, "bolt", "Feuerball ist ein Geschoss")
 T.eq(fb.col[1], 1.00, "Feuerball brennt orange")
-local sb = fx1("warlock", "wand", "ability")
+local sb = fx1("warlock", "melee", "ability")
 T.ok(sb.col[3] > sb.col[2], "Schattenblitz ist violett")
-local wand = fx1("priest", "wand", "autohit")
-T.eq(wand.form, "bolt", "Zauberstab ist ein kleines Geschoss")
-T.ok(wand.col[3] > wand.col[1], "Zauberstab bleibt fahlblau, nicht heilig")
+local staff = fx1("priest", "melee", "autohit")
+T.eq(staff.form, "slash", "Caster-Autohit ist ein Stabschlag, kein Geschoss")
+T.ok(staff.col[1] > 0.9 and staff.col[2] > 0.9, "Stabschlag bleibt weiss")
 
 -- Jaeger: Autoschuss ist ein Pfeil, Raptorstoss ein Nahkampfbogen (GDD 8.2)
 T.eq(fx1("hunter", "shot", "autohit").form, "arrow", "Autoschuss fliegt")
@@ -37,14 +38,14 @@ T.eq(fx1("warrior", "melee", "dot"), nil, "Blutung erzeugt kein Geschoss")
 -- Budget wie beim Floating Text (GDD 4.1): nichts laeuft ueber
 do
   local r = render.new()
-  for _ = 1, 200 do r:add_attack_fx("mage", "wand", "ability", 0, 0, 10, 10) end
+  for _ = 1, 200 do r:add_attack_fx("mage", "melee", "ability", 0, 0, 10, 10) end
   T.ok(#r.fx <= 61, "Effekt-Budget gedeckelt (" .. #r.fx .. ")")
 end
 
 -- Alterung: Effekte verschwinden von selbst, der Trefferrand klingt ab
 do
   local r = render.new()
-  r:add_attack_fx("mage", "wand", "ability", 0, 0, 10, 10)
+  r:add_attack_fx("mage", "melee", "ability", 0, 0, 10, 10)
   r:add_heal_fx(5, 5)
   r:add_hurt_flash(1.0)
   for _ = 1, 60 do r:update(1 / 60) end

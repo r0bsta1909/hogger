@@ -65,9 +65,13 @@ M.params = {
   autohit_melee_dmg      = p(2, 1, 10, 1, "8.1"),
   autohit_interval       = p(2.0, 0.5, 4.0, 0.1, "8.1"),
   autoshot_dmg           = p(3, 1, 10, 1, "8.1"),
-  autoshot_range         = p(200, 100, 400, 10, "8.1"),
-  wand_dmg               = p(2, 1, 10, 1, "8.1"),
-  wand_range             = p(120, 50, 300, 10, "8.1"),
+  -- Reichweiten (Runde 5, Issue #80): Caster mussten viel zu nah heran,
+  -- der Jaeger bekommt etwas mehr und bleibt die laengste Reichweite
+  -- (Vanilla-Verhaeltnis 30:35 yd ~ 200:230 px). cast_range hiess bis
+  -- Runde 5 wand_range — der Zauberstab ist weg (Issue #86), die
+  -- Zauber-Reichweite aller Caster-Faehigkeiten bleibt.
+  autoshot_range         = p(230, 100, 400, 10, "8.1"),
+  cast_range             = p(200, 50, 300, 10, "8.1"),
   melee_range            = p(40, 20, 100, 5, "8.1"),  -- im GDD nicht beziffert, siehe frage-Issue
   gcd                    = p(1.5, 0.5, 3.0, 0.1, "8.1"),
   -- Frontbogen fuer Angriffe (GDD 8.1, Playtest 2026-08-16): das Ziel muss
@@ -213,6 +217,10 @@ end
 -- ---------------------------------------------------------------------------
 M.RACES = { "mensch", "zwerg", "nachtelf", "gnom" }
 
+-- attack: "shot" = Jaeger-Autoschuss (die einzige kostenlose Fernkampf-
+-- Autoattack, laeuft automatisch); "melee" = Nahkampf-Autohit, der seit
+-- Runde 5 (Issue #86) ANGESCHALTET werden muss (Rechtsklick, Taste 4 oder
+-- irgendein Faehigkeitsdruck) — den Zauberstab gibt es nicht mehr.
 M.classes = {
   warrior = {
     name_de = "Krieger", races = { "mensch", "zwerg", "nachtelf", "gnom" },
@@ -251,7 +259,7 @@ M.classes = {
   },
   priest = {
     name_de = "Priester", races = { "mensch", "zwerg", "nachtelf" },
-    armor = "cloth", resource = "mana", attack = "wand",
+    armor = "cloth", resource = "mana", attack = "melee",
     abilities = {
       { id = "smite", name_de = "Goettliche Pein", dmg = "priest_smite_dmg", cast = "priest_smite_cast", cost = "priest_smite_mana" },
       { id = "lesser_heal", name_de = "Geringes Heilen", heal = "priest_heal_amount", cast = "priest_heal_cast", cost = "priest_heal_mana" },
@@ -259,7 +267,7 @@ M.classes = {
   },
   mage = {
     name_de = "Magier", races = { "mensch", "gnom" },
-    armor = "cloth", resource = "mana", attack = "wand",
+    armor = "cloth", resource = "mana", attack = "melee",
     abilities = {
       { id = "fireball", name_de = "Feuerball", dmg = "mage_fireball_dmg", cast = "mage_fireball_cast", cost = "mage_fireball_mana" },
       { id = "frost_armor", name_de = "Frostruestung", slow = "mage_frostarmor_slow", slow_duration = "mage_frostarmor_slow_duration" },
@@ -267,7 +275,7 @@ M.classes = {
   },
   warlock = {
     name_de = "Hexenmeister", races = { "mensch", "gnom" },
-    armor = "cloth", resource = "mana", attack = "wand",
+    armor = "cloth", resource = "mana", attack = "melee",
     abilities = {
       { id = "shadow_bolt", name_de = "Schattenblitz", dmg = "warlock_bolt_dmg", cast = "warlock_bolt_cast", cost = "warlock_bolt_mana" },
       { id = "summon_imp", name_de = "Wichtel beschwoeren", cast = "warlock_imp_cast", cost = "warlock_imp_mana" },

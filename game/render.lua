@@ -23,6 +23,7 @@ local ABILITY_ICON = {
   smite = "ab_smite", heal = "ab_heal", holylight = "ab_holylight",
   seal = "ab_seal", fireball = "ab_fireball", frostarmor = "ab_frostarmor",
   bolt = "ab_bolt", imp = "ab_imp", wrath = "ab_wrath", touch = "ab_touch",
+  melee = "ab_melee", -- Standard-Aktion Nahkampf (Issue #86)
 }
 local ABILITIES = require("game.gamesim.step").ABILITIES
 local ICON_RADIUS = require("game.gamesim.step").ICON_RADIUS
@@ -37,10 +38,11 @@ local CLASS_COL = {
   warlock = { 0.58, 0.51, 0.79 }, druid   = { 1.00, 0.49, 0.04 },
 }
 -- Autoangriff je Klasse in Worten (GDD 8.1) — beim Jaeger IST der Autoschuss
--- die erste "Faehigkeit", er hat deshalb nur einen Button (GDD 8.2)
+-- die erste "Faehigkeit", er hat deshalb nur einen Button (GDD 8.2).
+-- Der Nahkampf-Autohit will seit Runde 5 angeschaltet werden (Issue #86).
 local AUTO_DE = {
-  melee = "Nahkampf-Autohit", shot = "Autoschuss (laeuft automatisch)",
-  wand  = "Zauberstab (laeuft automatisch)",
+  melee = "Nahkampf-Autohit (Rechtsklick oder Taste 4 startet ihn)",
+  shot = "Autoschuss (laeuft automatisch)",
 }
 local RES_DE = { mana = "Mana", rage = "Wut", energy = "Energie" }
 
@@ -132,10 +134,10 @@ function R:add_attack_fx(src_class, attack, art, sx, sy, tx, ty)
     col = ENEMY_COL
   elseif attack == "shot" and art ~= "ability" then
     form, col = "arrow", { 0.85, 0.85, 0.75 }
-  elseif attack == "wand" then
-    form = "bolt"
-    col = (art == "ability") and (SCHOOL[src_class] or MELEE_COL)
-          or { 0.75, 0.80, 0.95 } -- Zauberstab: fahles Blau
+  elseif art == "ability" and SCHOOL[src_class] then
+    -- Zauber als Geschoss in Schulfarbe; den Zauberstab gibt es seit
+    -- Runde 5 nicht mehr (Issue #86), Caster-Autohits sind weisse Slashes
+    form, col = "bolt", SCHOOL[src_class]
   else
     form, col = "slash", MELEE_COL
   end
@@ -826,38 +828,46 @@ function R:draw(view, ui)
   if me and me.class and me.alive then
     local specs = ABILITIES[me.class] or {}
     local defs = model.classes[me.class].abilities or {}
-    local n = #specs
+    -- Klassen-Slots 1..3, dahinter die Standard-Aktion Nahkampf als
+    -- eigener Button mit Taste 4 (Issue #86) — jede Klasse hat ihn
+    local slots = {}
+    for i, spec in ipairs(specs) do
+      slots[#slots + 1] = { spec = spec, def = defs[i], slot = i }
+    end
+    slots[#slots + 1] = { melee = true }
+    local n = #slots
     local BR = 23                       -- Buttonradius
     local ring_r = radius * 0.87        -- Bahn knapp innerhalb des Rings
     local dtheta = (BR * 2 + 10) / ring_r
-    for i, spec in ipairs(specs) do
+    for k, entry in ipairs(slots) do
       -- Slot 1 links, aufsteigend nach rechts (Tastenreihenfolge)
-      local a = math.pi / 2 - (i - (n + 1) / 2) * dtheta
+      local a = math.pi / 2 - (k - (n + 1) / 2) * dtheta
       local x, y = ox + math.cos(a) * ring_r, oy + math.sin(a) * ring_r
       love.graphics.setColor(0.10, 0.09, 0.07, 0.95)
       love.graphics.circle("fill", x, y, BR)
-      local icon = ABILITY_ICON[spec.id]
+      local icon = entry.melee and "ab_melee" or ABILITY_ICON[entry.spec.id]
       if icon then assets.draw(icon, x, y, (BR * 1.7) / assets.size(icon)) end
       -- Cooldown-Sweep im Uhrzeigersinn (Original-Verhalten)
-      local cd = ui.cooldowns and ui.cooldowns[i] or 0
+      local cd = entry.slot and ui.cooldowns and ui.cooldowns[entry.slot] or 0
       if cd > 0 then
         love.graphics.setColor(0, 0, 0, 0.62)
         love.graphics.arc("fill", "pie", x, y, BR, -math.pi / 2,
           -math.pi / 2 + cd * 2 * math.pi)
       end
       -- laufender Cast hebt seinen Button hervor
-      local active = (me.cast_slot or 0) == i
+      local active = entry.slot ~= nil and (me.cast_slot or 0) == entry.slot
       love.graphics.setColor(active and 1 or 0.78, active and 0.9 or 0.63,
         active and 0.4 or 0.28, 1)
       love.graphics.setLineWidth(active and 3 or 2)
       love.graphics.circle("line", x, y, BR)
       love.graphics.setLineWidth(1)
       love.graphics.setColor(0.95, 0.92, 0.8, 1)
-      love.graphics.print(tostring(i), x + BR - 10, y + BR - 16)
+      love.graphics.print(entry.melee and "4" or tostring(entry.slot),
+        x + BR - 10, y + BR - 16)
       -- Tooltip: der Grund, warum "RS" niemanden mehr ratlos laesst (#28)
       if ui.mouse then
         local d = math.sqrt((ui.mouse[1] - x) ^ 2 + (ui.mouse[2] - y) ^ 2)
-        if d <= BR then hover_tip = { spec = spec, def = defs[i], slot = i } end
+        if d <= BR then hover_tip = entry end
       end
     end
     -- Autoangriff der Klasse in Worten: der Jaeger hat genau deshalb nur
@@ -904,7 +914,18 @@ function R:draw(view, ui)
   end
 
   -- Faehigkeits-Tooltip ueber dem Button (Original-Stil, GDD 4.2)
-  if hover_tip then
+  if hover_tip and hover_tip.melee then
+    -- Standard-Aktion Nahkampf (Issue #86)
+    local lines = { "Nahkampf", "Kostenlos",
+      string.format("Startet den Autohit: %d Schaden alle %.1f s",
+        model.p("autohit_melee_dmg"), model.p("autohit_interval")),
+      string.format("Reichweite %d px", model.p("melee_range")),
+      "Taste 4 oder Rechtsklick aufs Ziel" }
+    if me and me.class and model.classes[me.class].attack == "shot" then
+      lines[#lines + 1] = "(dein Autoschuss laeuft weiter von selbst)"
+    end
+    draw_tooltip(lines, ui.mouse[1], ui.mouse[2], w, h)
+  elseif hover_tip then
     local spec, def = hover_tip.spec, hover_tip.def
     local font = love.graphics.getFont()
     local lines = { def and def.name_de or spec.id }

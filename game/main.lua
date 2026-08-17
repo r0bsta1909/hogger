@@ -276,18 +276,15 @@ local function process_cosmetics(view)
         local src_npc = view.npcs and view.npcs[src_id]
         local id = "snd_melee_hit"
         if src_p and src_p.class then
-          local atk = model.classes[src_p.class].attack
-          if atk == "shot" then id = "snd_shot"
-          elseif atk == "wand" then
-            -- Caster: Zauber je Schule, Autoangriff = Stab (Schadensart aus
-            -- dem Ereignis, GDD 17.3 — nicht mehr an der Schadenshoehe geraten)
-            if e.art == "ability" then
-              id = ({ mage = "snd_impact_fire", warlock = "snd_impact_shadow",
-                      priest = "snd_impact_holy", druid = "snd_impact_fire" })
-                   [src_p.class] or "snd_wand"
-            else
-              id = "snd_wand"
-            end
+          -- Zauber klingen nach ihrer Schule (Schadensart aus dem Ereignis,
+          -- GDD 17.3); Autoangriffe: Autoschuss oder Nahkampf — den
+          -- Zauberstab gibt es seit Runde 5 nicht mehr (Issue #86)
+          if e.art == "ability" then
+            id = ({ mage = "snd_impact_fire", warlock = "snd_impact_shadow",
+                    priest = "snd_impact_holy", druid = "snd_impact_fire" })
+                 [src_p.class] or "snd_melee_hit"
+          elseif model.classes[src_p.class].attack == "shot" then
+            id = "snd_shot"
           end
         elseif src_npc and (src_npc.kind == "wolf" or src_npc.kind == "murloc") then
           -- Mob-Aggro-Naeherung: erster Biss bringt den Schrei (Nr. 11)
@@ -810,6 +807,14 @@ function love.keypressed(key)
         app.cooldown_max[slot] = cd
       end
     end
+  elseif key == "4" then
+    -- Standard-Aktion Nahkampf (Issue #86): schaltet den Autohit an;
+    -- tot loest nichts aus, der Host prueft ohnehin noch einmal
+    local me = app.view and app.view.players[app.view.me]
+    if me and me.alive and app.net then
+      if app.mode == "host" then app.net:engage()
+      elseif app.net.send_engage then app.net:send_engage() end
+    end
   elseif key == "tab" then
     if app.mode == "host" then app.net:set_local_target(world.HOGGER_ID)
     else app.net:set_target(world.HOGGER_ID) end
@@ -822,7 +827,7 @@ function love.textinput(t)
   if app.quest and app.quest:blocking() then app.quest:textinput(t) end
 end
 
-function love.mousepressed(mx, my)
+function love.mousepressed(mx, my, button)
   if app.headless then return end
   if app.dialog and app.dialog.visible then
     if app.dialog:mousepressed(mx, my) then
@@ -924,29 +929,34 @@ function love.mousepressed(mx, my)
     end
   end
 
-  local best, best_d = nil, 24
+  local best, best_d, best_enemy = nil, 24, false
   for pid, p in pairs(app.view.players) do
     if pid ~= app.view.me then
       local x, y = to_screen(p.x, p.y)
       local d = math.sqrt((x - mx) ^ 2 + (y - my) ^ 2)
-      if d < best_d then best, best_d = pid, d end
+      if d < best_d then best, best_d, best_enemy = pid, d, false end
     end
   end
   for nid, npc in pairs(app.view.npcs or {}) do
     if npc.kind ~= "imp" then
       local x, y = to_screen(npc.x, npc.y)
       local d = math.sqrt((x - mx) ^ 2 + (y - my) ^ 2)
-      if d < best_d then best, best_d = nid, d end
+      if d < best_d then best, best_d, best_enemy = nid, d, true end
     end
   end
   do
     local x, y = to_screen(app.view.hogger.x, app.view.hogger.y)
     local d = math.sqrt((x - mx) ^ 2 + (y - my) ^ 2)
-    if d < best_d then best, best_d = world.HOGGER_ID, d end
+    if d < best_d then best, best_d, best_enemy = world.HOGGER_ID, d, true end
   end
   if best then
     if app.mode == "host" then app.net:set_local_target(best)
     else app.net:set_target(best) end
+    -- Rechtsklick auf Hogger oder Mob schaltet den Nahkampf an (Issue #86)
+    if button == 2 and best_enemy then
+      if app.mode == "host" then app.net:engage()
+      elseif app.net.send_engage then app.net:send_engage() end
+    end
   end
 end
 

@@ -170,6 +170,8 @@ function H:_handle(peer, data)
     if step.accept_quest(self.state, c.pid, ev) then self:_after_step(ev) end
   elseif c and msg == wire.MSG.REVANCHE then
     self:revanche() -- jeder darf den Knopf druecken (LAN-Party, GDD 11)
+  elseif c and msg == wire.MSG.ENGAGE then
+    step.engage(self.state, c.pid) -- Nahkampf anschalten (Issue #86)
   elseif c and msg == wire.MSG.INPUT then
     local ctick, m0, m1, m2 = wire.read_input(data, off)
     local _, _, _, _, facing = wire.read_input(data, off)
@@ -261,6 +263,11 @@ end
 -- "Geist freilassen" des lokalen Spielers (GDD Kap. 11)
 function H:release_spirit()
   return step.release_spirit(self.state, self.local_pid)
+end
+
+-- Nahkampf des lokalen Spielers anschalten (Issue #86)
+function H:engage()
+  return step.engage(self.state, self.local_pid)
 end
 
 -- Admin (F12 [R]): Quest des lokalen Spielers zuruecksetzen — das Echo

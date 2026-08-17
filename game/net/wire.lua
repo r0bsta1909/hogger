@@ -12,7 +12,7 @@ W.MSG = {
   HELLO = 1, WELCOME = 2, INPUT = 3, SNAPSHOT = 4, EVENTS = 5,
   SET_TARGET = 6, PARAM_SET = 7, ZOOM = 8, ROSTER = 9,
   RENAME = 10, RENAME_RESULT = 11, STATS = 12, REVANCHE = 13,
-  QUEST_ACCEPT = 14, RELEASE_SPIRIT = 15,
+  QUEST_ACCEPT = 14, RELEASE_SPIRIT = 15, ENGAGE = 16,
 }
 
 -- Ereignistypen fuers Netz (Kosmetik-Feed; das JSONL-Log bleibt Host-Sache)
@@ -183,6 +183,11 @@ end
 -- REVANCHE-Knopf der finalen Tafel (GDD 11): Client -> Host, kein Payload
 function W.revanche()
   return header(W.MSG.REVANCHE)
+end
+
+-- Nahkampf anschalten (Issue #86): Client -> Host, kein Payload
+function W.engage()
+  return header(W.MSG.ENGAGE)
 end
 
 function W.stats(board)

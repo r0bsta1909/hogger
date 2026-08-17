@@ -128,6 +128,11 @@ function C:send_revanche()
   self:_send(wire.revanche(), CH_RELIABLE, "reliable")
 end
 
+-- Nahkampf anschalten (Issue #86): Rechtsklick oder Taste 4
+function C:send_engage()
+  self:_send(wire.engage(), CH_RELIABLE, "reliable")
+end
+
 function C:send_rename(name)
   if self.connected then self.rename_result = nil end
   self:_send(wire.rename(name), CH_RELIABLE, "reliable")
