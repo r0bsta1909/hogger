@@ -846,10 +846,14 @@ function love.mousepressed(mx, my)
     end
   end
   if app.victory then
-    if app.victory:mousepressed(mx, my) == "revanche" then
+    local r = app.victory:mousepressed(mx, my)
+    if r == "revanche" then
       -- REVANCHE (GDD 11): jeder darf druecken, der Host fuehrt aus
       if app.mode == "host" then app.net:revanche()
       else app.net:send_revanche() end
+    elseif r == "logout" then
+      -- Ausloggen (#85): beendet das Spiel; love.quit() raeumt das Netz ab
+      love.event.quit(0)
     end
     return
   end
