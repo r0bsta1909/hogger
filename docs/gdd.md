@@ -418,9 +418,10 @@ Unverändert Volley-Dash-Muster: Host-autoritativ, lua-enet, Channel 0 reliable 
 1. `main` geschützt und immer grün; jede Änderung als Branch → PR → CI grün → Merge. Claude Code arbeitet über `git` + `gh` (`gh pr create`, `gh run watch`, `gh pr checks`, `gh issue`) und merged nie auf Verdacht.
 2. **CI, zweigeteilt (ADR 003 — Actions-Minuten werden pro Job auf die volle Minute aufgerundet und erst dann mit dem OS-Faktor multipliziert, macOS 10×):**
    - **Schnellgate (`.github/workflows/ci.yml`):** Stufen 1, 3 und 4 in EINEM `ubuntu-latest`-Job, bei jedem PR und jedem Push auf `main`. Ein Job statt fünf, weil die Job-Anzahl der Kostentreiber ist, nicht die Testdauer. `paths-ignore` für `docs/**`, `reports/**`, `**.md`.
-   - **Cross-Platform-Beweis (`.github/workflows/ci-plattform.yml`):** Stufen 1+3 auf `windows-latest` + `macos-latest`, Stufe 4 auf macOS. Läuft per `gh workflow run ci-plattform.yml` (vor LAN-Abend und Release) und bei PRs mit Label `plattform` — also weiterhin die Matrix als Beweis, nur nicht mehr bei jedem Commit.
+   - **Cross-Platform-Beweis (`.github/workflows/ci-plattform.yml`):** Stufen 1+3 **und** Stufe 4 auf `windows-latest` + `macos-latest` (Linux deckt das Schnellgate ab). Läuft an jedem PR, bei Push auf `main`, wöchentlich per `schedule` (fängt Drift in Runner-Images und Paketständen ab) und auf Zuruf per `gh workflow run ci-plattform.yml`. Das Sammel-Gate `plattform-gruen` bündelt die Matrix zu einem stabilen Check-Namen für den Branch-Schutz.
    - Stufe 5 nur lokal (CI-Runner sagen nichts über den LAN-Host).
-   - Wird das Repo öffentlich, sind Actions-Minuten frei: dann gehört die Matrix zurück an jeden PR (Revisionsauslöser in ADR 003).
+   - **Branch-Schutz auf `main`:** PR-Pflicht, erforderliche Checks `test` (Schnellgate) und `plattform-gruen` (Matrix), null erforderliche Reviews, kein `enforce_admins`. Erst möglich, seit das Repo öffentlich ist.
+   - Kein `paths-ignore`: zusammen mit erzwungenen Checks würde ein reiner Doku-PR ewig auf einen Check warten, der nie startet.
 3. **Releases:** Tag `v*` → Action baut `.love`, `.exe`, `.app` als Release-Artefakte; LAN-Verteilung = Release-Link.
 4. **Issues als Arbeitsschlange** (Labels `balancing`, `gefühl`, `bug`, `modus2`); das Tuning-Protokoll (17.9) bleibt im GDD als Ergebnisgedächtnis.
 5. **Validierungsberichte** als CI-Artefakte plus Kernzahlen als PR-Kommentar (`gh pr comment`).

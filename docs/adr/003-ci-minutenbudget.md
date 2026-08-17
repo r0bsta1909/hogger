@@ -1,6 +1,7 @@
-# ADR 003: CI-Zuschnitt — ein Linux-Schnellgate, Matrix auf Zuruf
+# ADR 003: CI-Zuschnitt — ein Linux-Schnellgate, Plattform-Matrix daneben
 
-**Status:** akzeptiert (Rob, 17.08.2026)
+**Status:** akzeptiert (Rob, 17.08.2026) — **erster Revisionsauslöser am
+selben Tag eingetreten**, siehe „Nachtrag 17.08.2026" am Ende.
 
 **Kontext:** Das Actions-Freikontingent des privaten Repos war nach einem
 einzigen Bautag zu 98 % verbraucht (1.953 von 2.000 Minuten, 15 Tage bis zum
@@ -83,3 +84,45 @@ Ergebnis: **2 abgerechnete Minuten pro gemergtem Feature statt 48.**
   Runner) — dann gilt derselbe Rückbau wie bei Punkt 1.
 - **Stufe 2 (Sim) oder Stufe 5 wandern in die CI**: dann ist dieser Zuschnitt
   neu zu rechnen, weil dann erstmals echte Laufzeit statt Rundung dominiert.
+
+---
+
+## Nachtrag 17.08.2026: Repo öffentlich — Matrix zurück in die Breite
+
+Rob hat das Repo noch am selben Tag auf **public** gestellt. Damit ist
+Revisionsauslöser 1 eingetreten: Actions-Minuten sind unbegrenzt frei, der
+einzige verbleibende Kostenfaktor ist Wall-Clock. Umgesetzt:
+
+- **`ci-plattform.yml` hängt wieder an jedem PR und Push auf `main`**, dazu
+  `workflow_dispatch` und der wöchentliche `schedule` (montags 04:00 UTC).
+  Das Label `plattform` und die `if:`-Gates sind entfallen.
+- **Stufe 4 läuft jetzt auch auf Windows.** Vorher nie — Rob entwickelt
+  darauf, und Stufe 4 ist die einzige Stufe, die Pfade, Zeilenenden und
+  `love.filesystem` echt anfasst. Zwingend `lovec.exe` statt `love.exe`:
+  `love.exe` ist ein GUI-Subsystem-Binary ohne angehängte Konsole, die
+  Testausgabe wäre unsichtbar.
+- **Das Ein-Job-Schnellgate bleibt.** Es ist auch ohne Kostendruck das
+  bessere Design: ~40 s bis rot/grün, während `brew install --cask love`
+  und der LÖVE-Download in der Matrix Minuten brauchen.
+- **`paths-ignore` ist entfallen.** In Kombination mit erzwungenen
+  Status-Checks ist es eine Falle: ein reiner Doku-PR wartet ewig auf einen
+  Check, der nie startet, und lässt sich nicht mergen. Bei 40 s Laufzeit ist
+  Immer-Laufen die einfachere Wahrheit als eine Ausnahmeliste.
+- **Sammel-Gate `plattform-gruen`** (ein Job, `needs` auf die Matrix). Ohne
+  ihn müsste die Branch-Schutzregel jeden Matrix-Namen einzeln nennen
+  (`plattform (macos-latest)` …) und bräche bei jeder Matrix-Änderung.
+- **Branch-Schutz auf `main` aktiviert** — auf einem privaten Repo im
+  Free-Plan war das gar nicht möglich, CLAUDE.mds „`main` ist geschützt" war
+  bis hierher eine Absichtserklärung. Jetzt erzwungen: PR-Pflicht, dazu die
+  Checks `test` und `plattform-gruen`. Bewusst **null** erforderliche
+  Reviews (das Projekt hat genau einen Menschen) und **kein**
+  `enforce_admins`, damit Rob im Notfall durchkommt.
+
+Der Kostenbefund selbst bleibt gültig und ist der eigentliche Wert dieses
+ADR: **Job-Anzahl ist der Hebel, nicht Testdauer**, solange pro Job auf die
+volle Minute aufgerundet wird. Wird das Repo je wieder privat, ist der
+Rückbau der Stand vor diesem Nachtrag.
+
+**Neuer Revisionsauslöser:** Das Repo wird wieder privat, oder die Suite
+wächst so weit, dass echte Laufzeit statt Rundung dominiert (Stufe 2/Sim
+oder Stufe 5 in der CI) — dann ist der Zuschnitt neu zu rechnen.
