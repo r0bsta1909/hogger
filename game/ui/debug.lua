@@ -30,7 +30,13 @@ function D:keypressed(key)
   elseif key == "t" then
     return "teleport" -- sofort als Zufallsklasse vor Hogger (Issue #100)
   elseif key == "d" then
-    return "dock"   -- HUD-Andock-Vorschau umschalten (M12)
+    return "dock"   -- HUD-Dock umschalten (M12/M13)
+  elseif key == "b" then
+    return { bots = 1 }  -- Laufzeit-Bots (Runde 8, #109)
+  elseif key == "g" then
+    return { bots = 5 }
+  elseif key == "j" then
+    return { bots = 10 }
   elseif key == "+" or key == "kp+" then
     return { volume = 0.1 } -- Lautstaerke lebt hier (GDD 4.4)
   elseif key == "-" or key == "kp-" then
@@ -74,6 +80,7 @@ function D:draw(info)
     "[T] Teleport vor Hogger als Zufallsklasse (Host, Testhilfe)",
     "[D] HUD-Dock (Standard AN, Debug-Rueckweg): "
       .. (info.docked and "AN" or "aus"),
+    "[B/G/J] +1/+5/+10 Bots (Host; zaehlen voll ab dem naechsten Try)",
     "[+/-] Lautstaerke: " .. string.format("%d %%", (info.volume or 0) * 100),
     info.net or "Netz: keine Fehler",
     "IP eintippen + Enter verbindet: " .. self.ip_input .. "_",

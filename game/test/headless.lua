@@ -60,6 +60,7 @@ function T.run()
   local old_pid_of_c2 = nil
   local max_body = 0
   local revanche_sent, revanche_done = false, false
+  local addbot_pid, addbot_x = nil, nil -- Laufzeit-Bots (Runde 8, #109)
   local function outcome_counts()
     local try_starts, revives, damage_evs = 0, 0, 0
     for _, line in ipairs(log_lines) do
@@ -133,6 +134,35 @@ function T.run()
         "Quest: die erste Annahme startet den Raid-Leeroy (GDD 10.3)")
       ok(clients[1].snap and clients[1].snap.echo ~= nil,
         "Quest: das Echo steht im Snapshot")
+    end
+
+    -- Laufzeit-Bots (Runde 8, #109): joinen mitten im Try wie Nachzuegler
+    if iter == math.floor(50 / DT) then
+      local n0 = #host.state.players
+      local bots0 = #host.bot_pids
+      local total = host:add_bots(2)
+      ok(total == n0 + 2, "Laufzeit-Bots: +2 Spieler (" .. total .. ")")
+      ok(#host.bot_pids == bots0 + 2, "Laufzeit-Bots: pids registriert")
+      local seen = {}
+      for _, p in ipairs(host.state.players) do
+        ok(not seen[p.name], "Laufzeit-Bots: Name eindeutig (" .. p.name .. ")")
+        seen[p.name] = true
+      end
+      local newbie = host.state.players[host.bot_pids[#host.bot_pids]]
+      ok(newbie.name:find("^bot") ~= nil, "Laufzeit-Bots: bot-Praefix")
+      ok(newbie.ghost and not newbie.alive,
+        "Laufzeit-Bots: Spawn als Geist am Friedhof (wie ein echter Join)")
+      addbot_pid = host.bot_pids[#host.bot_pids]
+      addbot_x = newbie.x
+    end
+    if iter == math.floor(60 / DT) and addbot_pid then
+      local b = host.state.players[addbot_pid]
+      ok(b.x ~= addbot_x or b.alive,
+        "Laufzeit-Bots: der neue Bot bewegt sich oder lebt schon")
+      ok(clients[1].snap and clients[1].snap.players[addbot_pid] ~= nil,
+        "Laufzeit-Bots: Bot erreicht die Clients im Snapshot")
+      ok(clients[1].names[addbot_pid] ~= nil,
+        "Laufzeit-Bots: Roster-Broadcast mit Bot-Namen angekommen")
     end
 
     -- Geist freilassen (GDD Kap. 11): kein Client wird ohne Klick zum Geist,
