@@ -67,3 +67,28 @@ do
   T.eq(errors.check(w, warrior_shout, ctx(0, 0, 0)), nil,
     "Schlachtruf geht immer (wirkt auf einen selbst)")
 end
+-- Heilzauber (Runde 7, #103): heal_range fuer lebende Spieler-Ziele,
+-- Hogger/Mob im Ziel heisst Selbstheilung (immer ok), kein Frontbogen
+do
+  local priest_heal = step.ABILITIES.priest[2]
+  local pr = { class = "priest", resource = 100, target = 2 }
+  local players = { [2] = { x = 1300, y = 1000, alive = true } }
+  local c = ctx(1000, 1000, 0)
+  c.players = players
+  T.eq(errors.check(pr, priest_heal, c), errors.TOO_FAR,
+    "Heilziel in 300 px wird als zu weit gemeldet")
+  players[2].x = 1100
+  T.eq(errors.check(pr, priest_heal, c), nil,
+    "Heilziel in 100 px ist ok — auch mit dem Ruecken zu ihm")
+  local hog = { class = "priest", resource = 100, target = world.HOGGER_ID }
+  T.eq(errors.check(hog, priest_heal, ctx(1000, 1000, 0)), nil,
+    "Hogger im Ziel: Selbstheilung, immer ok")
+  -- expliziter Kontext aus der Heil-Leiste gewinnt
+  local c2 = ctx(1000, 1000, 0)
+  c2.ally_target = { x = 1400, y = 1000, alive = true, is_self = false }
+  T.eq(errors.check(pr, priest_heal, c2), errors.TOO_FAR,
+    "ally_target-Kontext: 400 px zu weit")
+  c2.ally_target = { x = 1400, y = 1000, alive = true, is_self = true }
+  T.eq(errors.check(pr, priest_heal, c2), nil,
+    "eigene Zeile: Reichweite egal")
+end

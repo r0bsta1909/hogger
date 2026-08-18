@@ -65,6 +65,12 @@ T.eq(M.p("cast_range"), 200, "8.1 Zauber-Reichweite der Caster (Runde 5, #80)")
 T.ok(M.p("autoshot_range") > M.p("cast_range"),
   "8.1 der Jaeger bleibt die laengste Reichweite (Vanilla 35 vs 30 yd)")
 T.eq(M.params.wand_dmg, nil, "8.1 der Zauberstab ist gestrichen (#86)")
+T.eq(M.p("heal_range"), 250, "8.1 Heil-Reichweite (Runde 7, #103)")
+T.eq(M.params.heal_range.kapitel, "8.1", "8.1 heal_range im Panel-Kapitel 8.1")
+T.ok(M.params.heal_range.min <= 250 and M.params.heal_range.max >= 250,
+  "8.1 heal_range-Grenzen umschliessen den Startwert")
+T.ok(M.p("heal_range") > M.p("cast_range") - M.p("melee_range"),
+  "8.1 heal_range bindet im 1D-Sim-Modell nie (Revisionsausloeser 17.9)")
 T.eq(M.p("gcd"), 1.5, "8.1 GCD")
 T.eq(M.p("crit_chance_player"), 0.05, "13.2 Kritchance Spieler")
 T.eq(M.p("crit_mult_hogger"), 2.0, "13.2 Kritmultiplikator Hogger")

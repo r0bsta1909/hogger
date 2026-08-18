@@ -172,6 +172,14 @@ function H:_handle(peer, data)
     self:revanche() -- jeder darf den Knopf druecken (LAN-Party, GDD 11)
   elseif c and msg == wire.MSG.ENGAGE then
     step.engage(self.state, c.pid) -- Nahkampf anschalten (Issue #86)
+  elseif c and msg == wire.MSG.HEAL_REQUEST then
+    -- Klick-Heilung aus der Heil-Leiste (Runde 7, #103): autoritativ
+    -- validiert und als normaler Cast gestartet, p.target unberuehrt
+    local target = wire.read_heal_request(data, off)
+    local ev = {}
+    if step.heal_request(self.state, c.pid, target, ev) then
+      self:_after_step(ev)
+    end
   elseif c and msg == wire.MSG.INPUT then
     local ctick, m0, m1, m2 = wire.read_input(data, off)
     local _, _, _, _, facing = wire.read_input(data, off)
@@ -273,6 +281,16 @@ end
 -- Nahkampf des lokalen Spielers anschalten (Issue #86)
 function H:engage()
   return step.engage(self.state, self.local_pid)
+end
+
+-- Klick-Heilung des lokalen Spielers (Heil-Leiste, Runde 7, #103)
+function H:heal_request(target_id)
+  local ev = {}
+  if step.heal_request(self.state, self.local_pid, target_id, ev) then
+    self:_after_step(ev)
+    return true
+  end
+  return false
 end
 
 -- Admin (F12 [R]): Quest des lokalen Spielers zuruecksetzen — das Echo

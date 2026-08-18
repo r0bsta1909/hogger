@@ -27,6 +27,8 @@ local ABILITY_ICON = {
 }
 local ABILITIES = require("game.gamesim.step").ABILITIES
 local ICON_RADIUS = require("game.gamesim.step").ICON_RADIUS
+-- Heilerklassen, abgeleitet aus den Faehigkeiten (Runde 7, eine Wahrheit)
+local ALLY_SLOT = require("game.gamesim.step").ALLY_SLOT
 local UI_BG = { 0.09, 0.08, 0.07 }
 local GRASS = { 0.30, 0.44, 0.22 }
 local PATH = { 0.48, 0.40, 0.26 }
@@ -276,6 +278,95 @@ function R:draw_raid_overview(view, w, h)
     end
     love.graphics.setColor(tc[1], tc[2], tc[3], 1)
     love.graphics.print(txt, x + COL_W - 16 - font:getWidth(txt), y)
+  end
+end
+
+-- Heil-Leiste (Runde 7, #103, GDD 4.3): AutoHeal-Stil — nur fuer
+-- Heilerklassen sichtbar, zeigt sich selbst plus alle lebenden Verbuendeten
+-- in Heil-Reichweite; Rechtsklick auf eine Zeile heilt diesen Spieler
+-- (HEAL_REQUEST), Linksklick waehlt ihn als Ziel. Layout/Builder/Hit-Test
+-- sind love-frei (Muster raid_rows).
+R.HEALBAR = { x = 12, y = 108, w = 190, header_h = 18, row_h = 18,
+              max_rows = 24 }
+
+-- Zeilen: selbst IMMER zuerst, danach alphabetisch nach Namen — STABIL,
+-- eine HP-Sortierung liesse die Zeilen unter dem Cursor springen (genau
+-- der Fehler, den die Leiste behebt). Geister/Tote sind unheilbar: raus.
+function R.heal_rows(view, heal_range, max_rows)
+  local rows, more_n = {}, 0
+  local names = view.names or {}
+  local me = view.players[view.me]
+  if not (me and me.alive) then return rows, 0 end
+  local function pct(p)
+    local maxhp = p.class and model.hp_for_class(p.class) or 0
+    return maxhp > 0 and math.floor((p.hp or 0) / maxhp * 100 + 0.5) or 0
+  end
+  rows[1] = { pid = view.me, name = names[view.me] or ("#" .. tostring(view.me)),
+              class = me.class, hp_pct = pct(me), is_self = true }
+  local others = {}
+  for pid, p in pairs(view.players) do
+    if pid ~= view.me and p.alive
+       and world.dist(view.me_x or 0, view.me_y or 0, p.x, p.y) <= heal_range then
+      others[#others + 1] = { pid = pid,
+                              name = names[pid] or ("#" .. tostring(pid)),
+                              class = p.class, hp_pct = pct(p), is_self = false }
+    end
+  end
+  table.sort(others, function(a, b)
+    local al, bl = a.name:lower(), b.name:lower()
+    if al ~= bl then return al < bl end
+    return a.pid < b.pid -- Namensgleichstand: pid entscheidet, stabil
+  end)
+  max_rows = max_rows or R.HEALBAR.max_rows
+  for _, r in ipairs(others) do
+    if #rows < max_rows then rows[#rows + 1] = r else more_n = more_n + 1 end
+  end
+  return rows, more_n
+end
+
+-- Reine Arithmetik: welche Zeile liegt unter (mx, my)? nil = keine.
+function R.healbar_row_at(n_rows, mx, my)
+  local HB = R.HEALBAR
+  if mx < HB.x or mx > HB.x + HB.w then return nil end
+  local i = math.floor((my - (HB.y + HB.header_h)) / HB.row_h) + 1
+  if i >= 1 and i <= n_rows then return i end
+  return nil
+end
+
+function R:draw_healbar(view)
+  local me = view.players[view.me]
+  if not (me and me.alive and me.class and ALLY_SLOT[me.class]) then return end
+  local rows, more_n = R.heal_rows(view, model.p("heal_range"))
+  if #rows == 0 then return end
+  local HB = R.HEALBAR
+  local extra = more_n > 0 and 1 or 0
+  local ph = HB.header_h + (#rows + extra) * HB.row_h + 8
+  love.graphics.setColor(0.07, 0.07, 0.11, 0.85)
+  love.graphics.rectangle("fill", HB.x, HB.y, HB.w, ph, 5, 5)
+  love.graphics.setColor(0.78, 0.63, 0.28, 0.9)
+  love.graphics.rectangle("line", HB.x, HB.y, HB.w, ph, 5, 5)
+  love.graphics.setColor(0.95, 0.85, 0.4, 1)
+  love.graphics.print("Heilziele  (Rechtsklick heilt)", HB.x + 8, HB.y + 3)
+  local font = love.graphics.getFont()
+  for i, r in ipairs(rows) do
+    local y = HB.y + HB.header_h + (i - 1) * HB.row_h + 1
+    if r.class and CLASS_ICON[r.class] then
+      local icon = CLASS_ICON[r.class]
+      assets.draw(icon, HB.x + 12, y + 8, 14 / assets.size(icon))
+    end
+    local col = (r.class and CLASS_COL[r.class]) or { 0.8, 0.8, 0.75 }
+    love.graphics.setColor(col[1], col[2], col[3], 1)
+    love.graphics.print(r.is_self and (r.name .. " (du)") or r.name,
+      HB.x + 22, y)
+    local txt = (r.hp_pct or 0) .. "%"
+    if (r.hp_pct or 0) <= 35 then love.graphics.setColor(0.9, 0.35, 0.3, 1)
+    else love.graphics.setColor(0.55, 0.8, 0.55, 1) end
+    love.graphics.print(txt, HB.x + HB.w - 8 - font:getWidth(txt), y)
+  end
+  if more_n > 0 then
+    love.graphics.setColor(0.6, 0.56, 0.45, 1)
+    love.graphics.print("+" .. more_n .. " weitere in Reichweite",
+      HB.x + 22, HB.y + HB.header_h + #rows * HB.row_h + 1)
   end
 end
 
@@ -818,6 +909,9 @@ function R:draw(view, ui)
     love.graphics.setColor(0.45, 0.42, 0.35, 1)
     love.graphics.print("STRG fuer Raid-Overview", 14, 88)
   end
+
+  -- Heil-Leiste der Heilerklassen (Runde 7, #103, GDD 4.3)
+  self:draw_healbar(view)
 
   -- Oben rechts: Zielfenster, Ziel des Ziels, Buff-Leiste (GDD 4.3)
   local aura_tip = nil

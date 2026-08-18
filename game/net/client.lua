@@ -133,6 +133,11 @@ function C:send_engage()
   self:_send(wire.engage(), CH_RELIABLE, "reliable")
 end
 
+-- Klick-Heilung aus der Heil-Leiste (Runde 7, #103)
+function C:send_heal(pid)
+  self:_send(wire.heal_request(pid), CH_RELIABLE, "reliable")
+end
+
 function C:send_rename(name)
   if self.connected then self.rename_result = nil end
   self:_send(wire.rename(name), CH_RELIABLE, "reliable")

@@ -8,7 +8,11 @@ local events = require("game.gamesim.events")
 
 local A = {}
 
+-- Muss zu step.ALLY_SLOT passen (dort aus ABILITIES abgeleitet; der
+-- Require-Zyklus step->announcer verhindert die Ableitung hier).
+-- Konsistenz sichert tests/unit_gamesim.lua.
 local HEALERS = { priest = true, paladin = true, druid = true }
+A.HEALERS = HEALERS
 local MILESTONES = { 0.75, 0.5, 0.25, 0.10 }
 local MILESTONE_LINE = { 7, 8, 9, 10 }
 

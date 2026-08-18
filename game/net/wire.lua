@@ -13,6 +13,7 @@ W.MSG = {
   SET_TARGET = 6, PARAM_SET = 7, ZOOM = 8, ROSTER = 9,
   RENAME = 10, RENAME_RESULT = 11, STATS = 12, REVANCHE = 13,
   QUEST_ACCEPT = 14, RELEASE_SPIRIT = 15, ENGAGE = 16,
+  HEAL_REQUEST = 17,
 }
 
 -- Ereignistypen fuers Netz (Kosmetik-Feed; das JSONL-Log bleibt Host-Sache)
@@ -188,6 +189,17 @@ end
 -- Nahkampf anschalten (Issue #86): Client -> Host, kein Payload
 function W.engage()
   return header(W.MSG.ENGAGE)
+end
+
+-- Klick-Heilung aus der Heil-Leiste (Runde 7, #103): Ziel-Spieler-ID,
+-- reliable. Der Host validiert autoritativ (Heilerklasse, Ziel lebt,
+-- heal_range, GCD/Ressource) und startet den Cast mit explizitem Ziel —
+-- p.target bleibt unberuehrt (GDD 14, Muster SET_TARGET/ENGAGE, ADR-002).
+function W.heal_request(pid)
+  return header(W.MSG.HEAL_REQUEST) .. pack("<B", pid)
+end
+function W.read_heal_request(data, off)
+  return love.data.unpack("<B", data, off)
 end
 
 function W.stats(board)

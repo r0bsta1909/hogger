@@ -31,6 +31,14 @@ Zeitschritt, 1-Byte-Input, Determinismus-Tests.
    den Richtungspfeil). **Zielwahl (Klick/Tab) ist KEIN Input-Bit**, sondern
    eine reliable Nachricht (`SET_TARGET`, Entity-ID) — niederfrequent,
    verlustfrei, kein Platz in der Maske nötig.
+   **Nachtrag Runde 7 (#103):** Die Klick-Heilung aus der Heil-Leiste folgt
+   demselben Muster als `HEAL_REQUEST` (1 Byte Ziel-Spieler-ID, reliable,
+   Vorbild ENGAGE): der Host validiert autoritativ und startet den Heilzauber
+   mit explizit eingefrorenem Ziel, `p.target` bleibt unberührt — dadurch
+   existiert kein Ordnungs-Race zwischen reliable- und Input-Kanal.
+   Verworfen: ein zweiter Ziel-Slot im Input-Byte (alle 8 Bits belegt) und
+   ein clientseitiges "SET_TARGET + verzögerter Fähigkeitsdruck"
+   (Kanal-Reihenfolge nicht garantiert, zwei Wahrheiten für ein Klickziel).
 4. **Snapshots** (ADR-001: 60 Hz Vollzustand, unreliable): Feldliste wird
    gegen den echten State erhoben und per Test erzwungen (Skill §4).
    Übertragen wird, was der Empfänger zeichnet: je Spieler Position

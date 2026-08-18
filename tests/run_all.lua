@@ -63,7 +63,8 @@ local stages = {
            "tests.unit_statboard", "tests.unit_assets", "tests.unit_netguard",
            "tests.unit_fx", "tests.unit_admin",
            "tests.unit_release", "tests.unit_errors", "tests.unit_report",
-           "tests.unit_panel", "tests.unit_raid", "tests.unit_render_order" },
+           "tests.unit_panel", "tests.unit_raid", "tests.unit_render_order",
+           "tests.unit_healbar" },
   determinism = { "tests.determinism" },
 }
 

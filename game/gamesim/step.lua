@@ -372,6 +372,18 @@ local ABILITIES = {
 }
 S.ABILITIES = ABILITIES -- fuer Renderer (Buttons) und Bots
 
+-- Heilerklassen aus den Faehigkeiten ABGELEITET (eine Wahrheit, Runde 7):
+-- Klasse -> Slot ihres Verbuendeten-Zaubers. Ergibt paladin=1, priest=2,
+-- druid=2. announcer.lua fuehrt ein eigenes HEALERS-Set (Require-Zyklus
+-- step->announcer verhindert die Ableitung dort); Konsistenz sichert ein
+-- Unit-Test.
+S.ALLY_SLOT = {}
+for class, specs in pairs(ABILITIES) do
+  for slot, spec in ipairs(specs) do
+    if spec.target == "ally" then S.ALLY_SLOT[class] = slot end
+  end
+end
+
 local function is_mana_class(p)
   return model.classes[p.class].resource == "mana"
 end
@@ -389,30 +401,52 @@ local function ally_target(state, p)
   return p
 end
 
-local function try_ability(state, p, slot, ev)
-  if p.gcd > 0 or p.cast then return end
+-- Heil-Reichweite (Runde 7, GDD 8.1): gilt fuer Verbuendeten-Zauber auf
+-- ANDERE; Selbstheilung hat immer Reichweite 0.
+local function ally_in_range(p, t)
+  if t == p then return true end
+  return world.dist(p.x, p.y, t.x, t.y) <= model.p("heal_range")
+end
+
+-- ally_id: explizites Heilziel aus der Heil-Leiste (S.heal_request);
+-- nil = bisherige Aufloesung ueber p.target mit Selbst-Fallback.
+local function try_ability(state, p, slot, ev, ally_id)
+  if p.gcd > 0 or p.cast then return false end
   local spec = ABILITIES[p.class] and ABILITIES[p.class][slot]
-  if not spec then return end
-  if spec.cd_field and p[spec.cd_field] > 0 then return end
-  if spec.requires_cp and p.cp < 1 then return end
+  if not spec then return false end
+  if spec.cd_field and p[spec.cd_field] > 0 then return false end
+  if spec.requires_cp and p.cp < 1 then return false end
   local cost = spec.cost and model.p(spec.cost) or 0
-  if p.resource < cost then return end
+  if p.resource < cost then return false end
   if spec.target == "enemy" and spec.range
-     and not enemy_in_reach(state, p, model.p(spec.range)) then return end
+     and not enemy_in_reach(state, p, model.p(spec.range)) then return false end
+  local ally
+  if spec.target == "ally" then
+    if ally_id then
+      -- explizites Ziel tot/unbekannt: kein stiller Selbst-Fallback —
+      -- "ich klickte Anna und heilte mich" waere die schlechtere Ueberraschung
+      ally = state.players[ally_id]
+      if not (ally and ally.alive) then return false end
+    else
+      ally = ally_target(state, p)
+    end
+    if not ally_in_range(p, ally) then return false end
+  end
   if p.stealth and spec.id ~= "stealth" then
     set_stealth(state, p, false) -- bricht beim Angriff (GDD 8.2)
   end
   if spec.cast then
     p.cast = { slot = slot, t_left = model.p(spec.cast),
                total = model.p(spec.cast),
-               target = spec.target == "ally" and ally_target(state, p).id or nil }
+               target = spec.target == "ally" and ally.id or nil }
     p.gcd = model.p("gcd")
-    return
+    return true
   end
   spend(state, p, cost)
   if spec.cd_field then p[spec.cd_field] = model.p(spec.cd) end
-  spec.effect(state, p, spec.target == "ally" and ally_target(state, p) or nil, ev)
+  spec.effect(state, p, ally, ev)
   p.gcd = model.p("gcd")
+  return true
 end
 
 local function finish_cast(state, p, ev)
@@ -428,6 +462,9 @@ local function finish_cast(state, p, ev)
   if spec.target == "ally" then
     target = c.target and state.players[c.target] or nil
     if not (target and target.alive) then target = p end
+    -- Ziel waehrend des Casts aus der Heil-Reichweite gelaufen: der Zauber
+    -- verpufft still und KOSTENLOS — wie der enemy-Abbruch darueber (Runde 7)
+    if not ally_in_range(p, target) then return end
   end
   spend(state, p, cost)
   spec.effect(state, p, target, ev)
@@ -863,6 +900,20 @@ function S.engage(state, pid)
   if not p or not p.alive then return false end
   p.attack_on = true
   return true
+end
+
+-- Klick-Heilung aus der Heil-Leiste (Runde 7, GDD 4.3/14): startet den
+-- Verbuendeten-Zauber der eigenen Klasse mit explizitem Ziel, OHNE p.target
+-- anzufassen — der Heiler behaelt sein Kampfziel, kein target_switch-Event.
+-- Alle Pruefungen (GCD, laufender Cast, Ressource, Ziel lebt, heal_range)
+-- erledigt derselbe try_ability-Pfad wie beim Tastendruck. Kein attack_on:
+-- Heilen ist kein Angriff.
+function S.heal_request(state, pid, target_id, ev)
+  local p = state.players[pid]
+  if not p or not p.alive then return false end
+  local slot = S.ALLY_SLOT[p.class]
+  if not slot then return false end
+  return try_ability(state, p, slot, ev, target_id)
 end
 
 -- Questannahme (GDD Kap. 5): ab jetzt darf sich der Spieler bewegen, und
