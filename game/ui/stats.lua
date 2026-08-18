@@ -13,17 +13,17 @@ S.HINT = "Klick zum Schliessen"
 
 -- opts.hold: kein Auto-Ausblenden, aber wegklickbar — die Tafel am Ende der
 -- Endsequenz (Runde 11, #132) ist das letzte Bild und soll auf den Leser
--- warten. opts.sticky: bleibt stehen und laesst sich gar nicht schliessen.
--- opts.buttons: Liste von { id, label } unten mittig; Klick liefert die id.
+-- warten. Die frueheren Knoepfe (REVANCHE / Ausloggen) und der sticky-Modus
+-- sind mit der neuen Endsequenz entfallen (#133): nach dem Fluchbruch fuehrt
+-- kein Weg zurueck ins Spiel, das Menue liegt jetzt auf ESC.
 function S.new(board, opts)
   opts = opts or {}
   return setmetatable({ board = board, t = SHOW_T, visible = true,
-                        sticky = opts.sticky, hold = opts.hold,
-                        buttons = opts.buttons }, S)
+                        hold = opts.hold }, S)
 end
 
 function S:update(dt)
-  if self.sticky or self.hold then
+  if self.hold then
     self.t = math.max(1, self.t) -- volle Deckkraft, kein Auto-Ausblenden
     return
   end
@@ -37,29 +37,12 @@ local function panel_rect(w, h)
   return (w - pw) / 2, (h - ph) / 2, pw, ph
 end
 
--- Rechteck von Knopf i bei n Knoepfen: nebeneinander, mittig unter der Tafel
-local function button_rect(w, h, i, n)
-  local px, py, pw, ph = panel_rect(w, h)
-  local bw, bh, gap = 180, 36, 24
-  local total = n * bw + (n - 1) * gap
-  return px + (pw - total) / 2 + (i - 1) * (bw + gap), py + ph - bh - 14, bw, bh
-end
-
 -- Klick in die Tafel schliesst sie (wegklickbar, GDD 11); mit Knoepfen
 -- (finale Sieg-Tafel) wirken nur die Knoepfe — Rueckgabe deren id
 function S:mousepressed(mx, my)
   if not self.visible then return false end
   local w, h = love.graphics.getDimensions()
   local px, py, pw, ph = panel_rect(w, h)
-  if self.buttons then
-    for i, b in ipairs(self.buttons) do
-      local bx, by, bw2, bh2 = button_rect(w, h, i, #self.buttons)
-      if mx >= bx and mx <= bx + bw2 and my >= by and my <= by + bh2 then
-        return b.id
-      end
-    end
-    return mx >= px and mx <= px + pw and my >= py and my <= py + ph
-  end
   if mx >= px and mx <= px + pw and my >= py and my <= py + ph then
     self.visible = false
     return true
@@ -69,7 +52,7 @@ end
 
 function S:keypressed(key)
   if not self.visible then return false end
-  if key == "escape" and not self.sticky then
+  if key == "escape" then
     self.visible = false
     return true
   end
@@ -122,7 +105,7 @@ function S:draw()
 
   -- Titelzeilen unten
   if #b.titles > 0 then
-    local bottom_off = self.buttons and 60 or 18
+    local bottom_off = 18
     local ty = py + ph - bottom_off - #b.titles * line_h
     love.graphics.setColor(0.6, 0.56, 0.45, a)
     love.graphics.print("Titel des Trys", lx, ty - line_h)
@@ -132,31 +115,14 @@ function S:draw()
     end
   end
 
-  -- Knoepfe der finalen Tafel: REVANCHE + Ausloggen (GDD 11 / #85)
-  if self.buttons then
-    for i, b in ipairs(self.buttons) do
-      local bx, by, bw2, bh2 = button_rect(w, h, i, #self.buttons)
-      love.graphics.setColor(0.45, 0.12, 0.10, a)
-      love.graphics.rectangle("fill", bx, by, bw2, bh2, 5, 5)
-      love.graphics.setColor(0.95, 0.75, 0.3, a)
-      love.graphics.setLineWidth(2)
-      love.graphics.rectangle("line", bx, by, bw2, bh2, 5, 5)
-      love.graphics.setLineWidth(1)
-      love.graphics.setColor(0.98, 0.92, 0.75, a)
-      love.graphics.print(b.label,
-        bx + bw2 / 2 - font:getWidth(b.label), by + 6, 0, 2, 2)
-    end
-  else
-    -- Hinweis unten rechts (Runde 10, #126): dass ein Klick die Tafel
-    -- schliesst, stand nirgends. Muster wie ui/victory.lua und ui/boot.lua,
-    -- zusaetzlich mit dem Ausblend-Alpha multipliziert — sonst bliebe der
-    -- Hinweis beim Ausfaden stehen. Nicht auf der klebrigen Sieg-Tafel:
-    -- die soll bewusst stehenbleiben und hat ihre eigenen Knoepfe.
-    love.graphics.setColor(0.6, 0.56, 0.45,
-      a * (0.6 + 0.3 * math.sin(self.t * 3)))
-    love.graphics.print(S.HINT,
-      px + pw - font:getWidth(S.HINT) - 14, py + ph - 22)
-  end
+  -- Hinweis unten rechts (Runde 10, #126): dass ein Klick die Tafel
+  -- schliesst, stand nirgends. Muster wie ui/victory.lua und ui/boot.lua,
+  -- zusaetzlich mit dem Ausblend-Alpha multipliziert — sonst bliebe der
+  -- Hinweis beim Ausfaden stehen.
+  love.graphics.setColor(0.6, 0.56, 0.45,
+    a * (0.6 + 0.3 * math.sin(self.t * 3)))
+  love.graphics.print(S.HINT,
+    px + pw - font:getWidth(S.HINT) - 14, py + ph - 22)
 end
 
 return S

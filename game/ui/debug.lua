@@ -27,6 +27,11 @@ function D:keypressed(key)
     return "intro"  -- Boot + Quest des Echos noch einmal (Issue #36)
   elseif key == "z" then
     return "realm"  -- kompletter Neustart des Realms (Issue #36)
+  elseif key == "v" then
+    -- Werkzeug (Runde 11, #133): setzt den Realm nach dem Fluchbruch zurueck,
+    -- damit die Endsequenz testbar ist, ohne die Anwendung neu zu starten.
+    -- Im Spiel selbst gibt es keinen Weg zurueck mehr.
+    return "revanche"
   elseif key == "t" then
     return "teleport" -- sofort als Zufallsklasse vor Hogger (Issue #100)
   elseif key == "d" then
@@ -78,6 +83,7 @@ function D:draw(info)
     "[K] Hogger sofort toeten (Host)   [R] Quest des Echos noch einmal",
     "[Z] Neuer Realm (frischer Abend, Quest, Leeroy wartet wieder)",
     "[T] Teleport vor Hogger als Zufallsklasse (Host, Testhilfe)",
+    "[V] Nach dem Fluchbruch zurueck in den Try (Host, Testhilfe)",
     "[D] HUD-Dock (Standard AN, Debug-Rueckweg): "
       .. (info.docked and "AN" or "aus"),
     "[B/G/J] +1/+5/+10 Bots (Host; zaehlen voll ab dem naechsten Try)",
