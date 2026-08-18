@@ -182,6 +182,8 @@ local function reset_hogger(state)
     charge = nil,           -- { target, t_left } (Anlauf/Telegraph)
     slow_until = 0,
     out_of_leash_t = 0,
+    no_contact_t = 0,       -- Kein-Kontakt-Uhr (Runde 9, #117)
+    reset_cause = nil,      -- "leash" | "no_contact", solange der Try endet
     bleed_targets = nil,
   }
 end

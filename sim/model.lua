@@ -38,6 +38,12 @@ M.params = {
   hogger_aggro_radius    = p(250, 100, 500, 10, "9.1"),
   hogger_leash_radius    = p(600, 300, 1200, 25, "9.2"),
   hogger_leash_hysteresis= p(2.0, 0, 5, 0.5, "9.1"),
+  -- Kein-Kontakt-Reset (Runde 9, #117): kommt Hogger im Kampf so lange an
+  -- kein Ziel heran, setzt er zurueck und der Try gilt als abgebrochen.
+  -- 20 s statt knapper Werte: ein verlangsamter Hogger (Frostruestung)
+  -- braucht bis zu 10,3 s quer durch seine eigene Leash-Zone.
+  -- Die Uhr laeuft NUR im Kampf und NUR bei lebenden Zielen (GDD 9.1).
+  hogger_no_contact_reset= p(20, 5, 120, 1, "9.1"),
   hogger_slice_dmg       = p(15, 5, 30, 1, "9.2"),
   hogger_slice_bleed_dmg = p(5, 0, 15, 1, "9.2"),
   hogger_slice_bleed_interval = p(2.0, 0.5, 4.0, 0.5, "9.2"),

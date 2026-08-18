@@ -824,3 +824,164 @@ do
   T.ok(fb_self, "heal: totes Ziel -> Selbstheilung am Cast-Ende (Bestand)")
   T.ok(pr.hp > fb_hp0, "heal: Fallback-Heilung wirkt")
 end
+
+-- Runde 9 (#117): Reset beendet und wertet den Try -------------------------
+-- Aufbau: ein lebender Kaempfer mit Bedrohung, Hogger im Kampf. Wo die
+-- Kein-Kontakt-Uhr isoliert getestet wird, pinnen wir Hogger auf den
+-- Huegel, damit der Leash nicht dazwischenfunkt.
+local function reset_world(opts)
+  opts = opts or {}
+  local st = world.new(7)
+  if opts.leeroy then world.add_leeroy(st) end
+  for i = 1, (opts.n or 1) do
+    world.add_player(st, "k" .. i, { quest_done = true })
+  end
+  world.begin_try(st, {})
+  local h = st.hogger
+  h.state = "combat"
+  for _, p in ipairs(st.players) do
+    p.alive, p.ghost, p.class = true, false, "warrior"
+    p.hp, p.max_hp = 80, 80
+    p.x, p.y = map.hill.x + 300, map.hill.y -- weit weg = kein Kontakt
+    h.threat[p.id] = 5
+  end
+  return st, h
+end
+
+local function tick_n(st, secs)
+  for _ = 1, math.ceil(secs / model.TICK_DT) do step.step(st, {}) end
+end
+
+do -- Uhr steht bei totem Raid: die Attrition bleibt (GDD 13.1)
+  local st, h = reset_world({ n = 3 })
+  for _, p in ipairs(st.players) do p.alive = false end
+  h.hp = h.max_hp * 0.5
+  local hp0, try0 = h.hp, st.try_nr
+  tick_n(st, 40)
+  T.eq(st.try_nr, try0, "reset: toter Raid bricht den Try NICHT ab")
+  T.eq(st.hogger.hp, hp0, "reset: toter Raid laesst Hoggers HP stehen")
+  T.eq(st.hogger.no_contact_t, 0, "reset: Uhr steht bei totem Raid")
+end
+
+do -- Uhr steht vor dem ersten Kontakt (Hogger patrouilliert)
+  local st, h = reset_world({ n = 1 })
+  h.state = "idle"
+  h.threat = {}
+  local try0 = st.try_nr
+  tick_n(st, 40)
+  T.eq(st.try_nr, try0, "reset: idle-Hogger bricht keinen Try ab")
+end
+
+do -- Kiting bricht ab: Try gewertet, Zaehler +1, Hogger voll am Huegel
+  local st, h = reset_world({ n = 1 })
+  h.hp = h.max_hp * 0.42
+  local try0, max0 = st.try_nr, h.max_hp
+  local seen_reset, cause, board, endval
+  for _ = 1, math.ceil((model.p("hogger_no_contact_reset") * 2) / model.TICK_DT) do
+    st.hogger.x, st.hogger.y = map.hill.x, map.hill.y -- Leash isolieren
+    for _, p in ipairs(st.players) do
+      p.x, p.y = map.hill.x + 300, map.hill.y
+      p.alive, p.hp = true, 80 -- am Leben halten: ein toter Raid haelt die Uhr an
+      st.hogger.threat[p.id] = 5
+    end
+    local evs = step.step(st, {})
+    for _, e in ipairs(evs) do
+      if e.ev == "hogger_reset" then seen_reset, cause = true, e.dst end
+      if e.ev == "try_end" then board, endval = e.board, e.val end
+    end
+    if seen_reset then break end
+  end
+  T.ok(seen_reset, "reset: Kein-Kontakt loest den Abbruch aus")
+  T.eq(cause, "no_contact", "reset: Ursache im Event")
+  T.eq(st.try_nr, try0 + 1, "reset: Try-Zaehler tickt")
+  T.eq(endval, 0, "reset: try_end wird als Wipe gewertet (val 0)")
+  T.ok(board and board.big == "Er hatte noch 42 %.",
+    "reset: Tafel zeigt die Rest-HP VOR dem Full Heal ("
+      .. tostring(board and board.big) .. ")")
+  T.eq(st.hogger.hp, max0, "reset: neuer Try startet mit vollen HP")
+  T.near(st.hogger.x, map.hill.x, "reset: Hogger steht wieder am Huegel")
+  T.ok(st.clock < 1, "reset: die Uhr des neuen Trys laeuft frisch")
+  T.eq(st.hogger.reset_cause, nil, "reset: Ursache ist zurueckgesetzt")
+  T.eq(st.hogger.no_contact_t, 0, "reset: Uhr ist zurueckgesetzt")
+  T.eq(#st.corpses, 0, "reset: neuer Try ohne Leichen")
+  T.eq(st.stats.hogger.dmg, 0, "reset: neuer Try mit frischen Statistiken")
+end
+
+do -- Leash-Reset beendet den Try ebenfalls
+  local st, h = reset_world({ n = 1 })
+  local try0 = st.try_nr
+  local cause
+  for _ = 1, math.ceil((model.p("hogger_leash_hysteresis") + 0.5) / model.TICK_DT) do
+    st.hogger.x = map.hill.x + model.p("hogger_leash_radius") + 100
+    st.hogger.y = map.hill.y
+    for _, p in ipairs(st.players) do
+      p.x, p.y = st.hogger.x, st.hogger.y
+      p.alive, p.hp = true, 80 -- sonst geht Hogger auf idle und leasht nie
+      st.hogger.threat[p.id] = 5
+    end
+    local evs = step.step(st, {})
+    for _, e in ipairs(evs) do
+      if e.ev == "hogger_reset" then cause = e.dst end
+    end
+    if cause then break end
+  end
+  T.eq(cause, "leash", "reset: Leash meldet seine eigene Ursache")
+  T.eq(st.try_nr, try0 + 1, "reset: Leash beendet den Try")
+end
+
+do -- Kontakt stellt die Uhr zurueck
+  local st, h = reset_world({ n = 1 })
+  local limit = model.p("hogger_no_contact_reset")
+  for _ = 1, math.ceil((limit - 2) / model.TICK_DT) do
+    st.hogger.x, st.hogger.y = map.hill.x, map.hill.y
+    for _, p in ipairs(st.players) do
+      p.x, p.y = map.hill.x + 300, map.hill.y
+      p.alive, p.hp = true, 80
+      st.hogger.threat[p.id] = 5
+    end
+    step.step(st, {})
+  end
+  T.ok(st.hogger.no_contact_t > 1, "reset: Uhr laeuft beim Kiten ("
+    .. string.format("%.1f", st.hogger.no_contact_t) .. " s)")
+  st.players[1].x, st.players[1].y = st.hogger.x, st.hogger.y
+  step.step(st, {})
+  T.eq(st.hogger.no_contact_t, 0, "reset: Kontakt stellt die Uhr zurueck")
+end
+
+do -- Kein Abbruch waehrend Fressen oder Charge
+  local st, h = reset_world({ n = 1 })
+  h.eating = { phase = "channel", t_left = 999, corpse = 1,
+               hitters = {}, hitter_count = 0, dmg_accum = 0 }
+  local try0 = st.try_nr
+  tick_n(st, 40)
+  T.eq(st.hogger.no_contact_t, 0, "reset: Fressen zaehlt als Kontakt")
+  T.eq(st.try_nr, try0, "reset: kein Abbruch waehrend des Fressens")
+
+  local st2, h2 = reset_world({ n = 1 })
+  h2.charge = { target = st2.players[1].id, t_left = 999 }
+  local try2 = st2.try_nr
+  tick_n(st2, 40)
+  T.eq(st2.hogger.no_contact_t, 0, "reset: Charge zaehlt als Kontakt")
+  T.eq(st2.try_nr, try2, "reset: kein Abbruch waehrend der Charge")
+end
+
+do -- Leeroy allein haelt die Uhr nicht am Laufen, in Schlagweite aber schon
+  local st, h = reset_world({ leeroy = true, n = 1 })
+  for _, p in ipairs(st.players) do
+    if not p.is_leeroy then p.alive = false end
+  end
+  local try0 = st.try_nr
+  tick_n(st, 40)
+  T.eq(st.try_nr, try0, "reset: Leeroy allein bricht keinen Try ab")
+  T.eq(st.hogger.no_contact_t, 0, "reset: Uhr steht bei nur lebendem Leeroy")
+end
+
+do -- Sieg schlaegt Abbruch
+  local st, h = reset_world({ n = 1 })
+  h.hp = 0
+  h.reset_cause = "no_contact"
+  local try0 = st.try_nr
+  step.step(st, {})
+  T.eq(st.phase, "won", "reset: der Sieg gewinnt gegen den Abbruch")
+  T.eq(st.try_nr, try0, "reset: der Siegtry wird nicht neu gestartet")
+end
