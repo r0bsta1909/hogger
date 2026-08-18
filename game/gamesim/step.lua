@@ -21,7 +21,9 @@ S.ICON_RADIUS = ICON_RADIUS -- der Renderer beschriftet den Balken damit
 -- ---------------------------------------------------------------------------
 local WON_MERGE_START = 8.0   -- Leeroys Koerper setzt sich in Bewegung
 local WON_MERGE_END   = 10.0  -- er ist im Echo aufgegangen
-local WON_EXIT        = 25.0  -- Blase bricht ab, Icon weg ("ausgeloggt")
+-- Der Abgang liegt bewusst 3,5 s nach der letzten Zeile: das abgebrochene
+-- "mit ALT+F..." muss lesbar sein, bevor es sich selbst beantwortet.
+local WON_EXIT        = 26.0  -- Blase bricht ab, Icon weg ("ausgeloggt")
 -- Leeroys letzter Monolog (GDD 11): Zeit -> Zeilen-ID in lines.lua
 local WON_LINES = {
   { 10.5, 31 }, { 13.5, 32 }, { 16.5, 33 }, { 19.5, 34 }, { 22.5, 35 },

@@ -64,6 +64,17 @@ T.ok(names.ECHO ~= names.LEEROY, "Echo und Raid-Leeroy sind zwei Figuren")
 T.ok(names.ECHO:find("[\128-\255]") == nil, "Name ist ASCII (Spielcode-Konvention)")
 T.ok(#names.LEEROY_LEFT > 0 and names.LEEROY_LEFT:find("[\128-\255]") == nil,
   "Systemnachricht der Endsequenz ist da und ASCII")
+
+-- Mit der Verschmelzung heilt der Name (GDD 11): aus dem doppelten wird
+-- wieder der eine, und genau der verlaesst dann das Spiel.
+T.eq(names.echo_name(0), names.ECHO, "waehrend des Trys der doppelte Name")
+T.eq(names.echo_name(1), names.ECHO, "versammelt: noch doppelt")
+T.eq(names.echo_name(2), names.ECHO, "waehrend der Verschmelzung noch doppelt")
+T.eq(names.echo_name(3), names.WHOLE, "verschmolzen: wieder einer")
+T.eq(names.echo_name(4), names.WHOLE, "beim Abgang: wieder einer")
+T.eq(names.WHOLE, "Leeroy Jenkins", "der ganze Name ist der aus der Legende")
+T.ok(names.LEEROY_LEFT:find(names.WHOLE, 1, true) == 1,
+  "die Systemnachricht meldet genau diesen Namen")
 do
   local erklaert = false
   for _, s in ipairs(quest.BODY or {}) do

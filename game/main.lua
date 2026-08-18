@@ -375,8 +375,10 @@ local function process_cosmetics(view)
       if text then
         app.render:announce((lid == 1 and "Leeroy: " or "Echo: ") .. text, 4)
         -- Der letzte Monolog haengt zusaetzlich als Sprechblase an der
-        -- verschmolzenen Figur (Endsequenz, GDD 11 / #132)
-        if lid >= 31 then app.render:bubble(text, 3.0) end
+        -- verschmolzenen Figur (Endsequenz, GDD 11 / #132). 3,5 s statt der
+        -- 3 s Zeilenabstand: die letzte Blase steht damit bis zum Abgang und
+        -- wird von ihm abgeschnitten, statt vorher still zu verpuffen.
+        if lid >= 31 then app.render:bubble(text, 3.5) end
       end
       if lid == 1 then
         audio.play("snd_leeroy_scream") -- kartenweit: DAS Startsignal (Nr. 16)
