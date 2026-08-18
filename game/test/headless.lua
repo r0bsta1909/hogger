@@ -227,6 +227,12 @@ function T.run()
            or clients[1].stats_board.header:find("SIEG") ~= nil,
           "Statistik-Tafel: Wipe-Pointe oder Siegkopf")
       end
+      -- Der Hinweis, dass ein Klick die Tafel schliesst (Runde 10, #126):
+      -- vorhanden und ASCII (Umlaut-Konvention des UI)
+      local hint = require("game.ui.stats").HINT
+      ok(type(hint) == "string" and #hint > 0, "Statistik-Tafel: Hinweistext da")
+      ok(hint and hint:find("[\128-\255]") == nil,
+        "Statistik-Tafel: Hinweistext ist ASCII")
     end
 
     -- Invarianten je Tick (GDD 17.7 Stufe 4)
