@@ -87,7 +87,7 @@ M.patrol = {
 -- Fluss-Linie am Suedrand (GDD 7.1); Murlocs spawnen nur hier
 M.RIVER_Y = 1900
 
--- Mob-Spawn-Punkte (GDD 7.2): weit verstreut, ausserhalb der Leash-Zone,
+-- Mob-Spawn-Punkte (GDD 7.2): weit verstreut, ausserhalb der Huegelzone,
 -- nie auf der Friedhof-Huegel-Achse; Reihenfolge = Slot-Aktivierung
 -- (model.mob_slots(N) aktiviert die ersten k). Ein Unit-Test erzwingt
 -- die Platzierungsregeln.
@@ -164,7 +164,7 @@ function M.zone_at(x, y)
     return "Friedhof von Elwynn"
   end
   if d2(x, y, f.x, f.y) < 300 * 300 then return "Wiederbelebungsfeld" end
-  if d2(x, y, M.hill.x, M.hill.y) < (model.p("hogger_leash_radius")) ^ 2 then
+  if d2(x, y, M.hill.x, M.hill.y) < (model.p("hogger_zone_radius")) ^ 2 then
     return "Hogger Hill"
   end
   return "Der Elwynn-Pfad"

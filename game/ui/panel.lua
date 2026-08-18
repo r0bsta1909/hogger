@@ -54,7 +54,7 @@ P.KAT_ORDER, P.KAT_NAME = KAT_ORDER, KAT_NAME
 
 -- Kategorie-Erklaerung fuer den Hover auf der Einstiegsebene (Runde 9)
 local KAT_DESC = {
-  hogger = "Alles am Boss: Schaden, Tempo, Fressen, Leash, Adds, HP-Formel.",
+  hogger = "Alles am Boss: Schaden, Tempo, Fressen, Revier, Adds, HP-Formel.",
   spieler = "Was fuer jede Klasse gilt: Tempo, Reichweiten, HP, Ressourcen.",
   klassen = "Die Faehigkeiten der acht Klassen: Schaden, Kosten, Zauberzeit.",
   mobs = "Ambient-Mobs am Wegesrand plus Erfahrung und Plunder.",

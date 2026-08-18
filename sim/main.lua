@@ -75,6 +75,8 @@ if not opts.sweep then
     s.eat_channels / s.runs,
     pct(s.eat_interrupted / math.max(1, s.eat_channels))))
   io.write(string.format("  Charges          %.1f/Lauf\n", s.charges / s.runs))
+  io.write(string.format("  Abbrueche        %d von %d Laeufen (Kein-Kontakt)\n",
+    s.resets, s.runs))
   if s.diag then
     io.write(string.format("  Lebensdauer am Boss (Mittel) %.1f s (GDD-Modell: 5-15 s)\n",
       s.diag.mean_life))

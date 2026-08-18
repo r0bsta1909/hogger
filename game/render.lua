@@ -1024,7 +1024,7 @@ function R:draw(view, ui)
 
   -- Hogger-Tracker (Runde 8, #108): dezentes Medaillon am Innenrand des
   -- Rings in Hoggers Richtung, solange er ausserhalb des sichtbaren
-  -- Kreises liegt und lebt — auch im Leash-Rueckweg. Kein Blinken.
+  -- Kreises liegt und lebt — auch wenn er weit draussen kaempft. Kein Blinken.
   if view.hogger and (view.hogger.hp or 0) > 0 then
     local ex, ey = R.edge_pos(view.me_x, view.me_y,
       view.hogger.x, view.hogger.y, self:zoom_radius(), L)

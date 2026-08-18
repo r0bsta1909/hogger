@@ -120,6 +120,14 @@ local function hogger_damage_player(state, p, amount, kind, ev)
   if p.hp <= 0 then kill_player(state, p, ev, crit, CAUSE[kind]) end
 end
 
+-- Hogger nimmt Kontakt auf (Runde 10, #124): Uhr auf 0, Try als angefangen
+-- markieren. Jeder Treffer haelt ihn im Kampf — genau das erlaubt das Kiten.
+local function hogger_engage(h)
+  h.engaged = true
+  h.no_contact_t = 0
+  if h.state == "idle" then h.state = "combat" end
+end
+
 local function player_damage_hogger(state, p, amount, kind, ev)
   local h = state.hogger
   if h.hp <= 0 or h.state == "reset" then return end
@@ -134,7 +142,7 @@ local function player_damage_hogger(state, p, amount, kind, ev)
   if sp then sp.dmg = sp.dmg + amount end
   local tf = p.is_leeroy and model.p("leeroy_threat_factor") or 1 -- GDD 10.3
   h.threat[p.id] = (h.threat[p.id] or 0) + model.threat_for(amount, false) * tf
-  if h.state == "idle" then h.state = "combat" end
+  hogger_engage(h)
   -- Fress-Unterbrechung (GDD 9.2): verschiedene Spieler ODER Schadensschwelle
   if h.eating and h.eating.phase == "channel" then
     local e = h.eating
@@ -837,7 +845,7 @@ local function npc_tick(state, npc, ev)
     local sp = stat_p(state, owner.id) -- Wichtel-Schaden zaehlt dem Meister
     if sp then sp.dmg = sp.dmg + dmg end
     h.threat[npc.id] = (h.threat[npc.id] or 0) + dmg
-    if h.state == "idle" then h.state = "combat" end
+    hogger_engage(h)
     -- Fress-Schwelle: Schaden zaehlt, der Wichtel ist aber kein
     -- "verschiedener Spieler" (GDD 9.2)
     if h.eating and h.eating.phase == "channel" then
@@ -989,31 +997,35 @@ local function hogger_try_eat(state, ev)
   return false
 end
 
--- Kein-Kontakt-Uhr (Runde 9, #117, GDD 9.1): laeuft NUR im Kampf und NUR,
--- solange lebende, nicht verstohlene Spieler da sind, die Hogger nicht
--- erreicht. Ein toter Raid haelt sie an — sonst wuerde Hogger nach jedem
--- Wipe voll heilen und das Attrition-Modell (GDD 13.1) kippen.
+-- Kein-Kontakt-Uhr (Runde 10, #124, GDD 9.1) — die EINZIGE Reset-Regel.
+-- Hogger trabt heim, wenn er so lange weder ein lebendes Ziel erreicht NOCH
+-- Spielerschaden genommen hat. Kiten ist damit ausdruecklich erlaubt, solange
+-- man ihn trifft (Rob, Playtest-Runde 10); der frueher an den Huegel gehaengte
+-- Leash ist ersatzlos weg — er riss Trys am Wiederbelebungsfeld auseinander.
+-- Die Uhr laeuft auch bei totem Raid weiter: der Nachschub hat eine
+-- Gnadenfrist (Todesstrafe 24 s < Uhr 30 s), sonst ist der Try gelaufen.
 -- Rueckgabe: true = Abbruchschwelle erreicht.
 local function hogger_no_contact(state)
   local h = state.hogger
-  -- Ausser Kampf gibt es nichts abzubrechen: Uhr zurueck.
-  if h.state ~= "combat" then
+  -- Vor dem ersten Aggro des Trys patrouilliert er nur — nichts abzubrechen.
+  if not h.engaged then
     h.no_contact_t = 0
     return false
   end
-  -- Beschaeftigt (Fressen/Charge) PAUSIERT die Uhr, setzt sie aber NICHT
-  -- zurueck: sonst koennte eine Charge alle 10 s den 20-s-Abbruch ewig
-  -- verhindern, und Kiten waere nicht mehr abbrechbar.
-  if h.eating or h.charge then return false end
+  -- Die Charge PAUSIERT die Uhr (kurzer Anlauf auf ein konkretes Ziel), setzt
+  -- sie aber NICHT zurueck: sonst verhinderte eine Charge alle 10 s den
+  -- Abbruch dauerhaft. Fressen pausiert seit Runde 10 NICHT mehr — jeder
+  -- Treffer stellt die Uhr ohnehin auf 0, und Fresskanaele haetten die Frist
+  -- sonst unvorhersehbar gedehnt (der Wert im Panel soll stimmen).
+  if h.charge then return false end
   local reach = model.p("melee_range")
-  local any_alive, contact = false, false
+  local contact = false
   for _, p in ipairs(state.players) do
-    if p.alive and not p.stealth then
-      -- Leeroy haelt die Uhr nicht am Laufen (er lebt und stirbt in
-      -- Dauerschleife und zaehlt nie in N, GDD 6/10) — aber wenn er in
-      -- Schlagweite steht, findet der Kampf statt.
-      if not p.is_leeroy then any_alive = true end
-      if world.dist(p.x, p.y, h.x, h.y) <= reach then contact = true break end
+    -- Leeroy zaehlt hier mit: steht er in Schlagweite, findet Kampf statt.
+    if p.alive and not p.stealth
+       and world.dist(p.x, p.y, h.x, h.y) <= reach then
+      contact = true
+      break
     end
   end
   if not contact and state.npcs then
@@ -1025,7 +1037,7 @@ local function hogger_no_contact(state)
       end
     end
   end
-  if contact or not any_alive then
+  if contact then
     h.no_contact_t = 0
     return false
   end
@@ -1033,7 +1045,17 @@ local function hogger_no_contact(state)
   return h.no_contact_t >= model.p("hogger_no_contact_reset")
 end
 
--- Reset (Leash oder Kein-Kontakt): beendet den Try. Der Full Heal passiert
+-- Lebt ueberhaupt noch jemand aus dem Raid? Entscheidet nur, wie der Abbruch
+-- auf der Statistik-Tafel heisst ("Der Raid lag zu lange" vs. "niemanden
+-- erreicht") — Leeroy zaehlt nie mit (GDD 6/10).
+local function raid_alive(state)
+  for _, p in ipairs(state.players) do
+    if p.alive and not p.is_leeroy then return true end
+  end
+  return false
+end
+
+-- Reset (Kein-Kontakt): beendet den Try. Der Full Heal passiert
 -- bewusst NICHT hier, sondern erst in world.begin_try — sonst zeigte die
 -- Statistik-Tafel immer "Er hatte noch 100 %." (Runde 9, #117)
 local function hogger_reset(state, cause)
@@ -1058,9 +1080,10 @@ local function hogger_tick(state, ev)
   if h.state == "reset" then return end
 
   -- Kein-Kontakt-Abbruch VOR Fress- und Charge-Block: beide returnen frueh,
-  -- die Uhr muss aber in jedem Tick gestellt werden (Runde 9, #117)
+  -- die Uhr muss aber in jedem Tick gestellt werden (Runde 9, #117).
+  -- Die Ursache trennt nur die Tafeltexte (Runde 10, #124).
   if hogger_no_contact(state) then
-    hogger_reset(state, "no_contact")
+    hogger_reset(state, raid_alive(state) and "no_contact" or "wipe")
     return
   end
 
@@ -1110,7 +1133,7 @@ local function hogger_tick(state, ev)
     end
   end
 
-  -- Charge-Anlauf laeuft (Leash-Pruefung waehrenddessen ausgesetzt, GDD 9.1)
+  -- Charge-Anlauf laeuft (pausiert die Kein-Kontakt-Uhr, GDD 9.1)
   if h.charge then
     h.charge.t_left = h.charge.t_left - DT
     local target = state.players[h.charge.target]
@@ -1146,6 +1169,9 @@ local function hogger_tick(state, ev)
     for _, p in ipairs(state.players) do
       if p.alive and world.dist(p.x, p.y, h.x, h.y) <= model.p("hogger_aggro_radius") then
         h.state = "combat"
+        -- Naehe startet den Try, stellt die Uhr aber NICHT zurueck: dafuer
+        -- muss man ihn erreichen oder treffen (Runde 10, #124).
+        h.engaged = true
         h.threat[p.id] = math.max(h.threat[p.id] or 0, 0.1)
         break
       end
@@ -1157,16 +1183,9 @@ local function hogger_tick(state, ev)
   end
 
   -- KAMPF ----------------------------------------------------------------
-  -- Leash (Hysterese 2 s; GDD 9.1)
-  if world.dist(h.x, h.y, map.hill.x, map.hill.y) > model.p("hogger_leash_radius") then
-    h.out_of_leash_t = h.out_of_leash_t + DT
-    if h.out_of_leash_t >= model.p("hogger_leash_hysteresis") then
-      hogger_reset(state, "leash")
-      return
-    end
-  else
-    h.out_of_leash_t = 0
-  end
+  -- Kein Leash mehr (Runde 10, #124): Hogger verfolgt ohne Distanzgrenze,
+  -- gestoppt nur von der Kein-Kontakt-Uhr oben und der Friedhofssperre in
+  -- hogger_move_towards. Wer ihn wegzieht, muss ihn treffen.
 
   local target, in_melee = pick_hogger_target(state)
   if not target then
@@ -1176,13 +1195,17 @@ local function hogger_tick(state, ev)
     return
   end
 
-  -- Charge: weitestes Ziel mit Bedrohung innerhalb des Leash-Radius (GDD 9.2)
+  -- Charge: weitestes Ziel mit Bedrohung in seinem Revier — gemessen AB
+  -- HOGGER (Runde 10, #124). Frueher ab dem Huegel: dann waere ein Kiter
+  -- weit draussen nie Charge-Ziel und Hogger haette gegen ihn kein Mittel.
+  -- sim/engine.lua misst mit p.d schon immer ab Hogger — jetzt sind Spiel
+  -- und Sim dieselbe Physik. (GDD 9.2)
   if h.charge_cd <= 0 then
     local far, far_d = nil, 0
     for _, p in ipairs(state.players) do
       local th = h.threat[p.id]
       if p.alive and not p.stealth and th and th > 0
-         and world.dist(p.x, p.y, map.hill.x, map.hill.y) <= model.p("hogger_leash_radius") then
+         and world.dist(p.x, p.y, h.x, h.y) <= model.p("hogger_zone_radius") then
         local d = world.dist(p.x, p.y, h.x, h.y)
         if d > far_d then far, far_d = p, d end
       end

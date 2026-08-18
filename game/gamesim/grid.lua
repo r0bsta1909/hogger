@@ -1,7 +1,7 @@
 -- game/gamesim/grid.lua — Begehbarkeits-Grid + A* (GDD Kap. 14).
 -- 32-px-Zellen aus der Kartendatei; deterministisch (feste Nachbar-
 -- Reihenfolge, keine pairs()-Iteration). Pfadglaettung per String-Pulling.
--- Nutzer: Leeroy (Anmarsch/Geisterlauf), Hoggers Leash-Rueckweg, Mob-Leash.
+-- Nutzer: Leeroy (Anmarsch/Geisterlauf) und der Mob-Leash an den Spawn.
 -- Die Karte hat derzeit keine blockierende Geometrie — das Grid ist die
 -- Infrastruktur, die bei kuenftigen Hindernissen (Modus 2) sofort traegt;
 -- der Erreichbarkeits-Test (Stufe 1) haelt die Zusage maschinell.

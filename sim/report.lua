@@ -20,7 +20,7 @@ function R.summarize(results)
     durations = {}, win_durations = {},
     uptime_sum = 0, deaths_sum = 0,
     eat_channels = 0, eat_interrupted = 0, eat_completed = 0,
-    charges = 0, crit_kills = 0,
+    charges = 0, crit_kills = 0, resets = 0,
     wins_without_interrupt = 0, runs_without_interrupt = 0,
     class_wins = {},
   }
@@ -40,6 +40,7 @@ function R.summarize(results)
     s.eat_completed = s.eat_completed + r.c.eat_completed
     s.charges = s.charges + r.c.charges
     s.crit_kills = s.crit_kills + r.c.crit_kills
+    s.resets = s.resets + (r.c.resets or 0) -- Kein-Kontakt-Abbrueche (Runde 10)
     if r.c.eat_interrupted == 0 then
       s.runs_without_interrupt = s.runs_without_interrupt + 1
       if r.win then s.wins_without_interrupt = s.wins_without_interrupt + 1 end
