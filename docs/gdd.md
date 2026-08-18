@@ -50,7 +50,7 @@ Leeroy erinnert sich nur an den Charge in die Welpen und den Wipe; danach taucht
 
 ## 3. Boot-Sequenz: Der falsche Client
 
-Ablauf beim Start von `WoW.exe` (Gesamtdauer ≤ 20 s, ab dem zweiten Start pro Rechner per Klick überspringbar bis zum Glitch-Ende):
+Ablauf beim Start von `WoW.exe` (Gesamtdauer ≤ 20 s, ab dem zweiten Start pro Rechner per Klick überspringbar bis zum Glitch-Ende). **Seit Runde 8 (#111) heißt die ausgelieferte Windows-exe tatsächlich `wow.exe`** — Taskleisten-Name „World of Warcraft", im Datei-Eigenschaften-Dialog steht ehrlich „Hogger muss sterben":
 
 1. **Fenster öffnet mit Original-Ladescreen** (Vanilla-Splash), dazu die ersten Sekunden der Login-Musik.
 2. Optional einmal pro Client pro Abend: kurzer Einblendungs-Gag "Position in der Warteschlange: 1 — Geschätzte Wartezeit: 4 Stunden" (1,5 s).
