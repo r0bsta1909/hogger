@@ -29,6 +29,8 @@ function D:keypressed(key)
     return "realm"  -- kompletter Neustart des Realms (Issue #36)
   elseif key == "t" then
     return "teleport" -- sofort als Zufallsklasse vor Hogger (Issue #100)
+  elseif key == "d" then
+    return "dock"   -- HUD-Andock-Vorschau umschalten (M12)
   elseif key == "+" or key == "kp+" then
     return { volume = 0.1 } -- Lautstaerke lebt hier (GDD 4.4)
   elseif key == "-" or key == "kp-" then
@@ -54,7 +56,7 @@ end
 function D:draw(info)
   if not self.visible then return end
   local w = love.graphics.getWidth()
-  local pw, ph = 500, 322
+  local pw, ph = 500, 344
   local px, py = 24, 60
   love.graphics.setColor(0.05, 0.06, 0.09, 0.94)
   love.graphics.rectangle("fill", px, py, pw, ph, 4, 4)
@@ -70,6 +72,8 @@ function D:draw(info)
     "[K] Hogger sofort toeten (Host)   [R] Quest des Echos noch einmal",
     "[Z] Neuer Realm (frischer Abend, Quest, Leeroy wartet wieder)",
     "[T] Teleport vor Hogger als Zufallsklasse (Host, Testhilfe)",
+    "[D] HUD am Ring andocken (Vorschau): "
+      .. (info.docked and "AN" or "aus"),
     "[+/-] Lautstaerke: " .. string.format("%d %%", (info.volume or 0) * 100),
     info.net or "Netz: keine Fehler",
     "IP eintippen + Enter verbindet: " .. self.ip_input .. "_",

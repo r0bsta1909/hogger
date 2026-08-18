@@ -43,6 +43,7 @@ local function parse_args(args)
     elseif a == "--shot" then i = i + 1; app.shot_at = tonumber(args[i]) or 3
     elseif a == "--auto" then app.auto = true
     elseif a == "--panel" then app.open_panel = true
+    elseif a == "--dock" then app.dock = true -- HUD-Andock-Vorschau (M12)
     end
     i = i + 1
   end
@@ -144,6 +145,7 @@ function love.load(args)
   wire = require("game.net.wire")
   discovery = require("game.net.discovery")
   app.render = require("game.render").new()
+  app.render.docked = app.dock or false -- HUD-Andock-Vorschau (M12, --dock)
   app.floating = require("game.ui.floating").new()
   app.debug = require("game.ui.debug").new()
   audio.load()
@@ -685,6 +687,7 @@ function love.draw()
     log_dir = love.filesystem.getSaveDirectory(),
     volume = audio.master(),
     net = app.net and app.net.guard and app.net.guard:note(),
+    docked = app.render and app.render.docked,
   })
 end
 
@@ -708,6 +711,12 @@ function love.keypressed(key)
   elseif action == "wipe" then
     require("game.session").wipe()
     app.debug.note = "session.json geloescht (wirkt beim naechsten Host-Start)"
+    return
+  elseif action == "dock" then
+    -- HUD-Andock-Vorschau (M12): live umschaltbar, damit Rob vergleichen kann
+    app.render.docked = not app.render.docked
+    app.debug.note = app.render.docked
+      and "HUD am Ring angedockt (Vorschau)" or "HUD in den Ecken"
     return
   elseif action == "kill" then
     -- Hogger sofort toeten: Fluchbruch allein testbar (Issue #35)
@@ -887,17 +896,21 @@ function love.mousepressed(mx, my, button)
   -- Heil-Leiste (Runde 7, #103, GDD 4.3): Rechtsklick auf eine Zeile heilt
   -- diesen Spieler (HEAL_REQUEST, p.target bleibt unberuehrt), Linksklick
   -- waehlt ihn als Ziel. Klicks im Leistenrechteck erreichen nie die Karte.
+  local w, h = love.graphics.getDimensions()
+  -- EINE Layout-Wahrheit mit dem Renderer (M12): Hit-Tests rechnen mit
+  -- denselben, UNgeshakten Zahlen wie die Zeichnung
+  local L = app.render.layout(w, h, app.render.docked)
   do
     local step_mod = require("game.gamesim.step")
     local me = app.view.players[app.view.me]
     local slot = me and me.alive and me.class and step_mod.ALLY_SLOT[me.class]
     if slot then
       local rows, more_n = app.render.heal_rows(app.view, model.p("heal_range"))
-      local HB = app.render.HEALBAR
+      local HB = L.frames.healbar
       local ph = HB.header_h + (#rows + ((more_n > 0) and 1 or 0)) * HB.row_h + 8
       if #rows > 0 and mx >= HB.x and mx <= HB.x + HB.w
          and my >= HB.y and my <= HB.y + ph then
-        local i = app.render.healbar_row_at(#rows, mx, my)
+        local i = app.render.healbar_row_at(#rows, mx, my, HB)
         local row = i and rows[i]
         if row and button == 2 then
           -- Fehlerzeile vorab (Issue #56): der Host verwirft stumm, der
@@ -931,20 +944,19 @@ function love.mousepressed(mx, my, button)
     end
   end
 
-  local w, h = love.graphics.getDimensions()
-  local radius = h / 2 - 8
+  local radius = L.radius
   local scale = radius / app.render:zoom_radius()
   local function to_screen(wx, wy)
     return w / 2 + (wx - app.view.me_x) * scale,
            h / 2 + (wy - app.view.me_y) * scale
   end
   -- Zoom-Knoepfe am Ring (GDD 4.2); UI-Klick-Sound (GDD 12 Nr. 14)
-  local zx, zy = w / 2 + radius * 0.86, h / 2 + radius * 0.42
-  if math.abs(mx - zx) < 14 and math.abs(my - zy) < 14 then
+  if math.abs(mx - L.zoom.x) < L.zoom.r and math.abs(my - L.zoom.y) < L.zoom.r then
     audio.play("snd_ui_click")
     app.render:set_zoom(app.render.zoom - 1) return
   end
-  if math.abs(mx - zx) < 14 and math.abs(my - (zy + 34)) < 14 then
+  if math.abs(mx - L.zoom.x) < L.zoom.r
+     and math.abs(my - (L.zoom.y + L.zoom.spacing)) < L.zoom.r then
     audio.play("snd_ui_click")
     app.render:set_zoom(app.render.zoom + 1) return
   end

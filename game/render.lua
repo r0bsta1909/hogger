@@ -325,20 +325,77 @@ function R.heal_rows(view, heal_range, max_rows)
 end
 
 -- Reine Arithmetik: welche Zeile liegt unter (mx, my)? nil = keine.
-function R.healbar_row_at(n_rows, mx, my)
-  local HB = R.HEALBAR
+-- hb: optionales Layout (Dock-Variante, M12); Default = R.HEALBAR.
+function R.healbar_row_at(n_rows, mx, my, hb)
+  local HB = hb or R.HEALBAR
   if mx < HB.x or mx > HB.x + HB.w then return nil end
   local i = math.floor((my - (HB.y + HB.header_h)) / HB.row_h) + 1
   if i >= 1 and i <= n_rows then return i end
   return nil
 end
 
-function R:draw_healbar(view)
+-- M12: eine Layout-Wahrheit fuer die gesamte Minimap-Moeblierung — Renderer
+-- (R:draw) und Maus-Hit-Tests (main.lua) rechnen mit DENSELBEN Zahlen.
+-- Love-frei (reine Arithmetik, Stufe-1-getestet in tests/unit_layout.lua).
+-- Alle Koordinaten sind UNgeshakt: die Moeblierung steht fest, nur der
+-- Weltinhalt (make_transform) wackelt beim Screenshake.
+-- docked (Runde 7, Vorschau hinter Flag): Einheiten-/Zielfenster tangential
+-- an 10-/2-Uhr an den Ring statt in die Ecken; alles Abgeleitete (CP,
+-- Kupfer, Hinweis, Heil-Leiste, Ziel-des-Ziels, Buffs) wandert mit.
+R.FRAME_W, R.FRAME_H = 214, 56
+
+function R.layout(w, h, docked)
+  local ox, oy = w / 2, h / 2
+  local radius = h / 2 - 22 -- war -8; Platz fuer Plaketten AUF dem Ring (M12)
+  local unit, target
+  if docked then
+    local p10x, p10y = ox - radius * 0.866, oy - radius * 0.5
+    local p2x = ox + radius * 0.866
+    unit = { x = math.max(12, math.floor(p10x - R.FRAME_W + 8)),
+             y = math.max(10, math.floor(p10y - R.FRAME_H + 8)) }
+    target = { x = math.min(w - 226, math.floor(p2x - 8)), y = unit.y }
+  else
+    unit = { x = 12, y = 10 }
+    target = { x = w - 226, y = 10 }
+  end
+  local HB = R.HEALBAR
+  return {
+    ox = ox, oy = oy, radius = radius,
+    ring_r = radius * 0.87, -- Bahn der Faehigkeits-Buttons
+    banner = { cx = ox, cy = oy - radius, h = 26, pad = 14, min_w = 140 },
+    npip = { x = ox, y = oy - radius + 26, r = 9 },
+    clock = { cx = ox, cy = oy + radius, w = 96, h = 34 },
+    zoom = { x = ox + radius * 0.86, y = oy + radius * 0.42,
+             r = 14, spacing = 34 },
+    frames = {
+      unit = unit,
+      target = target,
+      cp = { x = unit.x + 220, y = unit.y + 4 },
+      money = { x = unit.x + 2, y = unit.y + 60 },
+      hint = { x = unit.x + 2, y = unit.y + 78 },
+      healbar = { x = unit.x, y = unit.y + 98, w = HB.w,
+                  header_h = HB.header_h, row_h = HB.row_h,
+                  max_rows = HB.max_rows },
+      tot = { x = target.x, y = target.y + 60 },
+      buffs = { x = target.x, y = target.y + 86 },
+    },
+  }
+end
+
+-- Deterministischer Zellen-Hash fuer Aussen-Mottle und Gras-Flecken (M12):
+-- reine Integer-Arithmetik, KEIN math.random — frame-stabil, love-frei.
+function R.cellhash(x, y)
+  -- Zwischenwerte bleiben unter 2^53 (exakte Double-Arithmetik)
+  local n = (x * 374761 + y * 668265) % 2147483647
+  return (n * 48271) % 2147483647
+end
+
+function R:draw_healbar(view, hb)
   local me = view.players[view.me]
   if not (me and me.alive and me.class and ALLY_SLOT[me.class]) then return end
   local rows, more_n = R.heal_rows(view, model.p("heal_range"))
   if #rows == 0 then return end
-  local HB = R.HEALBAR
+  local HB = hb or R.HEALBAR
   local extra = more_n > 0 and 1 or 0
   local ph = HB.header_h + (#rows + extra) * HB.row_h + 8
   love.graphics.setColor(0.07, 0.07, 0.11, 0.85)
@@ -466,7 +523,7 @@ end
 -- Welt -> Bildschirm um (cx, cy) zentriert
 function R:make_transform(cx, cy)
   local w, h = love.graphics.getDimensions()
-  local radius = h / 2 - 8
+  local radius = h / 2 - 22 -- EINE Wahrheit mit R.layout (M12)
   local scale = radius / self:zoom_radius()
   local ox, oy = w / 2, h / 2
   if self.shake > 0 then
@@ -505,6 +562,19 @@ local function draw_tooltip(lines, mx, my, w, h)
   end
 end
 
+-- Plakette im Original-Minimap-Stil (M12, GDD 4.1/4.2): dunkle Fuellung,
+-- Goldrahmen, helle Innenlinie — fuer Zonenbanner und Uhr
+local function plaque(x, y, pw, ph)
+  love.graphics.setColor(0.07, 0.06, 0.05, 0.95)
+  love.graphics.rectangle("fill", x, y, pw, ph, 4, 4)
+  love.graphics.setColor(0.78, 0.63, 0.28, 1)
+  love.graphics.setLineWidth(2)
+  love.graphics.rectangle("line", x, y, pw, ph, 4, 4)
+  love.graphics.setLineWidth(1)
+  love.graphics.setColor(0.95, 0.85, 0.55, 0.5)
+  love.graphics.rectangle("line", x + 2, y + 2, pw - 4, ph - 4, 3, 3)
+end
+
 -- Balken der Eckfenster: links oben verankert, Beschriftung liegt IM Balken
 -- (Original-Vorbild spieleranzeige_und_ziel.png) — nie mehr quer durch die
 -- Zahlen wie zuvor (Issue #25)
@@ -526,30 +596,89 @@ end
 -- view: dekodierter Snapshot + me/me_x/me_y; ui: { facing_angle, cooldowns }
 function R:draw(view, ui)
   local w, h = love.graphics.getDimensions()
+  -- Die Layout-Wahrheit fuer die gesamte Moeblierung (M12): UNgeshakt,
+  -- identisch zu den Hit-Tests in main.lua
+  local L = R.layout(w, h, self.docked)
   love.graphics.setColor(UI_BG[1], UI_BG[2], UI_BG[3], 1)
   love.graphics.rectangle("fill", 0, 0, w, h)
+
+  -- Aussenbereich: dunkles Mottle statt Flat (M12) — statisches 64-px-Raster,
+  -- deterministisch aus cellhash, Zellen innerhalb des Kreises uebersprungen.
+  -- Bewusst simple Direkt-Calls (~200 Kreise); falls je messbar: in einen
+  -- Canvas backen (Rebuild bei Groessenwechsel).
+  do
+    local cell = 64
+    for gx0 = 0, math.ceil(w / cell) do
+      for gy0 = 0, math.ceil(h / cell) do
+        local cx = gx0 * cell + cell / 2
+        local cy = gy0 * cell + cell / 2
+        local dx, dy = cx - L.ox, cy - L.oy
+        if dx * dx + dy * dy > (L.radius + 40) ^ 2 then
+          local hsh = R.cellhash(gx0, gy0)
+          local jx = (hsh % 33) - 16
+          local jy = (math.floor(hsh / 33) % 33) - 16
+          love.graphics.setColor(0, 0, 0, 0.05 + (hsh % 8) * 0.01)
+          love.graphics.circle("fill", cx + jx, cy + jy, 22 + hsh % 12)
+        end
+      end
+    end
+  end
 
   local me = view.players[view.me]
   local to_screen, scale, ox, oy, radius = self:make_transform(view.me_x, view.me_y)
 
-  -- Kreis-Stencil: die Minimap
+  -- Kreis-Stencil: die Minimap — auf UNgeshakten L-Koordinaten, damit die
+  -- Kartenkante beim Screenshake nicht unter dem festen Ring hervorblitzt
   love.graphics.stencil(function()
-    love.graphics.circle("fill", ox, oy, radius)
+    love.graphics.circle("fill", L.ox, L.oy, L.radius)
   end, "replace", 1)
   love.graphics.setStencilTest("greater", 0)
 
   -- Boden
   love.graphics.setColor(GRASS[1], GRASS[2], GRASS[3], 1)
   love.graphics.rectangle("fill", 0, 0, w, h)
-  -- Pfad Friedhof -> Huegel
+  -- Gras-Textur (M12): deterministische Farbflecken auf einem 90-px-
+  -- WELTraster — scrollt und zoomt mit, flackert nie (cellhash statt random)
+  do
+    local cell = 90
+    local zr = self:zoom_radius()
+    local x0 = math.floor((view.me_x - zr) / cell)
+    local x1 = math.ceil((view.me_x + zr) / cell)
+    local y0 = math.floor((view.me_y - zr) / cell)
+    local y1 = math.ceil((view.me_y + zr) / cell)
+    for cx0 = x0, x1 do
+      for cy0 = y0, y1 do
+        local hsh = R.cellhash(cx0, cy0)
+        if hsh % 7 < 3 then
+          local jx = (hsh % 41) - 20
+          local jy = (math.floor(hsh / 41) % 41) - 20
+          local px, py = to_screen(cx0 * cell + jx, cy0 * cell + jy)
+          local d = (hsh % 2 == 0) and 0.025 or -0.03
+          love.graphics.setColor(GRASS[1] + d, GRASS[2] + d, GRASS[3] + d,
+            0.4 + (hsh % 3) * 0.05)
+          love.graphics.circle("fill", px, py, (30 + hsh % 18) * scale)
+        end
+      end
+    end
+  end
+  -- Pfad Friedhof -> Huegel: drei Paesse = weiche Kanten (M12)
   local g = map.graveyard()
   local gx, gy = to_screen(g.x, g.y)
   local hx2, hy2 = to_screen(map.hill.x, map.hill.y)
+  love.graphics.setColor((GRASS[1] + PATH[1]) / 2, (GRASS[2] + PATH[2]) / 2,
+    (GRASS[3] + PATH[3]) / 2, 0.55)
+  love.graphics.setLineWidth(34 * scale)
+  love.graphics.line(gx, gy, hx2, hy2)
   love.graphics.setColor(PATH[1], PATH[2], PATH[3], 1)
   love.graphics.setLineWidth(26 * scale)
   love.graphics.line(gx, gy, hx2, hy2)
+  love.graphics.setColor(PATH[1] + 0.05, PATH[2] + 0.04, PATH[3] + 0.03, 0.6)
+  love.graphics.setLineWidth(12 * scale)
+  love.graphics.line(gx, gy, hx2, hy2)
   love.graphics.setLineWidth(1)
-  -- Huegel-Plateau
+  -- Huegel-Plateau mit weichem Rand (M12)
+  love.graphics.setColor(0.36, 0.33, 0.24, 0.35)
+  love.graphics.circle("fill", hx2, hy2, 158 * scale)
   love.graphics.setColor(0.36, 0.33, 0.24, 1)
   love.graphics.circle("fill", hx2, hy2, 150 * scale)
 
@@ -771,6 +900,14 @@ function R:draw(view, ui)
     love.graphics.pop()
   end
 
+  -- Vignette an der Innenkante (M12): sanfter Uebergang zum Ring
+  for i, va in ipairs({ 0.14, 0.08, 0.04 }) do
+    love.graphics.setColor(0, 0, 0, va)
+    love.graphics.setLineWidth(8)
+    love.graphics.circle("line", L.ox, L.oy, L.radius - 3 - (i - 1) * 7)
+    love.graphics.setLineWidth(1)
+  end
+
   love.graphics.setStencilTest()
 
   -- Totensicht: blaeulicher Entsaettigungsfilter als Zustand (GDD 4.1)
@@ -786,35 +923,78 @@ function R:draw(view, ui)
     for i = 1, 5 do
       love.graphics.setColor(0.8, 0.1, 0.08, a * (1 - i / 6))
       love.graphics.setLineWidth(10)
-      love.graphics.circle("line", ox, oy, radius - i * 9)
+      love.graphics.circle("line", L.ox, L.oy, L.radius - i * 9)
       love.graphics.setLineWidth(1)
     end
   end
 
-  -- Ring
-  love.graphics.setColor(0.78, 0.63, 0.28, 1)
-  love.graphics.setLineWidth(4)
-  love.graphics.circle("line", ox, oy, radius + 2)
-  love.graphics.setLineWidth(1)
-
-  -- Zonenbanner oben (GDD 4.1)
+  -- Ornament-Goldring statt duenner Linie (M12, Original-Vorbild):
+  -- Sitz-Schatten aussen, Bronzeband, Gold-Hauptring, Kanten, Nieten
   do
-    local zone = map.zone_at(view.me_x, view.me_y)
-    love.graphics.setColor(0.95, 0.90, 0.70, 1)
-    local font = love.graphics.getFont()
-    love.graphics.print(zone, ox - font:getWidth(zone) / 2, oy - radius + 10)
+    local cx, cy, r = L.ox, L.oy, L.radius
+    love.graphics.setColor(0, 0, 0, 0.22)
+    love.graphics.setLineWidth(20)
+    love.graphics.circle("line", cx, cy, r + 16)
+    love.graphics.setColor(0, 0, 0, 0.12)
+    love.graphics.setLineWidth(18)
+    love.graphics.circle("line", cx, cy, r + 34)
+    love.graphics.setColor(0, 0, 0, 0.06)
+    love.graphics.circle("line", cx, cy, r + 52)
+    love.graphics.setColor(0.20, 0.15, 0.09, 1)
+    love.graphics.setLineWidth(10)
+    love.graphics.circle("line", cx, cy, r + 9)
+    love.graphics.setColor(0.78, 0.63, 0.28, 1)
+    love.graphics.setLineWidth(5)
+    love.graphics.circle("line", cx, cy, r + 3)
+    love.graphics.setColor(0.93, 0.82, 0.50, 0.9)
+    love.graphics.setLineWidth(1.5)
+    love.graphics.circle("line", cx, cy, r)
+    love.graphics.setColor(0.55, 0.42, 0.18, 1)
+    love.graphics.circle("line", cx, cy, r + 14)
+    love.graphics.setLineWidth(1)
+    -- Nieten im 45-Grad-Raster; 12 und 6 Uhr ausgelassen (dort Plaketten)
+    for k = 0, 7 do
+      if k ~= 2 and k ~= 6 then -- k=6: 12 Uhr, k=2: 6 Uhr (y waechst abwaerts)
+        local a2 = k * math.pi / 4
+        love.graphics.setColor(0.93, 0.82, 0.50, 1)
+        love.graphics.circle("fill", cx + math.cos(a2) * (r + 3),
+          cy + math.sin(a2) * (r + 3), 3.5)
+      end
+    end
   end
 
-  -- Uhr (zaehlt pro Try hoch, GDD 4.2) + Try-Nr.
+  -- Zonenbanner als Plakette AUF dem Ring (M12, GDD 4.1, Original-Vorbild)
+  do
+    local zone = map.zone_at(view.me_x, view.me_y)
+    local font = love.graphics.getFont()
+    local bw = math.max(L.banner.min_w, font:getWidth(zone) + 2 * L.banner.pad)
+    local bx = L.banner.cx - bw / 2
+    local by = L.banner.cy - L.banner.h / 2
+    plaque(bx, by, bw, L.banner.h)
+    -- goldene Endknaeufe auf Ringhoehe
+    love.graphics.setColor(0.78, 0.63, 0.28, 1)
+    love.graphics.circle("fill", bx, L.banner.cy, 4)
+    love.graphics.circle("fill", bx + bw, L.banner.cy, 4)
+    love.graphics.setColor(0.95, 0.90, 0.70, 1)
+    love.graphics.print(zone, L.banner.cx - font:getWidth(zone) / 2, by + 6)
+  end
+
+  -- Uhr-Plakette unten Mitte — die originale Minimap-Position (GDD 4.2)
   do
     local mins = math.floor(view.clock / 60)
     local secs = math.floor(view.clock % 60)
     local txt = string.format("%d:%02d", mins, secs)
+    local try_txt = "Try " .. view.try_nr
+    local font = love.graphics.getFont()
+    local pw = math.max(L.clock.w, font:getWidth(try_txt) + 16)
+    local px = L.clock.cx - pw / 2
+    local py = L.clock.cy - L.clock.h / 2
+    plaque(px, py, pw, L.clock.h)
     love.graphics.setColor(0.95, 0.90, 0.70, 1)
-    love.graphics.print(txt, ox + radius * 0.60, oy - radius * 0.66)
+    love.graphics.print(txt, L.clock.cx - font:getWidth(txt) / 2, py + 3)
     love.graphics.setColor(0.6, 0.56, 0.45, 1)
-    love.graphics.print("Try " .. view.try_nr, ox + radius * 0.60,
-      oy - radius * 0.66 + 16)
+    love.graphics.print(try_txt, L.clock.cx - font:getWidth(try_txt) / 2,
+      py + 18)
   end
 
   -- ====== Ring-UI komplett (GDD 4.2/4.3) ======
@@ -886,7 +1066,8 @@ function R:draw(view, ui)
   -- Klasse dauerhaft — Icon, Klassenfarbe und Klassenname (Issue #24)
   if me then
     local cls = me.class and model.classes[me.class]
-    unit_frame(12, 10, {
+    local FU = L.frames.unit
+    unit_frame(FU.x, FU.y, {
       name = names[view.me] or "?", rk = RACE_K[me.race],
       icon = me.class and CLASS_ICON[me.class] or nil,
       ring_col = me.class and CLASS_COL[me.class] or nil,
@@ -900,18 +1081,19 @@ function R:draw(view, ui)
     })
     if me.class == "rogue" and (me.cp or 0) > 0 then
       love.graphics.setColor(0.95, 0.35, 0.35, 1)
-      love.graphics.print("CP " .. me.cp, 232, 14)
+      love.graphics.print("CP " .. me.cp, L.frames.cp.x, L.frames.cp.y)
     end
     love.graphics.setColor(0.6, 0.56, 0.45, 1)
     love.graphics.print(string.format("Kupfer %d   Plunder %d",
-      me.kupfer or 0, me.plunder or 0), 14, 70)
+      me.kupfer or 0, me.plunder or 0), L.frames.money.x, L.frames.money.y)
     -- Hinweis auf das Raid-Overview (Runde 6, Issue #95)
     love.graphics.setColor(0.45, 0.42, 0.35, 1)
-    love.graphics.print("STRG fuer Raid-Overview", 14, 88)
+    love.graphics.print("STRG fuer Raid-Overview",
+      L.frames.hint.x, L.frames.hint.y)
   end
 
   -- Heil-Leiste der Heilerklassen (Runde 7, #103, GDD 4.3)
-  self:draw_healbar(view)
+  self:draw_healbar(view, L.frames.healbar)
 
   -- Oben rechts: Zielfenster, Ziel des Ziels, Buff-Leiste (GDD 4.3)
   local aura_tip = nil
@@ -948,13 +1130,16 @@ function R:draw(view, ui)
                 name_col = hostile and { 0.9, 0.25, 0.2 } or { 0.9, 0.8, 0.3 } }
     end
     if frame then
-      unit_frame(w - 226, 10, frame)
+      local FT = L.frames.target
+      unit_frame(FT.x, FT.y, frame)
       -- Ziel des Ziels: wen verpruegelt Hogger gerade? (GDD 4.3)
       if t == 0 and view.hogger.target and names[view.hogger.target] then
         love.graphics.setColor(0.07, 0.07, 0.09, 0.85)
-        love.graphics.rectangle("fill", w - 226, 70, 214, 20, 3, 3)
+        love.graphics.rectangle("fill", L.frames.tot.x, L.frames.tot.y,
+          214, 20, 3, 3)
         love.graphics.setColor(0.85, 0.8, 0.7, 1)
-        love.graphics.print("> " .. names[view.hogger.target], w - 220, 72)
+        love.graphics.print("> " .. names[view.hogger.target],
+          L.frames.tot.x + 6, L.frames.tot.y + 2)
       end
     end
     -- Buff-/Debuff-Leiste: nur was Level-1-Klassen haben (GDD 4.3), dazu
@@ -967,7 +1152,7 @@ function R:draw(view, ui)
     if me.bleeding then auras[#auras + 1] = { AURA.bleed } end
     for i, a in ipairs(auras) do
       local def, rest = a[1], a[2]
-      local bx, by = w - 226 + (i - 1) * 34, 96
+      local bx, by = L.frames.buffs.x + (i - 1) * 34, L.frames.buffs.y
       if def.debuff then
         love.graphics.setColor(0.32, 0.10, 0.10, 0.95)
       else
@@ -999,17 +1184,17 @@ function R:draw(view, ui)
     local frac = math.min(1, (me.xp or 0) / model.p("xp_level2"))
     love.graphics.setColor(0.35, 0.30, 0.2, 0.6)
     love.graphics.setLineWidth(3)
-    love.graphics.circle("line", ox, oy, radius - 8)
+    love.graphics.circle("line", L.ox, L.oy, L.radius - 8)
     if frac > 0 then
       love.graphics.setColor(0.75, 0.45, 0.85, 0.9)
-      love.graphics.arc("line", "open", ox, oy, radius - 8,
+      love.graphics.arc("line", "open", L.ox, L.oy, L.radius - 8,
         -math.pi / 2, -math.pi / 2 + frac * 2 * math.pi)
     end
     love.graphics.setLineWidth(1)
     -- Tooltip bei Hover (GDD 4.2)
     if ui.mouse then
-      local md = math.sqrt((ui.mouse[1] - ox) ^ 2 + (ui.mouse[2] - oy) ^ 2)
-      if md > radius - 16 and md < radius + 4 then
+      local md = math.sqrt((ui.mouse[1] - L.ox) ^ 2 + (ui.mouse[2] - L.oy) ^ 2)
+      if md > L.radius - 16 and md < L.radius + 4 then
         local rest = math.max(0, model.p("xp_level2") - (me.xp or 0))
         love.graphics.setColor(0.07, 0.07, 0.09, 0.9)
         love.graphics.rectangle("fill", ui.mouse[1] + 10, ui.mouse[2] - 24, 214, 20)
@@ -1020,19 +1205,62 @@ function R:draw(view, ui)
     end
   end
 
-  -- Zoom-Knoepfe am Ring (klassische Position, GDD 4.2) + Stufenanzeige
+  -- N-Pip: Norden ist fixiert (GDD 4.1) — als Kompass-Knopf unter dem
+  -- Zonenbanner, bewusst NACH dem XP-Bogen gezeichnet (M12)
   do
-    local zx, zy = ox + radius * 0.86, oy + radius * 0.42
+    local NP = L.npip
+    love.graphics.setColor(0.15, 0.14, 0.11, 1)
+    love.graphics.circle("fill", NP.x, NP.y, NP.r)
+    love.graphics.setColor(0.78, 0.63, 0.28, 1)
+    love.graphics.setLineWidth(2)
+    love.graphics.circle("line", NP.x, NP.y, NP.r)
+    love.graphics.setLineWidth(1)
+    love.graphics.setColor(0.95, 0.90, 0.70, 1)
+    love.graphics.print("N", NP.x - 4, NP.y - 8)
+  end
+
+  -- Zoom-Knoepfe am Ring (klassische Position, GDD 4.2): plastisch im
+  -- Original-Stil (M12); Stufe als drei Punkte + Hover-Tooltip statt Text
+  do
+    local Z = L.zoom
+    local zoom_hover = false
     for i, sym in ipairs({ "+", "-" }) do
-      local by = zy + (i - 1) * 34
-      love.graphics.setColor(0.15, 0.14, 0.11, 0.9)
-      love.graphics.circle("fill", zx, by, 13)
+      local by = Z.y + (i - 1) * Z.spacing
+      love.graphics.setColor(0, 0, 0, 0.5)
+      love.graphics.circle("fill", Z.x + 1, by + 2, Z.r + 1)
+      love.graphics.setColor(0.15, 0.14, 0.11, 1)
+      love.graphics.circle("fill", Z.x, by, Z.r)
       love.graphics.setColor(0.78, 0.63, 0.28, 1)
-      love.graphics.circle("line", zx, by, 13)
-      love.graphics.print(sym, zx - 4, by - 8)
+      love.graphics.setLineWidth(2)
+      love.graphics.circle("line", Z.x, by, Z.r)
+      love.graphics.setLineWidth(1)
+      love.graphics.setColor(0.95, 0.85, 0.55, 0.6)
+      love.graphics.setLineWidth(1.5)
+      love.graphics.arc("line", "open", Z.x, by, Z.r - 3,
+        math.rad(-140), math.rad(-40))
+      love.graphics.setLineWidth(1)
+      love.graphics.setColor(0.95, 0.90, 0.70, 1)
+      love.graphics.print(sym, Z.x - 4, by - 8)
+      if ui.mouse then
+        local d = math.sqrt((ui.mouse[1] - Z.x) ^ 2 + (ui.mouse[2] - by) ^ 2)
+        if d <= Z.r + 2 then zoom_hover = true end
+      end
     end
-    love.graphics.setColor(0.6, 0.56, 0.45, 1)
-    love.graphics.print("Zoom " .. self.zoom, zx - 24, zy + 60)
+    -- drei Stufen-Punkte: gefuellt bis zur aktuellen Zoomstufe
+    for s = 1, 3 do
+      local px = Z.x + (s - 2) * 9
+      local py = Z.y + Z.spacing + 22
+      if s <= self.zoom then
+        love.graphics.setColor(0.78, 0.63, 0.28, 1)
+      else
+        love.graphics.setColor(0.25, 0.22, 0.16, 1)
+      end
+      love.graphics.circle("fill", px, py, 2.5)
+    end
+    if zoom_hover and ui.mouse then
+      draw_tooltip({ "Zoom", "Stufe " .. self.zoom .. " von 3",
+        "Mausrad oder + / -" }, ui.mouse[1], ui.mouse[2], w, h)
+    end
   end
 
   -- Faehigkeiten als runde Add-on-Buttons am unteren Ring, mit Cooldown-Sweep
@@ -1051,12 +1279,12 @@ function R:draw(view, ui)
     slots[#slots + 1] = { melee = true }
     local n = #slots
     local BR = 23                       -- Buttonradius
-    local ring_r = radius * 0.87        -- Bahn knapp innerhalb des Rings
+    local ring_r = L.ring_r             -- Bahn knapp innerhalb des Rings
     local dtheta = (BR * 2 + 10) / ring_r
     for k, entry in ipairs(slots) do
       -- Slot 1 links, aufsteigend nach rechts (Tastenreihenfolge)
       local a = math.pi / 2 - (k - (n + 1) / 2) * dtheta
-      local x, y = ox + math.cos(a) * ring_r, oy + math.sin(a) * ring_r
+      local x, y = L.ox + math.cos(a) * ring_r, L.oy + math.sin(a) * ring_r
       love.graphics.setColor(0.10, 0.09, 0.07, 0.95)
       love.graphics.circle("fill", x, y, BR)
       local icon = entry.melee and "ab_melee" or ABILITY_ICON[entry.spec.id]
@@ -1090,8 +1318,8 @@ function R:draw(view, ui)
     if auto then
       local font = love.graphics.getFont()
       love.graphics.setColor(0.62, 0.58, 0.46, 1)
-      love.graphics.print(auto, ox - font:getWidth(auto) / 2,
-        oy + ring_r - BR - 22)
+      love.graphics.print(auto, L.ox - font:getWidth(auto) / 2,
+        L.oy + ring_r - BR - 22)
     end
   end
 
@@ -1102,7 +1330,8 @@ function R:draw(view, ui)
       * (0.75 + 0.25 * math.sin(love.timer.getTime() * 12))
     love.graphics.setColor(0.95, 0.28, 0.22, a)
     love.graphics.print(self.err_text,
-      ox - font:getWidth(self.err_text) / 2 * 1.2, oy + radius * 0.62, 0, 1.2, 1.2)
+      L.ox - font:getWidth(self.err_text) / 2 * 1.2, L.oy + L.radius * 0.62,
+      0, 1.2, 1.2)
   end
 
   -- Cast- und Wiederbelebungsbalken: unabhaengig von der Klasse, denn beim
@@ -1123,7 +1352,7 @@ function R:draw(view, ui)
       local def = me.class and model.classes[me.class].abilities[me.cast_slot or 0]
       label = def and def.name_de or "Zauber"
     end
-    local bw2, bx2, by2 = 260, ox - 130, oy + radius * 0.34
+    local bw2, bx2, by2 = 260, L.ox - 130, L.oy + L.radius * 0.34
     ui_bar(bx2, by2, bw2, 18, me.progress, { 0.85, 0.72, 0.28 }, label)
   end
 
@@ -1174,7 +1403,8 @@ function R:draw(view, ui)
   -- Loot-Toasts am linken Kreisrand (GDD 7.3)
   for i, t in ipairs(self.toasts) do
     love.graphics.setColor(0.95, 0.85, 0.35, math.min(1, t.t))
-    love.graphics.print(t.text, ox - radius * 0.72, oy + radius * 0.45 + (i - 1) * 18)
+    love.graphics.print(t.text, L.ox - L.radius * 0.72,
+      L.oy + L.radius * 0.45 + (i - 1) * 18)
   end
 
   -- Ansage-Banner (Try-Ende, Sieg)
@@ -1182,21 +1412,23 @@ function R:draw(view, ui)
     love.graphics.setColor(1, 0.9, 0.5, math.min(1, self.banner_t))
     local font = love.graphics.getFont()
     love.graphics.print(self.banner_text,
-      ox - font:getWidth(self.banner_text) / 2 * 2, oy - radius * 0.4, 0, 2, 2)
+      L.ox - font:getWidth(self.banner_text) / 2 * 2, L.oy - L.radius * 0.4,
+      0, 2, 2)
   end
 
   -- Killcam-Zeile: 2 s, RECOUNT-9000-Ton (GDD 11)
   if self.killcam_t > 0 and self.killcam_text then
     local a = math.min(1, self.killcam_t / 0.5)
-    local band_y = oy + radius * 0.52
+    local band_y = L.oy + L.radius * 0.52
     love.graphics.setColor(0, 0, 0, 0.75 * a)
     love.graphics.rectangle("fill", 0, band_y - 24, w, 58)
     love.graphics.setColor(0.9, 0.3, 0.25, a)
-    love.graphics.print("RECOUNT-9000 // Todesursachen-Analyse", ox - 120, band_y - 18)
+    love.graphics.print("RECOUNT-9000 // Todesursachen-Analyse",
+      L.ox - 120, band_y - 18)
     love.graphics.setColor(0.95, 0.92, 0.8, a)
     local font = love.graphics.getFont()
     love.graphics.print(self.killcam_text,
-      ox - font:getWidth(self.killcam_text) / 2 * 1.4, band_y + 2, 0, 1.4, 1.4)
+      L.ox - font:getWidth(self.killcam_text) / 2 * 1.4, band_y + 2, 0, 1.4, 1.4)
   end
 
   return to_screen
