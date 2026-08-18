@@ -825,6 +825,86 @@ do
   T.ok(pr.hp > fb_hp0, "heal: Fallback-Heilung wirkt")
 end
 
+-- Runde 10 (#125): ein abgebrochener Cast sperrt nichts mehr --------------
+-- Es gab nie einen Lockout; die beim Cast-START gesetzte GCD lief nach dem
+-- Abbruch weiter und sperrte bis zu 1,5 s. break_cast nullt sie jetzt.
+do
+  -- Voraussetzung fuer den Client-Fix (main.lua loescht die lokale
+  -- Cooldown-Anzeige, wenn ein Cast endet): jede Castzeit muss laenger sein
+  -- als die GCD, sonst waere das ein GCD-Bypass.
+  for cl, spec in pairs(step.ABILITIES) do
+    for slot, ab in pairs(spec) do
+      if ab.cast then
+        T.ok(model.p(ab.cast) >= model.p("gcd"),
+          "cast: Castzeit >= GCD (" .. cl .. ", Slot " .. slot .. ")")
+      end
+    end
+  end
+
+  local function caster_world()
+    local st = world.new(11)
+    world.add_player(st, "c", { quest_done = true })
+    world.begin_try(st, {})
+    local q = st.players[1]
+    q.alive, q.ghost = true, false
+    q.class, q.race = "mage", "mensch"
+    q.max_hp, q.hp = model.hp_for_class("mage"), model.hp_for_class("mage")
+    q.resource = model.p("mana_max")
+    q.x, q.y = st.hogger.x, st.hogger.y - 60
+    return st, q
+  end
+
+  local face = input.facing_towards(0, -60, 0, 0) -- Ziel liegt suedlich
+
+  -- Wegdrehen (Frontbogen)
+  local st, q = caster_world()
+  step.step(st, { [1] = { mask = input.AB1, facing = face } })
+  T.ok(q.cast ~= nil, "cast: Zauber startet")
+  T.ok(q.gcd > 0, "cast: der Start setzt die GCD")
+  step.step(st, { [1] = { mask = 0, facing = (face + 128) % 256 } })
+  T.eq(q.cast, nil, "cast: Wegdrehen bricht ab")
+  T.eq(q.gcd, 0, "cast: der Abbruch loescht die GCD")
+  step.step(st, { [1] = { mask = input.AB1, facing = face } })
+  T.ok(q.cast ~= nil, "cast: sofort danach ist der naechste Zauber erlaubt")
+
+  -- Bewegung
+  local st2, q2 = caster_world()
+  step.step(st2, { [1] = { mask = input.AB1, facing = face } })
+  step.step(st2, { [1] = { mask = input.LEFT, facing = face } })
+  T.eq(q2.cast, nil, "cast: Bewegung bricht ab")
+  T.eq(q2.gcd, 0, "cast: nach dem Bewegungsabbruch ist die GCD weg")
+
+  -- Hoggers Charge
+  local st3, q3 = caster_world()
+  step.step(st3, { [1] = { mask = input.AB1, facing = face } })
+  st3.hogger.charge = { target = q3.id, t_left = model.TICK_DT / 2 }
+  st3.hogger.threat[q3.id] = 5
+  step.step(st3, {})
+  T.eq(q3.cast, nil, "cast: die Charge bricht ab")
+  T.eq(q3.gcd, 0, "cast: nach der Charge ist sofort wieder zaubern erlaubt")
+
+  -- Klick-Heilung direkt nach einem abgebrochenen Heilzauber (Heil-Leiste)
+  local st4 = world.new(12)
+  world.add_player(st4, "pr", { quest_done = true })
+  world.add_player(st4, "op", { quest_done = true })
+  world.begin_try(st4, {})
+  local pr, op = st4.players[1], st4.players[2]
+  for _, p in ipairs(st4.players) do
+    p.alive, p.ghost = true, false
+    p.class, p.race = "priest", "mensch"
+    p.max_hp = model.hp_for_class("priest")
+    p.hp = p.max_hp
+    p.resource = model.p("mana_max")
+    p.x, p.y = st4.hogger.x + 500, st4.hogger.y
+  end
+  op.hp = 10
+  T.ok(step.heal_request(st4, pr.id, op.id, {}), "cast: Klick-Heilung startet")
+  step.step(st4, { [1] = { mask = input.LEFT, facing = 0 } }) -- Bewegung
+  T.eq(pr.cast, nil, "cast: der Heilzauber bricht durch Bewegung ab")
+  T.ok(step.heal_request(st4, pr.id, op.id, {}),
+    "cast: der Heiler darf sofort erneut heilen")
+end
+
 -- Runde 9 (#117) / Runde 10 (#124): eine einzige Reset-Regel ---------------
 -- Hogger trabt heim, wenn er die Frist lang weder ein lebendes Ziel erreicht
 -- NOCH Spielerschaden genommen hat. Kein Leash mehr — er darf ueberall
