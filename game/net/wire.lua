@@ -325,10 +325,14 @@ function W.snapshot_body(state)
       if p.alive and th and th > best then best, htarget = th, p.id end
     end
   end
-  parts[#parts + 1] = pack("<I2I2I4I4BBBBBBBB",
+  -- slow_rest (Runde 8, #107): Restsekunden des Magier-Frost-Slows an
+  -- Hogger (step.lua slow_until), aufgerundet, 0 = kein Slow
+  local slow_rest = math.max(0, math.min(255,
+    math.ceil((h.slow_until or 0) - state.time)))
+  parts[#parts + 1] = pack("<I2I2I4I4BBBBBBBBB",
     q16(h.x), q16(h.y), math.max(0, math.floor(h.hp + 0.5)),
     math.floor(h.max_hp + 0.5), hstate, eatphase, eathit, eatneed, eatprog,
-    ctarget, cprog, htarget)
+    ctarget, cprog, htarget, slow_rest)
   -- Das Echo von Leeroy Jenkins (GDD 10.1): Standposition. Es bewegt sich
   -- nicht — die Annaeherung ist lokale Darstellung (Issue #61)
   do
@@ -425,9 +429,11 @@ function W.read_snapshot(data, off)
     love.data.unpack("<I4I2I2BB", data, off)
   s.clock = clock10 / 10
   s.phase = phase == 1 and "won" or "try"
-  local hx, hy, hhp, hmax, hstate, eatphase, eathit, eatneed, eatprog, ctarget, cprog, htarget
-  hx, hy, hhp, hmax, hstate, eatphase, eathit, eatneed, eatprog, ctarget, cprog, htarget, off =
-    love.data.unpack("<I2I2I4I4BBBBBBBB", data, off)
+  local hx, hy, hhp, hmax, hstate, eatphase, eathit, eatneed, eatprog,
+        ctarget, cprog, htarget, hslow
+  hx, hy, hhp, hmax, hstate, eatphase, eathit, eatneed, eatprog, ctarget,
+    cprog, htarget, hslow, off =
+    love.data.unpack("<I2I2I4I4BBBBBBBBB", data, off)
   s.hogger = {
     x = hx, y = hy, hp = hhp, max_hp = hmax,
     state = ({ [0] = "idle", "combat", "eating", "reset" })[hstate],
@@ -436,6 +442,7 @@ function W.read_snapshot(data, off)
                              progress = eatprog / 255 } or nil,
     charge = ctarget ~= 255 and { target = ctarget, progress = cprog / 255 } or nil,
     target = htarget ~= 255 and htarget or nil,
+    slow_rest = hslow, -- Runde 8 (#107): Frost-Slow-Restsekunden
   }
   do
     local ex, ey

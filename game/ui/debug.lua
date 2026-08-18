@@ -72,7 +72,7 @@ function D:draw(info)
     "[K] Hogger sofort toeten (Host)   [R] Quest des Echos noch einmal",
     "[Z] Neuer Realm (frischer Abend, Quest, Leeroy wartet wieder)",
     "[T] Teleport vor Hogger als Zufallsklasse (Host, Testhilfe)",
-    "[D] HUD am Ring andocken (Vorschau): "
+    "[D] HUD-Dock (Standard AN, Debug-Rueckweg): "
       .. (info.docked and "AN" or "aus"),
     "[+/-] Lautstaerke: " .. string.format("%d %%", (info.volume or 0) * 100),
     info.net or "Netz: keine Fehler",

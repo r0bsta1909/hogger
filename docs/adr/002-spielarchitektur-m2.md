@@ -45,7 +45,8 @@ Zeitschritt, 1-Byte-Input, Determinismus-Tests.
    (2×u16, logische px), HP/Ressource (u8-Verhältnis + u16 roh für Balken),
    Klasse, Zustandsbits (lebend/Geist/castet/springt/gestohlen), Blickrichtung,
    Ziel-ID, Cast-Fortschritt; Hogger: Position, HP (u16), Zustand,
-   Fress-Zählerstand, Charge-Telegraph (Ziel + Restanlauf); global: Uhr,
+   Fress-Zählerstand, Charge-Telegraph (Ziel + Restanlauf), Frost-Slow-
+   Restsekunden (u8, aufgerundet; Runde 8 #107); global: Uhr,
    Try-Nr., ackInputTick je Client im Paketkopf.
 5. **Szenen:** flacher Zustandsautomat in `game/main.lua` (Debug-Start →
    Spiel), Netz-Update läuft IMMER (Skill §7: kein Szenen-Stack, der Sockets
