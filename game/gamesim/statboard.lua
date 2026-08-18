@@ -56,11 +56,13 @@ function B.build(state, won)
                             or string.format("%.1f", pct)
     hrow("Rest-HP", shown .. " %")
     local rest = "Er hatte noch " .. shown .. " %."
+    -- Zwei Zeilen: die Pointe wird in 1,6-facher Groesse gezeichnet, einzeilig
+    -- liefe der Grundtext in schmalen Fenstern aus dem Panel (Runde 10, #126)
     if cause == "no_contact" then
-      big = string.format("Er hat %d s lang niemanden erreicht. %s",
+      big = string.format("Er hat %d s lang niemanden erreicht.\n%s",
         math.floor(model.p("hogger_no_contact_reset") + 0.5), rest)
     elseif cause == "wipe" then
-      big = string.format("Der Raid lag %d s lang. %s",
+      big = string.format("Der Raid lag %d s lang.\n%s",
         math.floor(model.p("hogger_no_contact_reset") + 0.5), rest)
     else
       big = rest
