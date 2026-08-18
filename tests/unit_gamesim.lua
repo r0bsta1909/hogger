@@ -691,3 +691,136 @@ do
   model.params.mob_patrol_radius.wert = r0
   T.ok(still, "Patrouille: Radius 0 schaltet sie ab")
 end
+
+-- Runde 7 (#103): Heil-Reichweite und Klick-Heilung (HEAL_REQUEST) ----------
+T.eq(step.ALLY_SLOT.paladin, 1, "heal: Paladin-Ally-Slot 1 (Heiliges Licht)")
+T.eq(step.ALLY_SLOT.priest, 2, "heal: Priester-Ally-Slot 2 (Geringes Heilen)")
+T.eq(step.ALLY_SLOT.druid, 2, "heal: Druide-Ally-Slot 2 (Heilende Beruehrung)")
+T.eq(step.ALLY_SLOT.warrior, nil, "heal: Krieger hat keinen Ally-Slot")
+do -- eine Wahrheit: ALLY_SLOT (abgeleitet) == announcer.HEALERS (Handliste)
+  local ann = require("game.gamesim.announcer")
+  for class in pairs(ann.HEALERS) do
+    T.ok(step.ALLY_SLOT[class] ~= nil,
+      "heal: announcer-Heiler " .. class .. " hat einen Ally-Slot")
+  end
+  for class in pairs(step.ALLY_SLOT) do
+    T.ok(ann.HEALERS[class] == true,
+      "heal: Ally-Slot-Klasse " .. class .. " steht im announcer-Set")
+  end
+end
+
+do
+  local st = world.new(11)
+  world.add_player(st, "heiler", { quest_done = true }) -- 1: wird Priester
+  world.add_player(st, "tank", { quest_done = true })   -- 2: wird Krieger
+  world.add_player(st, "fern", { quest_done = true })   -- 3: wird Magier
+  world.add_player(st, "geist", { quest_done = true })  -- 4: bleibt Geist
+  world.begin_try(st, {})
+  local pr, wa, mg, gh = st.players[1], st.players[2], st.players[3], st.players[4]
+  local x5, y5 = world.class_icon_pos(5) pr.x, pr.y = x5, y5
+  local x1, y1 = world.class_icon_pos(1) wa.x, wa.y = x1, y1
+  local x6, y6 = world.class_icon_pos(6) mg.x, mg.y = x6, y6
+  for _ = 1, math.ceil((model.p("revive_channel") + 0.2) / model.TICK_DT) do
+    step.step(st, {})
+  end
+  T.ok(pr.alive and pr.class == "priest", "heal: Heiler ist Priester")
+  T.ok(wa.alive and wa.class == "warrior", "heal: Ziel ist Krieger")
+  T.ok(mg.alive and mg.class == "mage", "heal: Dritter ist Magier")
+  -- Aufstellung am (unantastbaren) Friedhof: Krieger 100 px daneben,
+  -- Magier 600 px entfernt — deutlich ausser heal_range (250)
+  local g = map.graveyard()
+  pr.x, pr.y = g.x, g.y
+  wa.x, wa.y = g.x + 100, g.y
+  mg.x, mg.y = g.x + 600, g.y
+  wa.hp = wa.hp - 20
+  T.eq(pr.target, world.HOGGER_ID, "heal: Priester hat Hogger im Ziel")
+
+  -- Verweigerungen: alles laeuft durch denselben try_ability-Pfad
+  T.ok(not step.heal_request(st, 3, 1, {}), "heal: Magier ist kein Heiler")
+  T.ok(not step.heal_request(st, 4, 1, {}), "heal: toter Absender verweigert")
+  T.ok(not step.heal_request(st, 1, 4, {}),
+    "heal: Geist-Ziel verweigert — KEIN stiller Selbst-Fallback")
+  T.ok(not step.heal_request(st, 1, 3, {}), "heal: Ziel ausser heal_range verweigert")
+  T.ok(not step.heal_request(st, 1, 99, {}), "heal: unbekannte Ziel-pid verweigert")
+  T.ok(pr.cast == nil, "heal: kein Cast nach lauter Verweigerungen")
+
+  -- Glueckspfad: expliziter Cast auf den Krieger, p.target bleibt Hogger
+  local mana0 = pr.resource
+  T.ok(step.heal_request(st, 1, 2, {}), "heal: Klick-Heilung startet den Cast")
+  T.ok(pr.cast ~= nil and pr.cast.target == 2, "heal: Cast-Ziel = Krieger")
+  T.eq(pr.target, world.HOGGER_ID, "heal: p.target bleibt unberuehrt")
+  T.ok(not step.heal_request(st, 1, 2, {}), "heal: laufender Cast blockt")
+  local hp0 = wa.hp
+  local healed = false
+  for _ = 1, math.ceil((model.p("priest_heal_cast") + 0.2) / model.TICK_DT) do
+    local evs = step.step(st, {})
+    for _, e in ipairs(evs) do
+      if e.ev == "heal" and e.src == 1 and e.dst == 2 then healed = true end
+    end
+  end
+  T.ok(healed, "heal: heal-Event mit src=Priester, dst=Krieger")
+  T.ok(wa.hp > hp0, "heal: Krieger-HP gestiegen")
+  T.ok(pr.resource < mana0, "heal: Mana verbraucht")
+
+  -- Selbstheilung per Klick auf die eigene Zeile: immer in Reichweite
+  for _ = 1, math.ceil(model.p("gcd") / model.TICK_DT) + 1 do step.step(st, {}) end
+  T.ok(step.heal_request(st, 1, 1, {}), "heal: Selbstheilung per Klick ok")
+  T.eq(pr.cast.target, 1, "heal: Selbstheilungs-Cast zielt auf einen selbst")
+  for _ = 1, math.ceil((model.p("priest_heal_cast") + 0.2) / model.TICK_DT) do
+    step.step(st, {})
+  end
+
+  -- Cast-Ende ausser Reichweite: verpufft still und KOSTENLOS
+  for _ = 1, math.ceil(model.p("gcd") / model.TICK_DT) + 1 do step.step(st, {}) end
+  pr.resource = 30
+  T.ok(step.heal_request(st, 1, 2, {}), "heal: Abbruch-Test-Cast startet")
+  wa.x = g.x + 800 -- Ziel laeuft waehrend des Casts heraus
+  local wa_hp = wa.hp
+  local aborted_heal = false
+  for _ = 1, math.ceil((model.p("priest_heal_cast") + 0.2) / model.TICK_DT) do
+    local evs = step.step(st, {})
+    for _, e in ipairs(evs) do
+      if e.ev == "heal" and e.src == 1 then aborted_heal = true end
+    end
+  end
+  T.ok(not aborted_heal, "heal: Herauslaufen — kein heal-Event")
+  T.eq(wa.hp, wa_hp, "heal: Herauslaufen — keine Heilung")
+  T.ok(pr.resource > 25, "heal: Herauslaufen — kein Mana verbraucht")
+  wa.x = g.x + 100
+
+  -- Tastendruck-Pfad, Regression: Hogger im Ziel -> Selbstheilung (Bestand)
+  for _ = 1, math.ceil(model.p("gcd") / model.TICK_DT) + 1 do step.step(st, {}) end
+  pr.resource = 100
+  pr.hp = pr.hp - 10
+  local self_hp0 = pr.hp
+  step.step(st, { [1] = { mask = input.AB2 } })
+  T.ok(pr.cast ~= nil and pr.cast.target == 1,
+    "heal: Taste mit Hogger-Ziel heilt einen selbst (Bestand)")
+  for _ = 1, math.ceil((model.p("priest_heal_cast") + 0.2) / model.TICK_DT) do
+    step.step(st, { [1] = { mask = 0 } })
+  end
+  T.ok(pr.hp > self_hp0, "heal: Selbstheilung ueber die Taste wirkt")
+
+  -- Tastendruck-Pfad, NEU: Spieler-Ziel ausser Reichweite wird verweigert
+  for _ = 1, math.ceil(model.p("gcd") / model.TICK_DT) + 1 do step.step(st, {}) end
+  pr.target = 3 -- Magier in 600 px
+  step.step(st, { [1] = { mask = input.AB2 } })
+  T.ok(pr.cast == nil, "heal: Taste mit fernem Spieler-Ziel castet nicht (Runde 7)")
+  pr.target = world.HOGGER_ID
+
+  -- Tot-Fallback am Cast-Ende bleibt Bestand: Ziel stirbt -> Selbstheilung
+  step.step(st, { [1] = { mask = 0 } })
+  pr.hp = pr.hp - 10
+  local fb_hp0 = pr.hp
+  T.ok(step.heal_request(st, 1, 2, {}), "heal: Fallback-Test-Cast startet")
+  wa.alive, wa.ghost, wa.dead_until = false, false, 100
+  local fb_self = false
+  for _ = 1, math.ceil((model.p("priest_heal_cast") + 0.2) / model.TICK_DT) do
+    local evs = step.step(st, {})
+    for _, e in ipairs(evs) do
+      if e.ev == "heal" and e.src == 1 and e.dst == 1 then fb_self = true end
+    end
+  end
+  T.ok(fb_self, "heal: totes Ziel -> Selbstheilung am Cast-Ende (Bestand)")
+  T.ok(pr.hp > fb_hp0, "heal: Fallback-Heilung wirkt")
+end

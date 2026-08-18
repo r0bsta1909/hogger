@@ -814,6 +814,7 @@ function love.keypressed(key)
         facing = input.facing_from_angle(app.facing_angle or 0),
         cooldown = app.cooldown_view[slot] or 0,
         hogger = app.view.hogger, npcs = app.view.npcs,
+        players = app.view.players, -- Heil-Reichweite (Runde 7, #103)
       })
       if err then
         app.render:error(err)
@@ -882,6 +883,54 @@ function love.mousepressed(mx, my, button)
   end
   if app.stats and app.stats:mousepressed(mx, my) then return end
   if not app.view then return end
+
+  -- Heil-Leiste (Runde 7, #103, GDD 4.3): Rechtsklick auf eine Zeile heilt
+  -- diesen Spieler (HEAL_REQUEST, p.target bleibt unberuehrt), Linksklick
+  -- waehlt ihn als Ziel. Klicks im Leistenrechteck erreichen nie die Karte.
+  do
+    local step_mod = require("game.gamesim.step")
+    local me = app.view.players[app.view.me]
+    local slot = me and me.alive and me.class and step_mod.ALLY_SLOT[me.class]
+    if slot then
+      local rows, more_n = app.render.heal_rows(app.view, model.p("heal_range"))
+      local HB = app.render.HEALBAR
+      local ph = HB.header_h + (#rows + ((more_n > 0) and 1 or 0)) * HB.row_h + 8
+      if #rows > 0 and mx >= HB.x and mx <= HB.x + HB.w
+         and my >= HB.y and my <= HB.y + ph then
+        local i = app.render.healbar_row_at(#rows, mx, my)
+        local row = i and rows[i]
+        if row and button == 2 then
+          -- Fehlerzeile vorab (Issue #56): der Host verwirft stumm, der
+          -- Client sagt, warum nichts passiert (GCD/Mana; Reichweite ist
+          -- durch die Listen-Mitgliedschaft praktisch garantiert)
+          local spec = step_mod.ABILITIES[me.class][slot]
+          local t = app.view.players[row.pid]
+          local err = require("game.ui.errors").check(me, spec, {
+            x = app.view.me_x, y = app.view.me_y,
+            cooldown = app.cooldown_view[slot] or 0,
+            ally_target = t and { x = t.x, y = t.y, alive = t.alive,
+                                  is_self = row.is_self },
+          })
+          if err then
+            app.render:error(err)
+          else
+            if app.mode == "host" then app.net:heal_request(row.pid)
+            else app.net:send_heal(row.pid) end
+            local cd = spec.cd and model.p(spec.cd) or model.p("gcd")
+            app.cooldown_view[slot] = cd
+            app.cooldown_max[slot] = cd
+            audio.play("snd_ui_click")
+          end
+        elseif row then
+          if app.mode == "host" then app.net:set_local_target(row.pid)
+          else app.net:set_target(row.pid) end
+          audio.play("snd_ui_click")
+        end
+        return
+      end
+    end
+  end
+
   local w, h = love.graphics.getDimensions()
   local radius = h / 2 - 8
   local scale = radius / app.render:zoom_radius()

@@ -79,6 +79,12 @@ M.params = {
   autoshot_range         = p(230, 100, 400, 10, "8.1"),
   cast_range             = p(200, 50, 300, 10, "8.1"),
   melee_range            = p(40, 20, 100, 5, "8.1"),  -- im GDD nicht beziffert, siehe frage-Issue
+  -- Heil-Reichweite (Runde 7, #103): Zauber mit target="ally" auf ANDERE;
+  -- Selbstheilung ist immer Reichweite 0. Die 1D-Sim prueft sie bewusst
+  -- NICHT: der maximale 1D-Spielerabstand ist cast_range - melee_range
+  -- = 160 px < 250 px, eine Pruefung koennte dort nie binden (toter Code
+  -- mit Falsifikationsrisiko). Revisionsausloeser in GDD 17.9.
+  heal_range             = p(250, 100, 400, 10, "8.1"),
   gcd                    = p(1.5, 0.5, 3.0, 0.1, "8.1"),
   -- Frontbogen fuer Angriffe (GDD 8.1, Playtest 2026-08-16): das Ziel muss
   -- vor einem liegen, Wegdrehen bricht laufende Zauber ab. 360 = Regel aus.

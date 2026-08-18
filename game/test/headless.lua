@@ -226,6 +226,16 @@ function T.run()
     end
   end
 
+  -- Wire-Roundtrip HEAL_REQUEST (Runde 7, #103): reines Lua kann
+  -- love.data.pack nicht, darum liegt der Codec-Test hier in Stufe 4
+  do
+    local data = wire.heal_request(7)
+    ok(#data == 4, "Wire: HEAL_REQUEST ist 4 Bytes")
+    local msg_type, off = wire.read_header(data)
+    ok(msg_type == wire.MSG.HEAL_REQUEST, "Wire: HEAL_REQUEST-Header")
+    ok(wire.read_heal_request(data, off) == 7, "Wire: Ziel-pid im Roundtrip")
+  end
+
   -- Ergebnis-Pruefungen
   local try_starts, revives, damage_evs = outcome_counts()
   ok(try_starts >= 2, "Voller Try inkl. Try-Uebergang (" .. try_starts .. " Starts)")
