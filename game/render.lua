@@ -5,6 +5,7 @@
 
 local model = require("sim.model")
 local map = require("game.data.map")
+local names = require("game.data.names")
 local world = require("game.gamesim.world")
 local input = require("game.gamesim.input")
 local assets = require("game.assets")
@@ -469,12 +470,22 @@ function R:announce(text, dur)
   self.banner_t = dur or 3
 end
 
+-- Sprechblase am Icon des Echos (Endsequenz, GDD 11 / #132). Der Monolog
+-- laeuft zusaetzlich als Einblendung — Rob will beides.
+R.BUBBLE_WRAP = 260 -- Textbreite; darunter wird der laengste Satz vierzeilig
+R.BUBBLE_PAD = 10
+function R:bubble(text, dur)
+  self.bubble_text = text
+  self.bubble_t = dur or 3
+end
+
 function R:add_shake(amount)
   self.shake = math.max(self.shake, amount)
 end
 
 function R:update(dt)
   if self.banner_t > 0 then self.banner_t = self.banner_t - dt end
+  if (self.bubble_t or 0) > 0 then self.bubble_t = self.bubble_t - dt end
   if self.killcam_t > 0 then self.killcam_t = self.killcam_t - dt end
   if self.shake > 0 then self.shake = math.max(0, self.shake - dt * 30) end
   for i = #self.toasts, 1, -1 do
@@ -804,8 +815,12 @@ function R:draw(view, ui)
   -- Das Echo von Leeroy Jenkins (GDD 10.1): blasses Krieger-Icon, gruener
   -- Name, goldenes Ausrufezeichen solange es eine Quest zu vergeben hat
   -- (Referenz questgeber-ausrufezeichen.jpg)
-  -- nur Geister sehen es (Issue #63), wie die Klassen-Bodenicons (GDD 4.1)
-  if view.echo and me and me.ghost then
+  -- nur Geister sehen es (Issue #63), wie die Klassen-Bodenicons (GDD 4.1).
+  -- Ausnahme seit Runde 11 (#132): in der Endsequenz sehen es ALLE — es ist
+  -- seine eigene Schlussszene, und nach dem Teleport lebt jeder. Ab Stufe 4
+  -- ist es weg (die verschmolzene Figur hat sich ausgeloggt).
+  local won = view.won_stage or 0
+  if view.echo and me and (me.ghost or (won > 0 and won < 4)) then
     local ex, ey = to_screen(view.echo.x, view.echo.y)
     local me_quest = me and (me.quest or 2) or 2
     local pulse = 0.7 + 0.3 * math.sin(love.timer.getTime() * 3)
@@ -814,7 +829,7 @@ function R:draw(view, ui)
     assets.draw("icon_warrior", ex, ey, scale * 1.9, 0.55)
     love.graphics.setColor(0.72, 0.86, 0.55, 0.95) -- freundlicher NPC: gruen
     local font = love.graphics.getFont()
-    local nm = "Echo von Leeroy Jenkins"
+    local nm = names.ECHO
     love.graphics.print(nm, ex - font:getWidth(nm) / 2, ey + 18 * scale)
     if me_quest < 2 then
       -- das Ausrufezeichen: goldener Balken plus Punkt, leicht schwebend
@@ -834,7 +849,9 @@ function R:draw(view, ui)
   local hg = view.hogger
   if hg.state ~= "reset" then
     local x, y = to_screen(hg.x, hg.y)
-    assets.draw("icon_hogger", x, y, scale * 2)
+    -- Nach dem Fluchbruch bleibt er als erloschenes Icon liegen (#132):
+    -- der Kreis, in dem alle stehen, braucht seine Mitte
+    assets.draw("icon_hogger", x, y, scale * 2, (hg.hp or 0) > 0 and 1 or 0.4)
   end
 
   -- Geister zuerst (gedimmt), dann Lebende (GDD 4.1)
@@ -842,7 +859,10 @@ function R:draw(view, ui)
   for pass = 1, 2 do
     for _, pid in ipairs(draw_pids) do
       local p = view.players[pid]
-      if pid ~= view.me then
+      -- Ab der Verschmelzung ist Leeroys Koerper im Echo aufgegangen (#132):
+      -- zwei Icons uebereinander wuerden die Pointe zerstoeren
+      local merged = p.is_leeroy and won >= 3
+      if pid ~= view.me and not merged then
         local is_ghost_pass = pass == 1
         if (p.ghost and is_ghost_pass) or (p.alive and not is_ghost_pass) then
           local x, y = to_screen(p.x, p.y)
@@ -1466,13 +1486,49 @@ function R:draw(view, ui)
       L.oy + L.radius * 0.45 + (i - 1) * 18)
   end
 
-  -- Ansage-Banner (Try-Ende, Sieg)
+  -- Ansage-Banner (Try-Ende, Sieg). In der Endsequenz rutscht es nach unten:
+  -- oben steht dann die Sprechblase an der verschmolzenen Figur, und beide
+  -- uebereinander waren im Test unlesbar (#132).
   if self.banner_t > 0 and self.banner_text then
     love.graphics.setColor(1, 0.9, 0.5, math.min(1, self.banner_t))
     local font = love.graphics.getFont()
+    local by = won > 0 and (L.oy + L.radius * 0.72) or (L.oy - L.radius * 0.4)
     love.graphics.print(self.banner_text,
-      L.ox - font:getWidth(self.banner_text) / 2 * 2, L.oy - L.radius * 0.4,
-      0, 2, 2)
+      L.ox - font:getWidth(self.banner_text) / 2 * 2, by, 0, 2, 2)
+  end
+
+  -- Sprechblase am Icon des Echos (Endsequenz, GDD 11 / #132): der Monolog
+  -- gehoert zur verschmolzenen Figur, also haengt er an ihr und nicht am
+  -- Bildschirmrand. Sie steht dabei still, ein Zipfel genuegt.
+  if (self.bubble_t or 0) > 0 and self.bubble_text and view.echo then
+    local bx, by = to_screen(view.echo.x, view.echo.y)
+    local font = love.graphics.getFont()
+    local wrap = R.BUBBLE_WRAP
+    local _, lines = font:getWrap(self.bubble_text, wrap)
+    local th = #lines * font:getHeight()
+    local bw = wrap + 2 * R.BUBBLE_PAD
+    local bh = th + 2 * R.BUBBLE_PAD
+    local px, py = bx - bw / 2, by - 46 - bh
+    local a = math.min(1, self.bubble_t * 2)
+    love.graphics.setColor(0.07, 0.07, 0.11, 0.94 * a)
+    love.graphics.rectangle("fill", px, py, bw, bh, 6, 6)
+    love.graphics.polygon("fill", bx - 7, py + bh, bx + 7, py + bh, bx, py + bh + 12)
+    love.graphics.setColor(0.78, 0.63, 0.28, a)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", px, py, bw, bh, 6, 6)
+    love.graphics.setLineWidth(1)
+    love.graphics.setColor(0.95, 0.92, 0.8, a)
+    love.graphics.printf(self.bubble_text, px + R.BUBBLE_PAD, py + R.BUBBLE_PAD,
+      wrap, "center")
+  end
+
+  -- Systemnachricht (Endsequenz, GDD 11 / #132): gelb, mittig, OHNE Ablauf —
+  -- sie ist das letzte Wort des Abends und bleibt stehen.
+  if self.sysmsg then
+    local font = love.graphics.getFont()
+    love.graphics.setColor(1, 0.82, 0.2, 1)
+    love.graphics.print(self.sysmsg,
+      L.ox - font:getWidth(self.sysmsg) / 2 * 1.4, L.oy - 12, 0, 1.4, 1.4)
   end
 
   -- Killcam-Zeile: 2 s, RECOUNT-9000-Ton (GDD 11)

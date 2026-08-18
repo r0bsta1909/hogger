@@ -1,20 +1,17 @@
--- game/ui/victory.lua — Fluchbruch-Sequenz (GDD Kap. 11): Hoggers Icon
--- zerspringt, Loot-Fenster (Thunderfury-Gag + Zerfledderter Wams), der
--- Glitch laeuft rueckwaerts, kurz der echte Login-Screen, dann die finale
--- Statistik-Tafel mit REVANCHE- und Ausloggen-Knopf (#85).
--- Die Sim steht waehrenddessen (phase "won"), bis REVANCHE den naechsten
--- Abend-Durchlauf startet (Try-Zaehler bei 1).
-
-local assets = require("game.assets")
-local stats = require("game.ui.stats")
+-- game/ui/victory.lua — der Auftakt des Fluchbruchs (GDD Kap. 11):
+-- Hoggers Icon zerspringt, danach kurz das Loot-Fenster (Thunderfury-Gag +
+-- Zerfledderter Wams). Mehr macht dieses Overlay nicht: Verschmelzung,
+-- Monolog und Abgang spielen seit Runde 11 (#132) IN DER WELT und werden
+-- von der Sim getaktet (won_stage im Snapshot), damit alle Rechner dieselben
+-- Beats sehen. Rueckwaerts-Glitch, Login-Splash und die Knoepfe REVANCHE /
+-- Ausloggen sind ersatzlos entfallen — nach dem Fluchbruch gibt es keinen
+-- Weg zurueck ins Spiel.
 
 local V = {}
 V.__index = V
 
 local SHATTER_T = 2.2
-local LOOT_MIN_T = 1.2
-local UNGLITCH_T = 2.2
-local LOGIN_T = 3.0
+local LOOT_T = 5.0 -- zeitgesteuert: ein Klickzwang liesse die Runde driften
 
 -- Loot-Texte (GDD-Wortlaut bzw. Vorschlag)
 local THUNDERFURY =
@@ -25,9 +22,8 @@ local WAMS = "Zerfledderter Wams  (2 Kupfer)"
 function V.new(board)
   local self = setmetatable({}, V)
   self.board = board
-  self.state = "shatter" -- shatter | loot | unglitch | login | board
+  self.state = "shatter" -- shatter | loot | done
   self.t = 0
-  self.panel = nil
   -- Scherben deterministisch (rein kosmetisch, kein RNG-Kanal)
   self.frags = {}
   for i = 1, 14 do
@@ -38,50 +34,27 @@ function V.new(board)
   return self
 end
 
-local function enter(self, state)
-  self.state = state
-  self.t = 0
-  if state == "unglitch" then
-    -- der Glitch laeuft rueckwaerts — mit demselben Static (GDD 11/12)
-    require("game.audio").play("snd_glitch_static")
-  end
-end
-
 function V:update(dt)
   self.t = self.t + dt
   if self.state == "shatter" and self.t >= SHATTER_T then
-    enter(self, "loot")
-  elseif self.state == "unglitch" and self.t >= UNGLITCH_T then
-    enter(self, "login")
-  elseif self.state == "login" and self.t >= LOGIN_T then
-    enter(self, "board")
-    self.panel = stats.new(self.board, { sticky = true, buttons = {
-      { id = "revanche", label = "REVANCHE" },
-      { id = "logout", label = "Ausloggen" }, -- beendet das Spiel (#85)
-    } })
+    self.state, self.t = "loot", 0
+  elseif self.state == "loot" and self.t >= LOOT_T then
+    self.state, self.t = "done", 0
   end
-  if self.panel then self.panel:update(dt) end
 end
 
--- Rueckgabe "revanche" oder "logout", wenn ein Knopf der finalen Tafel
--- gedrueckt wurde (#85)
-function V:mousepressed(mx, my)
-  if self.state == "loot" and self.t >= LOOT_MIN_T then
-    enter(self, "unglitch")
-    return true
-  elseif self.state == "board" and self.panel then
-    local r = self.panel:mousepressed(mx, my)
-    if r == "revanche" or r == "logout" then return r end
-    return true
-  end
-  return true -- Sequenz schluckt Klicks (die Welt steht ohnehin)
+-- true, solange das Overlay noch etwas zu sagen hat
+function V:active()
+  return self.state ~= "done"
+end
+
+function V:mousepressed()
+  if self.state == "loot" then self.state, self.t = "done", 0 end
+  return true -- die Sequenz schluckt Klicks (die Welt steht ohnehin)
 end
 
 function V:keypressed(key)
-  if key == "return" or key == "space" then
-    local r = self:mousepressed(-1, -1)
-    return r == true
-  end
+  if key == "return" or key == "space" then self:mousepressed() end
   return true
 end
 
@@ -109,45 +82,6 @@ local function draw_loot(self, w, h)
     love.graphics.setColor(0.85, 0.75, 0.5, 1)
     love.graphics.print(self.board.wams, px + 16, py + 112)
   end
-  love.graphics.setColor(0.6, 0.56, 0.45, 0.6 + 0.3 * math.sin(self.t * 3))
-  love.graphics.print("(klicken)", px + pw - 76, py + ph - 22)
-end
-
-local function draw_unglitch(self, w, h)
-  -- der Glitch laeuft rueckwaerts: die Minimap zerreisst (GDD 11)
-  local k = math.min(1, self.t / UNGLITCH_T)
-  local rnd = love.math.random
-  local bands = 14
-  local band_h = h / bands
-  for i = 0, bands - 1 do
-    if rnd() < k then
-      local off = (rnd() - 0.5) * 160 * k
-      love.graphics.setColor(0, 0, 0, 0.55 * k)
-      love.graphics.rectangle("fill", off, i * band_h, w, band_h)
-    end
-  end
-  love.graphics.setColor(0, 0, 0, 0.35)
-  for y = 0, h, 3 do
-    love.graphics.rectangle("fill", 0, y, w, 1)
-  end
-  love.graphics.setColor(1, 1, 1, 0.3 * k)
-  for _ = 1, 260 do
-    love.graphics.rectangle("fill", rnd() * w, rnd() * h, rnd() * 3 + 1, 1)
-  end
-  love.graphics.setColor(0, 0, 0, k * k)
-  love.graphics.rectangle("fill", 0, 0, w, h)
-end
-
-local function draw_login(self, w, h)
-  -- contain wie beim Start-Splash (Issue #66) — derselbe Helfer, damit die
-  -- beiden Stellen nie wieder auseinanderlaufen (#84). Ausloggen ist jetzt
-  -- ein Knopf auf der Tafel, keine Textzeile mehr (#85).
-  local img = assets.get("splash_login")
-  local scale, iw, ih = require("game.ui.boot").splash_scale(img, w, h)
-  love.graphics.setColor(0, 0, 0, 1)
-  love.graphics.rectangle("fill", 0, 0, w, h)
-  love.graphics.setColor(1, 1, 1, 1)
-  love.graphics.draw(img, w / 2, h / 2, 0, scale, scale, iw / 2, ih / 2)
 end
 
 function V:draw(view, to_screen, w, h)
@@ -169,13 +103,6 @@ function V:draw(view, to_screen, w, h)
     love.graphics.circle("fill", hx, hy, 30 + k * 90)
   elseif self.state == "loot" then
     draw_loot(self, w, h)
-  elseif self.state == "unglitch" then
-    draw_unglitch(self, w, h)
-  elseif self.state == "login" then
-    draw_login(self, w, h)
-  elseif self.state == "board" and self.panel then
-    draw_login(self, w, h) -- die Tafel liegt ueber dem Login-Screen
-    self.panel:draw()
   end
 end
 
