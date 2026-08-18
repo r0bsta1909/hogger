@@ -976,6 +976,64 @@ do -- Leeroy allein haelt die Uhr nicht am Laufen, in Schlagweite aber schon
   T.eq(st.hogger.no_contact_t, 0, "reset: Uhr steht bei nur lebendem Leeroy")
 end
 
+-- Runde 9 (#118): Laufzeit-Skalierung fuer die F12-Debug-Bots -------------
+do
+  local st = world.new(3)
+  world.add_leeroy(st)
+  for i = 1, 5 do world.add_player(st, "p" .. i, { quest_done = true }) end
+  world.begin_try(st, {})
+  T.eq(st.n_scale, 5, "rescale: N zaehlt ohne Leeroy")
+  local h = st.hogger
+  h.hp = h.max_hp * 0.5
+  local frac0 = h.hp / h.max_hp
+  local adds0 = model.adds(5)
+
+  T.eq(world.rescale(st, {}), false, "rescale: ohne neue Spieler passiert nichts")
+
+  for i = 6, 8 do world.add_player(st, "p" .. i, { quest_done = true }) end
+  local ev = {}
+  T.eq(world.rescale(st, ev), true, "rescale: neue Spieler skalieren sofort")
+  T.eq(st.n_scale, 8, "rescale: n_scale nachgezogen")
+  T.eq(h.max_hp, model.hogger_hp(8), "rescale: Max-HP nach der 9.3-Formel")
+  T.ok(math.abs(h.hp / h.max_hp - frac0) < 1e-6,
+    "rescale: HP-Anteil bleibt erhalten")
+  T.ok(h.hp >= 1, "rescale: Hogger stirbt nie durch das Rescale")
+  local logged = false
+  for _, e in ipairs(ev) do
+    if e.ev == "param_change" and e.dst == "n_scale" then logged = true end
+  end
+  T.ok(logged, "rescale: das Log erklaert den HP-Sprung")
+
+  -- Adds stocken auf; erschlagene Welpen kommen nicht zurueck (GDD 9.2)
+  local function count_adds()
+    local n = 0
+    for _, npc in pairs(st.npcs) do if npc.kind == "add" then n = n + 1 end end
+    return n
+  end
+  T.eq(count_adds(), model.adds(8), "rescale: Adds aufgestockt")
+  T.ok(model.adds(8) > adds0, "rescale: mehr Spieler = mehr Welpen")
+  for id, npc in pairs(st.npcs) do
+    if npc.kind == "add" then st.npcs[id] = nil break end
+  end
+  world.add_player(st, "p9", { quest_done = true })
+  world.rescale(st, {})
+  T.eq(count_adds(), model.adds(9) - 1,
+    "rescale: erschlagene Welpen bleiben tot")
+end
+
+do -- Kein Rescale bei totem Hogger oder nach dem Sieg
+  local st = world.new(3)
+  world.add_player(st, "a", { quest_done = true })
+  world.begin_try(st, {})
+  st.hogger.hp = 0
+  world.add_player(st, "b", { quest_done = true })
+  T.eq(world.rescale(st, {}), false, "rescale: toter Hogger bleibt tot")
+  T.eq(st.hogger.hp, 0, "rescale: kein Wiederbeleben durch das Rescale")
+  st.hogger.hp = 100
+  st.phase = "won"
+  T.eq(world.rescale(st, {}), false, "rescale: nach dem Sieg passiert nichts")
+end
+
 do -- Sieg schlaegt Abbruch
   local st, h = reset_world({ n = 1 })
   h.hp = 0

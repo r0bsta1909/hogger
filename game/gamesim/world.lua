@@ -188,17 +188,60 @@ local function reset_hogger(state)
   }
 end
 
+-- N = verbundene, wiederbelebbare Spieler; Leeroy zaehlt nie mit (GDD 6/10).
+-- Eine Wahrheit fuer begin_try und die Laufzeit-Skalierung (Runde 9, #118).
+function M.count_n(state)
+  local n = 0
+  for _, p in ipairs(state.players) do
+    if not p.is_leeroy and not p.disconnected then n = n + 1 end
+  end
+  return math.max(1, n)
+end
+
+-- Laufzeit-Skalierung (Runde 9, #118): NUR fuer die F12-Debug-Bots. Echte
+-- Joins zaehlen weiter erst ab dem naechsten Try (GDD 6). Hoggers HP-ANTEIL
+-- bleibt erhalten, Adds werden nur aufgestockt (erschlagene Welpen kommen
+-- nicht zurueck, GDD 9.2). Cleave, Unterbrecher, Fressrate und Mob-Slots
+-- folgen automatisch ueber n_scale.
+function M.rescale(state, evlist)
+  local h = state.hogger
+  -- Nach dem Sieg oder bei totem Hogger nichts tun: ein hp-Update wuerde
+  -- ihn wiederbeleben und den Fluchbruch zerstoeren.
+  if state.phase ~= "try" or not h or h.hp <= 0 then return false end
+  local n = M.count_n(state)
+  if n == state.n_scale then return false end
+  state.n_scale = n
+  local frac = h.max_hp > 0 and (h.hp / h.max_hp) or 1
+  h.max_hp = model.hogger_hp(n)
+  h.hp = math.max(1, math.floor(frac * h.max_hp + 0.5))
+  -- Adds nur aufstocken, nie loeschen
+  local want = model.adds(n)
+  local have = state.adds_spawned or 0
+  if want > have then
+    local addpos = map.add_positions(want)
+    for i = have + 1, want do
+      local pos = addpos[i]
+      local npc = M.add_npc(state, "add", pos.x, pos.y, model.p("add_hp"))
+      npc.state = "idle"
+      npc.spawn_x, npc.spawn_y = pos.x, pos.y
+    end
+    state.adds_spawned = want
+  end
+  M.ensure_mob_slots(state)
+  if evlist then
+    -- wie der Try-Seed als param_change geloggt: das Log muss erklaeren,
+    -- warum Hoggers Max-HP mitten im Try springt
+    events.push(evlist, state.tick, "param_change", "host", "n_scale", n, nil)
+  end
+  return true
+end
+
 -- Try-Start: N zaehlen, Hogger zuruecksetzen, Seed ableiten, Parameter loggen
 function M.begin_try(state, evlist)
   state.try_nr = state.try_nr + 1
   state.clock = 0
   state.phase = "try"
-  -- N = verbundene, wiederbelebbare Spieler; Leeroy zaehlt nie mit (GDD 6/10)
-  local n = 0
-  for _, p in ipairs(state.players) do
-    if not p.is_leeroy and not p.disconnected then n = n + 1 end
-  end
-  state.n_scale = math.max(1, n)
+  state.n_scale = M.count_n(state)
   state.corpses = {}
   -- Statistik-Tafel (GDD 11): Zaehler je Try, gefuellt in step.lua
   state.stats = {
@@ -227,6 +270,7 @@ function M.begin_try(state, evlist)
     npc.state = "idle"
     npc.spawn_x, npc.spawn_y = pos.x, pos.y
   end
+  state.adds_spawned = #addpos -- Basis fuer M.rescale (Runde 9, #118)
   -- Ambient-Mobs bestehen ueber Trys fort; fehlende Slots auffuellen
   M.ensure_mob_slots(state)
   if evlist then
