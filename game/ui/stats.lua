@@ -11,17 +11,19 @@ local SHOW_T = 10 -- ~10 s (GDD 11)
 -- Hinweis auf der Tafel (Runde 10, #126). ASCII-Konvention wie ueberall im UI.
 S.HINT = "Klick zum Schliessen"
 
--- opts.sticky: bleibt stehen (finale Sieg-Tafel); opts.buttons: Liste von
--- { id, label } unten mittig (REVANCHE + Ausloggen, GDD 11 / #85) —
--- Klick liefert die id des getroffenen Knopfs
+-- opts.hold: kein Auto-Ausblenden, aber wegklickbar — die Tafel am Ende der
+-- Endsequenz (Runde 11, #132) ist das letzte Bild und soll auf den Leser
+-- warten. opts.sticky: bleibt stehen und laesst sich gar nicht schliessen.
+-- opts.buttons: Liste von { id, label } unten mittig; Klick liefert die id.
 function S.new(board, opts)
   opts = opts or {}
   return setmetatable({ board = board, t = SHOW_T, visible = true,
-                        sticky = opts.sticky, buttons = opts.buttons }, S)
+                        sticky = opts.sticky, hold = opts.hold,
+                        buttons = opts.buttons }, S)
 end
 
 function S:update(dt)
-  if self.sticky then
+  if self.sticky or self.hold then
     self.t = math.max(1, self.t) -- volle Deckkraft, kein Auto-Ausblenden
     return
   end

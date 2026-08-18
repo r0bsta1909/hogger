@@ -373,6 +373,9 @@ local function process_cosmetics(view)
       local text = lines[lid]
       if text then
         app.render:announce((lid == 1 and "Leeroy: " or "Echo: ") .. text, 4)
+        -- Der letzte Monolog haengt zusaetzlich als Sprechblase an der
+        -- verschmolzenen Figur (Endsequenz, GDD 11 / #132)
+        if lid >= 31 then app.render:bubble(text, 3.0) end
       end
       if lid == 1 then
         audio.play("snd_leeroy_scream") -- kartenweit: DAS Startsignal (Nr. 16)
@@ -579,9 +582,10 @@ function love.update(dt)
     if board.header:find("^SIEG") then
       app.victory = require("game.ui.victory").new(board)
       app.stats = nil
+      -- Die Tafel kommt erst ganz am Ende, nach Leeroys Abgang (#132)
+      app.end_board = board
       -- Sieg-Marker (Runde 8, #110): endet der Abend siegreich, ist der
-      -- naechste Start ein Erststart (Auswertung in love.load). REVANCHE
-      -- entwertet den Marker wieder (unten).
+      -- naechste Start ein Erststart (Auswertung in love.load).
       love.filesystem.write("sieg.dat", "1")
     else
       app.stats = require("game.ui.stats").new(board)
@@ -595,10 +599,28 @@ function love.update(dt)
   if app.panel then app.panel:update(dt, love.mouse.getPosition()) end
   if app.victory then
     app.victory:update(dt)
-    -- REVANCHE gedrueckt, der naechste Durchlauf laeuft: Sequenz beenden
+    if not app.victory:active() then app.victory = nil end
+    -- Der Fluch ist zurueck (Debug-REVANCHE, #110): Sequenz sofort abraeumen
     if app.view and app.view.phase == "try" then
-      love.filesystem.remove("sieg.dat") -- der Fluch ist zurueck (#110)
-      app.victory = nil
+      love.filesystem.remove("sieg.dat")
+      app.victory, app.sysmsg_done, app.endboard = nil, nil, nil
+      app.render.sysmsg = nil
+    end
+  end
+
+  -- Die Endsequenz taktet die Sim (Runde 11, #132): won_stage 4 heisst
+  -- "Leeroy ist ausgeloggt". Danach die Systemnachricht, kurz darauf die
+  -- Statistik-Tafel als letztes Bild — sie bleibt bis zum Klick stehen.
+  if view and (view.won_stage or 0) >= 4 then
+    if not app.sysmsg_done then
+      app.sysmsg_done = 0
+      app.render.sysmsg = require("game.data.names").LEEROY_LEFT
+      app.render.bubble_t = 0 -- die Blase bricht mitten im Satz ab
+    end
+    app.sysmsg_done = app.sysmsg_done + dt
+    if app.sysmsg_done >= 1.7 and not app.endboard and app.end_board then
+      app.endboard = true
+      app.stats = require("game.ui.stats").new(app.end_board, { hold = true })
     end
   end
 
@@ -927,15 +949,8 @@ function love.mousepressed(mx, my, button)
     end
   end
   if app.victory then
-    local r = app.victory:mousepressed(mx, my)
-    if r == "revanche" then
-      -- REVANCHE (GDD 11): jeder darf druecken, der Host fuehrt aus
-      if app.mode == "host" then app.net:revanche()
-      else app.net:send_revanche() end
-    elseif r == "logout" then
-      -- Ausloggen (#85): beendet das Spiel; love.quit() raeumt das Netz ab
-      love.event.quit(0)
-    end
+    -- Der Auftakt schluckt Klicks; ein Klick ins Loot-Fenster ueberspringt es
+    app.victory:mousepressed(mx, my)
     return
   end
   if app.stats and app.stats:mousepressed(mx, my) then return end

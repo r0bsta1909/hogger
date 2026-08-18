@@ -55,8 +55,22 @@ do
   T.ok(w:visible(), "das Fenster bleibt sichtbar, bis angenommen wird")
 end
 
--- Der Text gehoert dem ECHO, nicht dem Raid-Leeroy (Issue #52)
-T.ok(quest.GIVER:find("Echo") ~= nil, "Questgeber ist das Echo")
+-- Der Text gehoert dem ECHO, nicht dem Raid-Leeroy (Issue #52). Seit Runde 11
+-- (#132) heisst es "Leeroy Leeroy Jenkins Jenkins" — dass es nur der Rest von
+-- Leeroy ist, sagt seitdem der Questtext selbst statt der Name.
+local names = require("game.data.names")
+T.eq(quest.GIVER, names.ECHO, "Questgeber traegt den Namen aus einer Wahrheit")
+T.ok(names.ECHO ~= names.LEEROY, "Echo und Raid-Leeroy sind zwei Figuren")
+T.ok(names.ECHO:find("[\128-\255]") == nil, "Name ist ASCII (Spielcode-Konvention)")
+T.ok(#names.LEEROY_LEFT > 0 and names.LEEROY_LEFT:find("[\128-\255]") == nil,
+  "Systemnachricht der Endsequenz ist da und ASCII")
+do
+  local erklaert = false
+  for _, s in ipairs(quest.BODY or {}) do
+    if s:find("uebrig ist") then erklaert = true end
+  end
+  T.ok(erklaert, "der Questtext klaert auf, dass er nur das Echo ist")
+end
 T.ok(#quest.BODY >= 4, "Questtext hat die Intro-Informationen")
 T.ok(#quest.GOALS >= 2, "Questziele sind benannt")
 local goals = table.concat(quest.GOALS, " ")

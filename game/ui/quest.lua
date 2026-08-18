@@ -15,7 +15,7 @@ Q.__index = Q
 -- Koerper seit tausend Trys beim Sterben zu. %d = Try-Nummer.
 -- ---------------------------------------------------------------------------
 local TITLE = "Der Fluch des Leeroy Jenkins"
-local GIVER = "Echo von Leeroy Jenkins"
+local GIVER = require("game.data.names").ECHO
 local BODY = {
   "Da bist du ja. Nein, steh nicht auf. Du liegst nicht, du bist nur tot. "
     .. "Das legt sich.",

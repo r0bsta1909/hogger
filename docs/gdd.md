@@ -278,10 +278,12 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 
 ### 10.1 Das Echo von Leeroy Jenkins (Friedhof)
 
+**Sein Name im Spiel lautet zwingend „Leeroy Leeroy Jenkins Jenkins"** (Runde 11, #132) — der Fluch hat ihn geteilt, und was übrig blieb, heißt doppelt. Dass er nur das Echo ist, erklärt er selbst im Questtext; der Name sagt es nicht. Er steht an genau einer Stelle im Code (`game/data/names.lua`), Weltbeschriftung und Questfenster lesen ihn von dort.
+
 Was von Leeroy übrig ist, während sein Körper da vorne schon wieder losrennt. Das Echo steht am Friedhof, greift **nie** in den Kampf ein und muss zusehen, wie seine eigene physische Gestalt Try um Try anstürmt und abgeschlachtet wird. Es ist **Erzähler, Questgeber und Announcer**:
 
 - **Questgeber:** goldenes Ausrufezeichen, grüner NPC-Name. Die Quest liegt mit dem Spielbeitritt an; die Annäherung ist eine **rein lokale Sequenz** (1,3 s), die nur der betroffene Spieler sieht — in der Welt bewegt sich das Echo nie, sonst würde bei 40 Beitritten auf demselben Spawnpunkt dauernd jemand über den Friedhof gechargt (Playtest-Korrektur 2026-08-16). **Die einzige Ausnahme ist die Endsequenz** (Kap. 11): Zum Fluchbruch tritt es in die Mitte des Spielerkreises, weil sein eigener Körper dort mit ihm verschmilzt.
-- **Nur Geister sehen es** (wie die acht Klassen-Bodenicons, 4.1): Lebende sehen und klicken es nicht.
+- **Nur Geister sehen es** (wie die acht Klassen-Bodenicons, 4.1): Lebende sehen und klicken es nicht. **Ausnahme: die Endsequenz** (Kap. 11) — dort sehen es alle, denn nach dem Teleport lebt jeder, und es ist seine eigene Schlussszene. Mit seinem Abgang verschwindet es ganz.
 - **Easter Egg:** Wer es als Geist erneut anklickt, bekommt die ganze Geschichte — mehrere durchblätterbare Seiten (Raid, Sturmangriff, Fluch, Erwachen, Teilung, warum es fragt). Null Spielwirkung, keine Belohnung, kein Hinweis darauf. Nur wer es findet.
 - **Questlog:** Taste `L` blendet die Quest weg und zurück; nach der Annahme zeigt sie dieselbe Seite als Log (ohne Namensfeld, ohne Knöpfe).
 - **Erzähler:** die Quest, kurze Zwischen-Zeilen am Friedhof, "Ah. Wieder da." beim Rejoin.
@@ -326,7 +328,9 @@ Die Zeilen sind Text (Sprechblase + Einblendung), gesprochen vom Echo. Einzige V
   - **Verschmelzung:** Mitten im Kreis stehen Leeroys Krieger-Körper und das Echo dicht beieinander. Der Körper gleitet auf das Echo zu und geht in ihm auf — die einzige Bewegung, die das Echo je macht (10.1).
   - **Der Monolog** (fünf Zeilen, als Sprechblase am Icon **und** als Einblendung): „Wir... wir haben es geschafft." · „Der Fluch ist gebrochen. Ich spüre meine Hände wieder." · „Ich kann wieder die Escape-Taste drücken!" · „ENDLICH. BIN. ICH. FREI!" · „Moment. Hätte ich vielleicht auch all die Zeit mit ALT+F..."
   - **Der Abgang:** Die Sprechblase bricht hart ab, Leeroys Icon verschwindet sofort, als hätte er sich ausgeloggt. Dann die gelbe Systemnachricht mittig: **"Leeroy Jenkins hat das Spiel verlassen."**
-  - **Die ganze Szene läuft in der Simulation** und wird über das Phasen-Byte des Snapshots getaktet (0 = Try, 1–4 = versammelt/Verschmelzung/Monolog/Abgang). Damit sehen alle Rechner dieselben Beats zur selben Zeit — anders als früher, wo das klickgebundene Loot-Fenster die Teilnehmer auseinanderdriften ließ.
+  - **Die Statistik-Tafel kommt zuletzt** — nach dem Abgang, ohne Knöpfe, und sie bleibt bis zum Klick stehen (Hinweis „Klick zum Schliessen"). Danach steht wieder das Schlussbild da: der Kreis, Hoggers erloschenes Icon und die gelbe Zeile.
+  - **Die ganze Szene läuft in der Simulation** und wird über das Phasen-Byte des Snapshots getaktet (0 = Try, 1–4 = versammelt/Verschmelzung/Monolog/Abgang). Damit sehen alle Rechner dieselben Beats zur selben Zeit — anders als früher, wo das klickgebundene Loot-Fenster die Teilnehmer auseinanderdriften ließ. Das Loot-Fenster ist deshalb zeitgesteuert (ein Klick überspringt es nur).
+  - **Gestrichen (Runde 11):** der Rückwärts-Glitch, der Login-Splash am Ende und die Knöpfe REVANCHE / Ausloggen. Die Welt bleibt die ganze Szene über sichtbar — es gibt keinen Vorhang mehr zwischen Kill und Schlussbild.
 
 ---
 
