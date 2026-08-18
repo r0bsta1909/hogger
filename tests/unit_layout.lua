@@ -122,6 +122,24 @@ do
     "layout: healbar_row_at-Default bleibt R.HEALBAR")
 end
 
+-- Hogger-Tracker edge_pos (Runde 8, #108) -----------------------------------
+do
+  local L = render.layout(1280, 800, false)
+  T.eq(render.edge_pos(0, 0, 100, 0, 200, L), nil,
+    "tracker: innerhalb des Zoom-Radius kein Indikator")
+  T.eq(render.edge_pos(0, 0, 200, 0, 200, L), nil,
+    "tracker: exakt am Uebergang noch kein Indikator (<=)")
+  local ex, ey = render.edge_pos(0, 0, 201, 0, 200, L)
+  T.ok(ex ~= nil, "tracker: ausserhalb erscheint der Indikator")
+  T.near(math.sqrt((ex - L.ox) ^ 2 + (ey - L.oy) ^ 2), L.radius - 18,
+    "tracker: Punkt liegt auf dem Innenrand (radius - 18)")
+  T.ok(ex > L.ox, "tracker: oestliches Ziel zeigt nach rechts")
+  T.near(ey, L.oy, "tracker: rein oestliches Ziel bleibt auf der Mittellinie")
+  local nx, ny = render.edge_pos(500, 500, 500, -300, 200, L)
+  T.ok(ny < L.oy, "tracker: noerdliches Ziel zeigt nach oben")
+  T.near(nx, L.ox, "tracker: rein noerdliches Ziel bleibt mittig")
+end
+
 -- cellhash: deterministisch und streuend ------------------------------------
 do
   T.eq(render.cellhash(7, 13), render.cellhash(7, 13),

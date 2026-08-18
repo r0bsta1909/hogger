@@ -399,6 +399,17 @@ function R.layout(w, h, docked)
   }
 end
 
+-- Hogger-Tracker (Runde 8, #108): liegt ein Ziel ausserhalb des sichtbaren
+-- Kreises (Weltdistanz > Zoom-Radius), liefert edge_pos den Punkt am
+-- Innenrand des Rings in seiner Richtung — sonst nil. Reine Arithmetik,
+-- love-frei, Stufe-1-getestet.
+function R.edge_pos(me_x, me_y, tx, ty, zr, L)
+  if world.dist(me_x, me_y, tx, ty) <= zr then return nil end
+  local ang = math.atan2(ty - me_y, tx - me_x)
+  return L.ox + math.cos(ang) * (L.radius - 18),
+         L.oy + math.sin(ang) * (L.radius - 18)
+end
+
 -- Deterministischer Zellen-Hash fuer Aussen-Mottle und Gras-Flecken (M12):
 -- reine Integer-Arithmetik, KEIN math.random — frame-stabil, love-frei.
 function R.cellhash(x, y)
@@ -1024,6 +1035,23 @@ function R:draw(view, ui)
         love.graphics.circle("fill", cx + math.cos(a2) * (r + 3),
           cy + math.sin(a2) * (r + 3), 3.5)
       end
+    end
+  end
+
+  -- Hogger-Tracker (Runde 8, #108): dezentes Medaillon am Innenrand des
+  -- Rings in Hoggers Richtung, solange er ausserhalb des sichtbaren
+  -- Kreises liegt und lebt — auch im Leash-Rueckweg. Kein Blinken.
+  if view.hogger and (view.hogger.hp or 0) > 0 then
+    local ex, ey = R.edge_pos(view.me_x, view.me_y,
+      view.hogger.x, view.hogger.y, self:zoom_radius(), L)
+    if ex then
+      love.graphics.setColor(0.07, 0.07, 0.09, 0.9)
+      love.graphics.circle("fill", ex, ey, 14)
+      love.graphics.setColor(0.78, 0.63, 0.28, 0.9)
+      love.graphics.setLineWidth(1.5)
+      love.graphics.circle("line", ex, ey, 14)
+      love.graphics.setLineWidth(1)
+      assets.draw("icon_hogger", ex, ey, 22 / assets.size("icon_hogger"), 0.9)
     end
   end
 
