@@ -41,8 +41,13 @@ return {
   -- 29-30: Besonderes
   [29] = "DING? ... das ist nicht moeglich.",
   [30] = "Zeit haben wir. Ewig, genau genommen.",
-  -- 31-33: Fluchbruch (GDD 11), zeitversetzt aus step.lua
-  [31] = "ER IST TOT. ER IST WIRKLICH TOT. ICH HABE ES GESEHEN.",
-  [32] = "Der Fluch ... bricht. Ich spuere es. Endlich.",
-  [33] = "Danke. Ehrlich. Und jetzt ... REVANCHE?",
+  -- 31-35: Der letzte Monolog nach dem Fluchbruch (GDD 11), zeitversetzt aus
+  -- step.lua. Gesprochen wird er von der verschmolzenen Figur — Koerper und
+  -- Echo sind in diesem Moment wieder eins. Zeile 35 bricht mitten im Wort
+  -- ab: er loggt aus, waehrend er es ausspricht.
+  [31] = "Wir... wir haben es geschafft.",
+  [32] = "Der Fluch ist gebrochen. Ich spuere meine Haende wieder.",
+  [33] = "Ich kann wieder die Escape-Taste druecken!",
+  [34] = "ENDLICH. BIN. ICH. FREI!",
+  [35] = "Moment. Haette ich vielleicht auch all die Zeit mit ALT+F...",
 }

@@ -18,11 +18,34 @@ M.CLASSES_M2 = M.CLASSES -- Altname (Tests/Renderer M2)
 -- NPC-IDs beginnen bei 100 (Spieler 1..40, Hogger 0); u8-Adressraum im Wire
 M.NPC_ID_BASE = 100
 
+-- i-ter von n Punkten auf einem Ring um (cx, cy). Ab RING_MAX Punkten je Ring
+-- kommt ein weiterer Ring dazu, sonst kleben bei grossen Gruppen die Icons.
+-- Der "lockere" Versatz ist deterministisch aus dem Index gerechnet — kein
+-- RNG-Kanal (Zufalls-Regel GDD 14), damit die Sim reproduzierbar bleibt.
+-- Ohne jitter (Standard) liegen die Punkte exakt auf dem Ring.
+-- RING_STEP bleibt klein: der aeusserste Ring muss auch bei N=40 innerhalb
+-- des engsten Zoom-Radius (zoom_radius_1, 300 px) liegen, sonst sieht ein
+-- Spieler am Rand die Mitte des Kreises nicht mehr.
+local RING_MAX, RING_STEP = 12, 45
+function M.ring_pos(cx, cy, i, n, radius, jitter, phase)
+  local ring = math.floor((i - 1) / RING_MAX)
+  local first = ring * RING_MAX + 1
+  local count = math.min(RING_MAX, n - first + 1)
+  local r = radius + ring * RING_STEP
+  local angle = (i - first) * (2 * math.pi / math.max(1, count)) + (phase or 0)
+  if jitter and jitter > 0 then
+    -- zwei teilerfremde Multiplikatoren: Winkel und Radius zappeln
+    -- unterschiedlich, das Muster wirkt gewachsen statt gerastert
+    angle = angle + ((i * 37) % 23 / 23 - 0.5) * (2 * math.pi / math.max(1, count)) * 0.5
+    r = r + ((i * 53) % 17 / 17 - 0.5) * 2 * jitter
+  end
+  return cx + r * math.cos(angle), cy + r * math.sin(angle)
+end
+
 -- Positionen der begehbaren Klassenicons am Wiederbelebungsfeld
 function M.class_icon_pos(slot)
   local f = map.field()
-  local angle = (slot - 1) * (2 * math.pi / #M.CLASSES) + 0.5
-  return f.x + 140 * math.cos(angle), f.y + 140 * math.sin(angle)
+  return M.ring_pos(f.x, f.y, slot, #M.CLASSES, 140, 0, 0.5)
 end
 
 function M.new(seed)
@@ -34,6 +57,8 @@ function M.new(seed)
     try_nr = 0,
     phase = "try",      -- "try" | "won"
     won_t = 0,
+    won_stage = 0,      -- Endsequenz-Beat fuer den Client (GDD 11, #131)
+    merge_from = nil,   -- Startpunkt von Leeroys Koerper fuer die Verschmelzung
     n_scale = 0,        -- N beim Try-Start (GDD 6)
     players = {},       -- Array; Index == Spieler-ID (1..40)
     corpses = {},       -- { x, y, drag = nil|{t_left} }

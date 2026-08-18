@@ -297,9 +297,14 @@ local model = require("sim.model")
 function W.snapshot_body(state)
   local h = state.hogger
   local parts = {}
+  -- Das Phasen-Byte traegt seit Runde 11 (#131) auch den Beat der
+  -- Endsequenz: 0 = Try laeuft, 1..4 = Fluchbruch (versammelt, Verschmelzung,
+  -- Monolog, Leeroy weg). Kein zusaetzliches Byte noetig — der Snapshot
+  -- waechst dadurch nicht, und ausser der Phase liest niemand dieses Feld.
   parts[#parts + 1] = pack("<I4I2I2BB",
     state.tick, math.floor(state.clock * 10), state.try_nr,
-    state.phase == "won" and 1 or 0, state.n_scale)
+    state.phase == "won" and math.max(1, state.won_stage or 1) or 0,
+    state.n_scale)
   -- Hogger
   local hstate = ({ idle = 0, combat = 1, eating = 2, reset = 3 })[h.state] or 0
   local eatphase, eathit, eatneed, eatprog = 0, 0, 0, 0
@@ -428,7 +433,8 @@ function W.read_snapshot(data, off)
   s.tick, clock10, s.try_nr, phase, s.n_scale, off =
     love.data.unpack("<I4I2I2BB", data, off)
   s.clock = clock10 / 10
-  s.phase = phase == 1 and "won" or "try"
+  s.phase = phase >= 1 and "won" or "try"
+  s.won_stage = phase -- 0 keine, 1 versammelt, 2 Verschmelzung, 3 Monolog, 4 weg
   local hx, hy, hhp, hmax, hstate, eatphase, eathit, eatneed, eatprog,
         ctarget, cprog, htarget, hslow
   hx, hy, hhp, hmax, hstate, eatphase, eathit, eatneed, eatprog, ctarget,

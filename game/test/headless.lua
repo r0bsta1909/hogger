@@ -6,6 +6,7 @@
 
 local model = require("sim.model")
 local world = require("game.gamesim.world")
+local step = require("game.gamesim.step")
 local bot = require("game.gamesim.bot")
 local wire = require("game.net.wire")
 local hostmod = require("game.net.host")
@@ -284,6 +285,38 @@ function T.run()
     local msg_type, off = wire.read_header(data)
     ok(msg_type == wire.MSG.HEAL_REQUEST, "Wire: HEAL_REQUEST-Header")
     ok(wire.read_heal_request(data, off) == 7, "Wire: Ziel-pid im Roundtrip")
+  end
+
+  -- Die Endsequenz ueber das Netz (Runde 11, #131): Hogger gezielt toeten und
+  -- die Szene bis zum Abgang durchlaufen lassen. Deterministisch, damit der
+  -- Fluchbruch nicht davon abhaengt, ob die Bots zufaellig gewinnen.
+  do
+    local st = host.state
+    if st.phase == "try" then
+      step.admin_kill_hogger(st)
+      local ticks = math.ceil((step.WON_EXIT + 2) / DT)
+      local idle = { mask = 0, facing = 0 }
+      for _ = 1, ticks do
+        host:update(DT, idle)
+        for _, c in ipairs(clients) do
+          if not c.dead then c:update(DT, idle) end
+        end
+      end
+      ok(st.phase == "won", "Finale: Phase steht auf won")
+      ok(st.won_stage == 4, "Finale: Leeroy ist am Ende weg (Stufe "
+        .. tostring(st.won_stage) .. ")")
+      for _, p in ipairs(st.players) do
+        ok(p.alive and not p.ghost, "Finale: " .. p.name .. " lebt im Kreis")
+      end
+      -- Der Beat muss beim Client ankommen — er haengt im Phasen-Byte
+      local body = wire.snapshot_body(st)
+      local _, snap = wire.read_snapshot(wire.snapshot(0, body), 4)
+      ok(snap.phase == "won", "Finale: Phase im Snapshot")
+      ok(snap.won_stage == st.won_stage, "Finale: Beat im Snapshot")
+      local c1 = clients[1]
+      ok(c1.snap == nil or c1.snap.won_stage == nil or c1.snap.won_stage >= 1,
+        "Finale: der Client sieht die Endsequenz")
+    end
   end
 
   -- Ergebnis-Pruefungen

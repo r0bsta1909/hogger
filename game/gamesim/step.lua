@@ -13,8 +13,28 @@ local S = {}
 local DT = model.TICK_DT
 local ICON_RADIUS = 60      -- Draufstellen-Radius der Klassenicons (GDD 5)
 S.ICON_RADIUS = ICON_RADIUS -- der Renderer beschriftet den Balken damit
--- Leeroys letzte Zeilen nach dem Fluchbruch (GDD 11): Zeit -> Zeilen-ID
-local WON_LINES = { { 1.0, 31 }, { 4.5, 32 }, { 9.0, 33 } }
+-- ---------------------------------------------------------------------------
+-- Die Endsequenz (GDD 11) — EINE Zeitachse, ab dem Kill in Sekunden.
+-- Sie liegt bewusst in der Sim und nicht im Client: so sehen alle Rechner
+-- dieselben Beats zur selben Zeit. Der Client haengt sich mit Loot-Fenster,
+-- Sprechblase und Tafel nur dran (won_stage im Snapshot).
+-- ---------------------------------------------------------------------------
+local WON_MERGE_START = 8.0   -- Leeroys Koerper setzt sich in Bewegung
+local WON_MERGE_END   = 10.0  -- er ist im Echo aufgegangen
+local WON_EXIT        = 25.0  -- Blase bricht ab, Icon weg ("ausgeloggt")
+-- Leeroys letzter Monolog (GDD 11): Zeit -> Zeilen-ID in lines.lua
+local WON_LINES = {
+  { 10.5, 31 }, { 13.5, 32 }, { 16.5, 33 }, { 19.5, 34 }, { 22.5, 35 },
+}
+-- Stufen fuer den Client (Snapshot): 1 versammelt, 2 Verschmelzung laeuft,
+-- 3 verschmolzen (Monolog), 4 Leeroy ist weg
+local function won_stage_at(t)
+  if t >= WON_EXIT then return 4 end
+  if t >= WON_MERGE_END then return 3 end
+  if t >= WON_MERGE_START then return 2 end
+  return 1
+end
+S.WON_EXIT = WON_EXIT -- der Client zeigt danach Systemnachricht und Tafel
 
 -- ---------------------------------------------------------------------------
 -- Kampfhelfer
@@ -98,6 +118,50 @@ local function revive_as(state, p, class, race)
     if r == race then return i end
   end
   return 1
+end
+
+-- Der kollektive Teleport (GDD 11, #131): im Moment des Kills stehen ALLE
+-- Spieler in einem lockeren Kreis um Hoggers Leiche und leben — egal ob sie
+-- gerade tot dalagen, als Geist unterwegs waren oder noch im Onboarding
+-- steckten. Niemand verpasst das Ende, und der Totensicht-Filter faellt bei
+-- allen im selben Frame ab (er haengt allein an alive).
+-- Klasse und Rasse bleiben, wie sie waren: ein Rassenwurf je Spieler wuerde
+-- den Host-RNG-Strom verschieben (Zufalls-Regel GDD 13.2/14).
+-- In der Mitte stehen das Echo und Leeroys Koerper dicht beieinander — von
+-- dort aus laeuft die Verschmelzung (siehe WON_MERGE_*).
+local FINALE_RADIUS = 130
+local FINALE_JITTER = 16
+local function finale_gather(state, ev)
+  local h = state.hogger
+  local cx, cy = h.x, h.y
+  local ring = {}
+  for _, p in ipairs(state.players) do
+    if not p.is_leeroy then ring[#ring + 1] = p end
+  end
+  for i, p in ipairs(ring) do
+    local class = p.class or world.CLASSES[1]
+    local race = p.race or model.RACES[1]
+    local race_idx = revive_as(state, p, class, race)
+    -- Wer noch im Onboarding steckt, waere sonst bewegungsgesperrt (GDD 5)
+    if (p.quest or 0) < 2 then p.quest = 2 end
+    local x, y = world.ring_pos(cx, cy, i, #ring, FINALE_RADIUS, FINALE_JITTER)
+    p.x, p.y = map.clamp(x, y)
+    p.facing = input.facing_towards(p.x, p.y, cx, cy)
+    events.push(ev, state.tick, "revive", p.id, class, race_idx, nil)
+  end
+  -- Das Echo tritt aus dem Friedhof heraus in die Mitte: seine eigene
+  -- Schlussszene ist die einzige, in der es sich je bewegt (GDD 10.1)
+  if state.echo then
+    state.echo.x, state.echo.y = map.clamp(cx - 46, cy - 62)
+  end
+  local lp = state.leeroy_pid and state.players[state.leeroy_pid]
+  if lp then
+    local race_idx = revive_as(state, lp, "warrior", "mensch")
+    lp.quest = 2
+    lp.x, lp.y = map.clamp(cx + 46, cy - 62)
+    state.merge_from = { x = lp.x, y = lp.y }
+    events.push(ev, state.tick, "revive", lp.id, "warrior", race_idx, nil)
+  end
 end
 
 -- cause: Todesursache fuer die Killcam (killcam.CAUSE, GDD Kap. 11)
@@ -1395,6 +1459,9 @@ function S.revanche(state, ev)
   if state.phase ~= "won" then return false end
   state.phase = "try"
   state.try_nr = 0
+  state.won_stage = 0
+  state.merge_from = nil
+  world.reset_echo(state) -- es steht wieder am Friedhof (GDD 10.1)
   restart_all(state, ev)
   return true
 end
@@ -1406,10 +1473,23 @@ function S.step(state, inputs)
   state.time = state.tick * DT
 
   if state.phase == "won" then
-    -- Fluchbruch (GDD 11): die Welt haelt an, bis REVANCHE gedrueckt wird;
-    -- Leeroys letzte Zeilen kommen zeitversetzt
+    -- Fluchbruch (GDD 11): die Welt haelt an. Es laeuft nur noch die
+    -- Schlussszene — Verschmelzung, Monolog, Abgang.
     local before = state.won_t
     state.won_t = state.won_t + DT
+    state.won_stage = won_stage_at(state.won_t)
+    -- Verschmelzung: der Koerper gleitet mit Ease-out ins Echo (#131).
+    -- Gerechnet wird absolut aus won_t, nicht schrittweise — so kommt jeder
+    -- Tick auf dieselbe Position, egal wie oft er gerechnet wurde.
+    local lp = state.leeroy_pid and state.players[state.leeroy_pid]
+    if lp and state.echo and state.merge_from then
+      local r = (state.won_t - WON_MERGE_START) / (WON_MERGE_END - WON_MERGE_START)
+      r = math.max(0, math.min(1, r))
+      local e = 1 - (1 - r) * (1 - r)
+      lp.x = state.merge_from.x + (state.echo.x - state.merge_from.x) * e
+      lp.y = state.merge_from.y + (state.echo.y - state.merge_from.y) * e
+      lp.facing = input.facing_towards(lp.x, lp.y, state.echo.x, state.echo.y)
+    end
     for _, l in ipairs(WON_LINES) do
       if before < l[1] and state.won_t >= l[1] then
         events.push(ev, state.tick, "leeroy_line", "leeroy", l[2], nil, nil)
@@ -1472,6 +1552,9 @@ function S.step(state, inputs)
     end_try(state, ev, true)
     state.phase = "won"
     state.won_t = 0
+    state.won_stage = 1
+    -- Der Teleport passiert im Kill-Tick, VOR dem Einfrieren (GDD 11, #131)
+    finale_gather(state, ev)
   elseif state.hogger.reset_cause then
     -- Ein Reset beendet und wertet den Try (Runde 9, #117, GDD 6/9.1):
     -- erst das Protokoll, dann die Tafel (die liest die Rest-HP), erst
