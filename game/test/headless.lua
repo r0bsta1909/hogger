@@ -204,16 +204,17 @@ function T.run()
         "Rename: Roster-Broadcast bei allen angekommen")
     end
 
-    -- Fluchbruch (GDD 11): ein Sieg haelt die Welt an, bis REVANCHE
-    -- gedrueckt wird — hier drueckt Client 1 ueber das Netz
+    -- Gewinnen die Bots von selbst, laeuft die Endsequenz an und die Welt
+    -- steht — der Realm wird per Werkzeug zurueckgeholt (seit Runde 11 gibt
+    -- es im Spiel keinen Weg zurueck mehr, #133), damit der Test weiterlaeuft
     if host.state.phase == "won" and not revanche_sent then
       revanche_sent = true
-      clients[1]:send_revanche()
+      host:revanche()
     end
     if revanche_sent and not revanche_done and host.state.phase == "try" then
       revanche_done = true
       ok(host.state.try_nr == 1,
-        "REVANCHE: Try-Zaehler startet bei 1 (" .. host.state.try_nr .. ")")
+        "Werkzeug-Neustart: Try-Zaehler startet bei 1 (" .. host.state.try_nr .. ")")
     end
 
     -- Statistik-Tafel (GDD 11): nach dem ersten Try-Ende (90 s) bei allen
@@ -324,9 +325,9 @@ function T.run()
   ok(try_starts >= 2, "Voller Try inkl. Try-Uebergang (" .. try_starts .. " Starts)")
   ok(revives >= 4, "Clients beleben sich ueber das Netz wieder (" .. revives .. ")")
   ok(damage_evs > 50, "Kampf laeuft ueber das Netz (" .. damage_evs .. " Treffer)")
-  -- nach einer REVANCHE zaehlt der Try-Zaehler regulaer ab 1 (GDD 11)
+  -- nach einem Werkzeug-Neustart zaehlt der Try-Zaehler ab 1 (GDD 11)
   ok(revanche_sent or host.state.try_nr >= 1000,
-    "Try-Zaehler vierstellig (GDD 6) bzw. REVANCHE-Neustart")
+    "Try-Zaehler vierstellig (GDD 6) bzw. Werkzeug-Neustart")
   -- Leeroy vollendet seinen Loop ohne leeroy_stuck (GDD 17.7 Stufe 4)
   local leeroy_revive, leeroy_stuck = false, false
   for _, line in ipairs(log_lines) do

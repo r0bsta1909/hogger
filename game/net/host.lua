@@ -169,8 +169,6 @@ function H:_handle(peer, data)
   elseif c and msg == wire.MSG.QUEST_ACCEPT then
     local ev = {}
     if step.accept_quest(self.state, c.pid, ev) then self:_after_step(ev) end
-  elseif c and msg == wire.MSG.REVANCHE then
-    self:revanche() -- jeder darf den Knopf druecken (LAN-Party, GDD 11)
   elseif c and msg == wire.MSG.ENGAGE then
     step.engage(self.state, c.pid) -- Nahkampf anschalten (Issue #86)
   elseif c and msg == wire.MSG.HEAL_REQUEST then

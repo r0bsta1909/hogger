@@ -5,8 +5,13 @@
 local D = {}
 D.__index = D
 
-function D.new(text)
-  return setmetatable({ text = text or "Vom Server getrennt.", visible = true }, D)
+-- opts.quit: OK beendet das Spiel statt neu zu suchen. Gilt nur nach dem
+-- Fluchbruch (GDD 11, #133) — geht der Host, ist der Abend vorbei. Waehrend
+-- eines laufenden Abends bleibt der Reconnect, sonst kostet ein Netzhaenger
+-- der ganzen Runde ihre Sitzung.
+function D.new(text, opts)
+  return setmetatable({ text = text or "Vom Server getrennt.", visible = true,
+                        quit = opts and opts.quit or false }, D)
 end
 
 local function button_rect(w, h)

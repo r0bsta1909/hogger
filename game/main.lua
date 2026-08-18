@@ -16,6 +16,7 @@ local model = require("sim.model")
 local input = require("game.gamesim.input")
 local world = require("game.gamesim.world")
 local audio = require("game.audio")
+local gamemenu = require("game.ui.gamemenu")
 local wire, discovery
 
 local app = {
@@ -444,7 +445,7 @@ function love.update(dt)
       and ("Netz: " .. tostring(app.net.net_error):sub(1, 70)) or app.debug.note
     local msg = app.net.failed
     teardown_net()
-    app.dialog = require("game.ui.dialog").new(msg)
+    app.dialog = require("game.ui.dialog").new(msg, { quit = app.won_seen })
     app.mode = "disconnected"
     return
   end
@@ -611,6 +612,9 @@ function love.update(dt)
   -- Die Endsequenz taktet die Sim (Runde 11, #132): won_stage 4 heisst
   -- "Leeroy ist ausgeloggt". Danach die Systemnachricht, kurz darauf die
   -- Statistik-Tafel als letztes Bild — sie bleibt bis zum Klick stehen.
+  -- Wer den Fluchbruch gesehen hat, beendet bei einer Trennung das Spiel
+  -- statt neu zu suchen (#133): geht der Host, ist der Abend vorbei.
+  if view and (view.won_stage or 0) > 0 then app.won_seen = true end
   if view and (view.won_stage or 0) >= 4 then
     if not app.sysmsg_done then
       app.sysmsg_done = 0
@@ -735,6 +739,11 @@ function love.draw()
   if app.boot and app.boot:active() and not app.boot:covers_screen() then
     app.boot:draw_overlay(bw, bh) -- langsame Aufblende in die Totensicht
   end
+  -- Spielmenue ueber allem, aber unter dem Trennungs-Dialog (#133)
+  if app.menu then
+    local gmx, gmy = love.mouse.getPosition()
+    gamemenu.draw(bw, bh, gmx, gmy)
+  end
   if app.dialog and app.dialog.visible then app.dialog:draw() end
   local lobbies = 0
   if app.search then
@@ -755,6 +764,7 @@ function love.keypressed(key)
   if app.headless then return end
   if app.dialog and app.dialog.visible then
     if app.dialog:keypressed(key) then
+      if app.dialog.quit then love.event.quit(0) return end -- nach dem Sieg
       -- OK: Glitch-Schwarz + automatischer Reconnect (GDD Kap. 3)
       app.dialog = nil
       start_search()
@@ -808,6 +818,18 @@ function love.keypressed(key)
       app.debug.note = "Nur der Host kann sich teleportieren."
     end
     return
+  elseif action == "revanche" then
+    -- Testhilfe (Runde 11, #133): im Spiel gibt es nach dem Fluchbruch
+    -- keinen Weg zurueck; hier schon, sonst braeuchte jeder Durchlauf der
+    -- Endsequenz einen Anwendungsneustart.
+    if app.mode == "host" and app.net and app.net.revanche then
+      app.debug.note = app.net:revanche()
+        and "Realm zurueck im Try — der Fluch ist wieder da"
+        or "Geht nur nach dem Fluchbruch."
+    else
+      app.debug.note = "Nur der Host kann das."
+    end
+    return
   elseif action == "intro" then
     replay_intro()
     return
@@ -827,6 +849,16 @@ function love.keypressed(key)
   elseif action == true then
     return
   end
+  -- Spielmenue (GDD 11, #133): es gibt NUR nach dem Fluchbruch. Der Abend
+  -- ist vorbei, das Spiel wartet auf harten Input — ESC oeffnet und
+  -- schliesst, ALT+F4 beendet ohne Umweg (love.quit raeumt das Netz ab).
+  if key == "escape" and gamemenu.available(app.view) then
+    app.menu = not app.menu
+    audio.play("snd_ui_click")
+    return
+  end
+  if app.menu then return end -- offen schluckt es alles andere
+
   if key == "f12" then app.debug:toggle() return end
   -- Questlog wie im Original (Issue #62): wegblenden, zurueckholen, und
   -- nach der Annahme die Quest nachlesen
@@ -925,10 +957,21 @@ end
 
 function love.mousepressed(mx, my, button)
   if app.headless then return end
+  -- Spielmenue nach dem Fluchbruch (GDD 11, #133): nur "Spiel verlassen" ist
+  -- scharf, ein Klick daneben tut nichts (auch nicht schliessen — dafuer ESC)
+  if app.menu then
+    local w, h = love.graphics.getDimensions()
+    if gamemenu.click(w, h, mx, my) == "quit" then
+      audio.play("snd_ui_click")
+      love.event.quit(0) -- love.quit raeumt Netz und Session ab
+    end
+    return
+  end
   -- Tuning-Panel zuerst: Export-Knopf, und Klicks im Panel setzen kein Ziel
   if app.panel and app.panel:mousepressed(mx, my) then return end
   if app.dialog and app.dialog.visible then
     if app.dialog:mousepressed(mx, my) then
+      if app.dialog.quit then love.event.quit(0) return end -- nach dem Sieg
       app.dialog = nil
       start_search()
       if app.boot then app.boot:reenter() end
