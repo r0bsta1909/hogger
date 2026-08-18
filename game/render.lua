@@ -571,25 +571,9 @@ local function hp_bar(x, y, w2, frac, r, g, b)
   love.graphics.rectangle("fill", x - w2, y, w2 * 2 * math.max(0, math.min(1, frac)), 4)
 end
 
--- Tooltip im Original-Stil: erste Zeile gold (Name), Rest hell.
--- Wird von Faehigkeits- und Buff-Tooltips benutzt (GDD 4.2/4.3)
-local function draw_tooltip(lines, mx, my, w, h)
-  local font = love.graphics.getFont()
-  local tw = 0
-  for _, l in ipairs(lines) do tw = math.max(tw, font:getWidth(l)) end
-  local th = #lines * 16 + 8
-  local tx = math.min(w - tw - 20, math.max(8, mx - tw / 2))
-  local ty = math.max(8, my - th - 16)
-  love.graphics.setColor(0.05, 0.05, 0.07, 0.94)
-  love.graphics.rectangle("fill", tx, ty, tw + 12, th, 3, 3)
-  love.graphics.setColor(0.45, 0.40, 0.28, 1)
-  love.graphics.rectangle("line", tx, ty, tw + 12, th, 3, 3)
-  for i, l in ipairs(lines) do
-    love.graphics.setColor(i == 1 and 1 or 0.8, i == 1 and 0.85 or 0.78,
-      i == 1 and 0.4 or 0.66, 1)
-    love.graphics.print(l, tx + 6, ty + 4 + (i - 1) * 16)
-  end
-end
+-- Tooltip im Original-Stil (GDD 4.2/4.3): erste Zeile gold (Name), Rest
+-- hell. Eine Wahrheit fuer Renderer und F10-Panel (Runde 9, #119).
+local draw_tooltip = require("game.ui.tooltip").draw
 
 -- Plakette im Original-Minimap-Stil (M12, GDD 4.1/4.2): dunkle Fuellung,
 -- Goldrahmen, helle Innenlinie — fuer Zonenbanner und Uhr

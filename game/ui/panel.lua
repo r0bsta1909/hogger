@@ -10,6 +10,8 @@
 -- Steuerlogik ist love-frei; love nur in update/draw/mousepressed.
 
 local model = require("sim.model")
+local docs = require("sim.param_docs")
+local tooltip = require("game.ui.tooltip")
 
 local P = {}
 P.__index = P
@@ -18,6 +20,11 @@ P.__index = P
 local REPEAT_DELAY = 0.35
 local REPEAT_RATE = 0.045
 local REPEAT_KEYS = { "down", "up", "pagedown", "pageup", "left", "right" }
+
+-- Hover-Erklaerung (Runde 9, #119): wer eine Sekunde auf einer Zeile
+-- verweilt, bekommt Beschreibung und Wirkungsrichtung
+local HOVER_DELAY = 1.0
+P.HOVER_DELAY = HOVER_DELAY
 
 local CSV_FILE = "tuning.csv"
 P.CSV_FILE = CSV_FILE
@@ -44,6 +51,21 @@ local KAT_NAME = {
   sonstiges = "Sonstiges",
 }
 P.KAT_ORDER, P.KAT_NAME = KAT_ORDER, KAT_NAME
+
+-- Kategorie-Erklaerung fuer den Hover auf der Einstiegsebene (Runde 9)
+local KAT_DESC = {
+  hogger = "Alles am Boss: Schaden, Tempo, Fressen, Leash, Adds, HP-Formel.",
+  spieler = "Was fuer jede Klasse gilt: Tempo, Reichweiten, HP, Ressourcen.",
+  klassen = "Die Faehigkeiten der acht Klassen: Schaden, Kosten, Zauberzeit.",
+  mobs = "Ambient-Mobs am Wegesrand plus Erfahrung und Plunder.",
+  loop = "Der Rhythmus des Abends: Trylaenge, Todesstrafe, Laufwege.",
+  krits = "Der einzige Zufall im Spiel: Kritchance und Multiplikator.",
+  leeroy = "Der Raid-Leeroy und das Echo am Friedhof.",
+  ui = "Kamera und Anzeige: Zoomstufen, Erfahrungsbalken.",
+  sim = "Nur fuer die Headless-Sim: Agentenverhalten beim Balancing.",
+  sonstiges = "Ohne Kategorie -- hier sollte nie etwas stehen.",
+}
+P.KAT_DESC = KAT_DESC
 
 local KAT_BY_KEY = {
   try_time_limit = "loop", release_grace = "loop", revive_channel = "loop",
@@ -206,10 +228,20 @@ function P:keypressed(key)
 end
 
 -- Wiederholung fuer gehaltene Tasten (Issue #81): main ruft das pro Frame
-function P:update(dt)
+-- mit der Mausposition (fuer die Hover-Uhr, Runde 9)
+function P:update(dt, mx, my)
   if not self.visible then
     self:repeat_step(nil, 0)
+    self:hover_step(nil, 0)
     return
+  end
+  if mx then
+    local w, h = love.graphics.getDimensions()
+    local line_h = love.graphics.getFont():getHeight() + 4
+    self.hover_mx, self.hover_my = mx, my
+    self.hover_show = self:hover_step(self:row_at(mx, my, w, h, line_h), dt)
+  else
+    self.hover_show = false
   end
   local held
   for _, k in ipairs(REPEAT_KEYS) do
@@ -247,6 +279,56 @@ end
 
 local function inside(mx, my, x, y, rw, rh)
   return mx >= x and mx <= x + rw and my >= y and my <= y + rh
+end
+
+-- Welche Listenzeile liegt unter der Maus? Reine Arithmetik (love-frei,
+-- getestet); line_h kommt vom Aufrufer, damit die Schriftgroesse nicht
+-- hier hineinragt. Rueckgabe: Key bzw. Kategorie-Id, sonst nil.
+function P:row_at(mx, my, w, h, line_h)
+  local px, py, pw, ph = geom(w, h)
+  if mx < px or mx > px + pw then return nil end
+  local top = py + 32
+  if my < top or my > py + ph - 40 then return nil end -- Titel/Fusszeile
+  if self.mode == "kats" then
+    local i = math.floor((my - top) / (line_h + 6)) + 1
+    return self.kats[i]
+  end
+  local list = self.by_kat[self:current_kat()]
+  local visible_rows = math.floor((ph - 40 - 22) / line_h)
+  local row = math.floor((my - top) / line_h) + 1
+  if row < 1 or row > visible_rows then return nil end
+  return list[row + self.scroll]
+end
+
+-- Hover-Uhr (Muster repeat_step, love-frei): true, sobald faellig
+function P:hover_step(key, dt)
+  if key == nil or key ~= self.hover_key then
+    self.hover_key = key
+    self.hover_t = 0
+    return false
+  end
+  self.hover_t = (self.hover_t or 0) + dt
+  return self.hover_t >= HOVER_DELAY
+end
+
+-- Tooltip-Zeilen: Live-Wert oben (gold), dann Beschreibung, Wirkung,
+-- Stellbereich. Zahlen kommen IMMER aus model.params, nie aus dem Text.
+function P:tooltip_lines(key)
+  if not key then return nil end
+  local e = model.params[key]
+  if not e then -- Kategorienebene
+    local d = KAT_DESC[key]
+    if not d then return nil end
+    return { KAT_NAME[key] or key, d,
+             string.format("%d Werte", #(self.by_kat[key] or {})) }
+  end
+  local d = docs[key] or { "(keine Beschreibung)", "" }
+  return {
+    string.format("%s = %g", key, e.wert),
+    d[1], d[2],
+    string.format("Kapitel %s   Bereich %g..%g   Schritt %g",
+      e.kapitel, e.min, e.max, e.schritt),
+  }
 end
 
 -- Klick auf den Export-Knopf; alle anderen Klicks im Panel werden
@@ -346,6 +428,14 @@ function P:draw()
   if self.note_t > 0 and self.note then
     love.graphics.setColor(0.55, 0.70, 0.40, math.min(1, self.note_t))
     love.graphics.print(self.note, px + 12, py + ph - 40)
+  end
+
+  -- Erklaerung nach einer Sekunde Verweilen (Runde 9, #119)
+  if self.hover_show and self.hover_key then
+    local lines = self:tooltip_lines(self.hover_key)
+    if lines then
+      tooltip.draw(lines, self.hover_mx, self.hover_my, w, h)
+    end
   end
 end
 
