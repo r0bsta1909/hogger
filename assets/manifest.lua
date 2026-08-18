@@ -35,7 +35,7 @@ return {
   icon_murloc   = { form = "kreis",  groesse = 22, farbe = { 0.35, 0.70, 0.55 }, kuerzel = "mu", datei = "icon_murloc.png" },
   icon_loot     = { form = "raute",  groesse = 16, farbe = { 0.95, 0.85, 0.35 }, kuerzel = "",   datei = "icon_loot.png" },
 
-  -- Programm-Icon (Fenster, hogger.exe, hogger.app; GDD 17.0). Eigene
+  -- Programm-Icon (Fenster, wow.exe, hogger.app; GDD 17.0). Eigene
   -- Zeichnung, kein fremdes Bildmaterial — Rob kann die Datei jederzeit
   -- durch eine andere 256er-PNG ersetzen, Pipeline und Fenster ziehen nach.
   icon_app      = { form = "kreis",  groesse = 256, farbe = { 0.55, 0.18, 0.14 }, kuerzel = "H", datei = "icon_app.png" },

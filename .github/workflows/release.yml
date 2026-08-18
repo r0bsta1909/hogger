@@ -4,7 +4,9 @@
 # conf.lua (Kopien aus game/) plus die Baeume game/, sim/, assets/ — LOEVEs
 # Zip-Loader loest require("game.*")/require("sim.*") gegen die Archivwurzel.
 # Das Programm-Icon (assets/icon_app.png) wird zu .ico und .icns und ersetzt
-# das LOEVE-Icon in hogger.exe und hogger.app (Issue #37).
+# das LOEVE-Icon in wow.exe und hogger.app (Issue #37).
+# Die Windows-exe heisst wow.exe (Runde 8, #111): die Boot-Fiktion
+# "Der falsche Client" (GDD 3) behauptet seit jeher WoW.exe — jetzt stimmt es.
 name: release
 on:
   push:
@@ -89,10 +91,12 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe" -OutFile rcedit.exe
           # Icon VOR dem Anhaengen der .love setzen: rcedit schreibt die
           # PE-Ressourcen neu und wuerde angehaengte Daten sonst verlieren
+          # FileDescription = Taskleisten-/Task-Manager-Name: die Fiktion.
+          # ProductName bleibt die ehrliche Schicht im Eigenschaften-Dialog.
           .\rcedit.exe "$lovedir\love.exe" --set-icon build\hogger.ico `
-            --set-version-string "FileDescription" "Hogger muss sterben" `
+            --set-version-string "FileDescription" "World of Warcraft" `
             --set-version-string "ProductName" "Hogger muss sterben"
-          cmd /c copy /b "$lovedir\love.exe" + build\hogger.love "$lovedir\hogger.exe"
+          cmd /c copy /b "$lovedir\love.exe" + build\hogger.love "$lovedir\wow.exe"
           Remove-Item "$lovedir\love.exe","$lovedir\lovec.exe"
           Compress-Archive -Path "$lovedir\*" -DestinationPath build\hogger-win64.zip
       - uses: actions/upload-artifact@v4
@@ -117,4 +121,4 @@ jobs:
             artifacts/windows/hogger-win64.zip \
             artifacts/love-und-mac/hogger-macos.zip \
             --title "Hogger muss sterben $GITHUB_REF_NAME" \
-            --notes "LAN-Abend-Build: hogger.love (alle Plattformen mit installiertem LOEVE 11.5), hogger-win64.zip (hogger.exe, ohne Installation), hogger-macos.zip (hogger.app). Erster Start = Realm (GDD Kap. 3)."
+            --notes "LAN-Abend-Build: hogger.love (alle Plattformen mit installiertem LOEVE 11.5), hogger-win64.zip (wow.exe — ja, wirklich; ohne Installation), hogger-macos.zip (hogger.app). Erster Start = Realm (GDD Kap. 3)."
