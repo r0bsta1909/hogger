@@ -829,7 +829,10 @@ function R:draw(view, ui)
     assets.draw("icon_warrior", ex, ey, scale * 1.9, 0.55)
     love.graphics.setColor(0.72, 0.86, 0.55, 0.95) -- freundlicher NPC: gruen
     local font = love.graphics.getFont()
-    local nm = names.ECHO
+    -- Mit der Verschmelzung heilt der Name: aus dem doppelten wird wieder
+    -- der eine (GDD 11) — die Wunde, die der Fluch geschlagen hat, schliesst
+    -- sich vor den Augen der Runde.
+    local nm = names.echo_name(won)
     love.graphics.print(nm, ex - font:getWidth(nm) / 2, ey + 18 * scale)
     if me_quest < 2 then
       -- das Ausrufezeichen: goldener Balken plus Punkt, leicht schwebend

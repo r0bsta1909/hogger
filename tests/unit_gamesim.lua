@@ -950,6 +950,9 @@ do -- Verschmelzung, Monolog, Abgang — und die Welt bleibt eingefroren
   end
 
   T.eq(#lines, 5, "finale: fuenf Monolog-Zeilen")
+  T.ok(step.WON_EXIT - 22.5 >= 3.4,
+    "finale: die letzte Zeile steht lange genug, bevor er abtritt ("
+      .. string.format("%.1f", step.WON_EXIT - 22.5) .. " s)")
   for i = 1, 5 do T.eq(lines[i], 30 + i, "finale: Zeile " .. i .. " in der Reihenfolge") end
   T.ok(stages[2], "finale: Stufe 2 (Verschmelzung) wird erreicht")
   T.ok(stages[3], "finale: Stufe 3 (Monolog) wird erreicht")
