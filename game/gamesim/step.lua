@@ -65,6 +65,41 @@ local function break_cast(p)
   p.gcd = 0
 end
 
+-- Ein Spieler erwacht mit einer Klasse: Werte, Auren, Zustand (GDD 5/8.1).
+-- EINE Wahrheit fuer die Wiederbelebung am Klassenicon, den Admin-Teleport
+-- und das Finale (#131) — der Block lag vorher wortgleich doppelt im File.
+-- Position und Ereignisse bleiben Sache der Aufrufer, die unterscheiden sich.
+-- Rueckgabe: Rassen-Index fuer das revive-Event (GDD 17.3).
+local function revive_as(state, p, class, race)
+  p.class = class
+  p.race = race
+  p.max_hp = model.hp_for_class(class)
+  p.hp = p.max_hp
+  local res = model.classes[class].resource
+  p.resource = (res == "rage") and 0
+               or (res == "energy") and model.p("energy_max")
+               or model.p("mana_max")
+  p.cp = 0
+  p.stealth = false
+  p.seal_hits = 0
+  p.frost_armor = false
+  p.alive = true
+  p.ghost = false
+  p.revive = nil
+  break_cast(p) -- frisch erwacht heisst auch: keine Rest-GCD (#125)
+  p.attack_on = false -- der naechste Anlauf beginnt friedlich (Issue #86)
+  p.last_cast_t = -1000
+  p.next_auto = 0
+  p.shout_until = 0
+  p.bleed_t = 0
+  p.dead_until = 0
+  p.release_wish = nil
+  for i, r in ipairs(model.RACES) do
+    if r == race then return i end
+  end
+  return 1
+end
+
 -- cause: Todesursache fuer die Killcam (killcam.CAUSE, GDD Kap. 11)
 local function kill_player(state, p, ev, was_crit, cause)
   p.alive = false
@@ -549,32 +584,11 @@ local function player_tick(state, p, inp, ev)
         if p.class ~= class then
           events.push(ev, state.tick, "class_change", p.id, class, nil, nil)
         end
-        p.class = class
         -- Rasse je Wiederbelebung regelkonform ausgewuerfelt (GDD 5), kosmetisch;
         -- Leeroy ist fluchbedingt immer Mensch-Krieger (GDD 10.3)
-        p.race = p.is_leeroy and "mensch" or model.roll_race(class, state.rng:next())
-        local race_idx = 1
-        for i, r in ipairs(model.RACES) do
-          if r == p.race then race_idx = i end
-        end
-        p.max_hp = model.hp_for_class(class)
-        p.hp = p.max_hp
-        local res = model.classes[class].resource
-        p.resource = (res == "rage") and 0
-                     or (res == "energy") and model.p("energy_max")
-                     or model.p("mana_max")
-        p.cp = 0
-        p.stealth = false
-        p.seal_hits = 0
-        p.frost_armor = false
-        p.alive = true
-        p.ghost = false
-        p.revive = nil
-        p.attack_on = false
-        p.last_cast_t = -1000
-        p.next_auto = 0
-        p.shout_until = 0
-        p.bleed_t = 0
+        local race = p.is_leeroy and "mensch"
+                     or model.roll_race(class, state.rng:next())
+        local race_idx = revive_as(state, p, class, race)
         events.push(ev, state.tick, "revive", p.id, class, race_idx, nil)
       end
     end
@@ -1352,29 +1366,7 @@ function S.admin_teleport(state, pid)
   local h = state.hogger
   if not p or not h or h.hp <= 0 then return false end
   local class = model.CLASS_IDS[state.tick % #model.CLASS_IDS + 1]
-  p.class = class
-  p.race = model.roll_race(class, state.rng:next())
-  p.max_hp = model.hp_for_class(class)
-  p.hp = p.max_hp
-  local res = model.classes[class].resource
-  p.resource = (res == "rage") and 0
-               or (res == "energy") and model.p("energy_max")
-               or model.p("mana_max")
-  p.cp = 0
-  p.stealth = false
-  p.seal_hits = 0
-  p.frost_armor = false
-  p.alive = true
-  p.ghost = false
-  p.revive = nil
-  break_cast(p) -- frisch wiederbelebt heisst auch: keine Rest-GCD (#125)
-  p.attack_on = false
-  p.last_cast_t = -1000
-  p.next_auto = 0
-  p.shout_until = 0
-  p.bleed_t = 0
-  p.dead_until = 0
-  p.release_wish = nil
+  revive_as(state, p, class, model.roll_race(class, state.rng:next()))
   -- Quest gilt als angenommen (world.accept_quest verlangt den Offer-
   -- Zustand — das Werkzeug ueberspringt das Onboarding komplett)
   if (p.quest or 0) < 2 then p.quest = 2 end
