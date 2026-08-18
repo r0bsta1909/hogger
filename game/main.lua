@@ -575,7 +575,8 @@ function love.update(dt)
     app.stats:update(dt)
     if not app.stats.visible then app.stats = nil end
   end
-  if app.panel then app.panel:update(dt) end -- Key-Repeat (Issue #81)
+  -- Key-Repeat (Issue #81) + Hover-Uhr fuer die Parameter-Erklaerung (#119)
+  if app.panel then app.panel:update(dt, love.mouse.getPosition()) end
   if app.victory then
     app.victory:update(dt)
     -- REVANCHE gedrueckt, der naechste Durchlauf laeuft: Sequenz beenden

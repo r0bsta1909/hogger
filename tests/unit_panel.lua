@@ -132,3 +132,106 @@ do
   local _, n2 = p:csv()
   T.eq(n2, 0, "alles zurueck: wieder leer")
 end
+
+-- Runde 9 (#119): jeder Parameter ist erklaert ------------------------------
+local docs = require("sim.param_docs")
+
+do -- Vollstaendigkeit: das ist der eigentliche Zweck des Tests
+  for k in pairs(model.params) do
+    local d = docs[k]
+    T.ok(type(d) == "table" and type(d[1]) == "string" and #d[1] > 0
+         and type(d[2]) == "string" and #d[2] > 0,
+      "Panel erklaert jeden Parameter (GDD 17.6): " .. k)
+  end
+  for k in pairs(docs) do
+    T.ok(model.params[k] ~= nil,
+      "Beschreibung ohne Parameter (Waise): " .. k)
+  end
+end
+
+do -- Textqualitaet: ASCII, Form, Laenge, KEINE Zahlen
+  for k, d in pairs(docs) do
+    if type(d) == "table" and d[1] and d[2] then
+      for i = 1, 2 do
+        local ascii = true
+        for pos = 1, #d[i] do
+          local b = d[i]:byte(pos)
+          if b < 32 or b > 126 then ascii = false break end
+        end
+        T.ok(ascii, "Beschreibung ist ASCII (" .. k .. ", Feld " .. i .. ")")
+        T.ok(d[i]:find("%d") == nil,
+          "keine Zahlen im Text -- der Tooltip zeigt den Live-Wert (" .. k .. ")")
+      end
+      T.ok(d[1]:sub(-1) == ".", "Beschreibung endet auf einem Punkt: " .. k)
+      T.ok(d[2]:sub(1, 9) == "hoeher = ",
+        "Wirkungsrichtung beginnt mit 'hoeher = ': " .. k)
+      T.ok(#d[1] <= 80, "Beschreibung passt in den Tooltip: " .. k)
+      T.ok(#d[2] <= 60, "Wirkungsrichtung passt in den Tooltip: " .. k)
+    end
+  end
+end
+
+do -- Kategorien haben ebenfalls eine Erklaerung
+  for _, kat in ipairs(panelmod.KAT_ORDER) do
+    local d = panelmod.KAT_DESC[kat]
+    T.ok(type(d) == "string" and #d > 0 and d:sub(-1) == ".",
+      "Kategorie erklaert: " .. kat)
+  end
+end
+
+do -- Hover-Uhr (love-frei, Muster repeat_step)
+  local q = panelmod.new(apply)
+  T.eq(q:hover_step("gcd", 0.5), false,
+    "Hover: der erste Frame auf einer Zeile startet die Uhr bei null")
+  T.eq(q:hover_step("gcd", 0.5), false, "Hover: unter der Schwelle kein Tooltip")
+  T.eq(q:hover_step("gcd", 0.4), false, "Hover: knapp darunter immer noch nicht")
+  T.eq(q:hover_step("gcd", 0.2), true, "Hover: ab einer Sekunde faellig")
+  T.eq(q:hover_step("melee_range", 0.2), false, "Hover: Zeilenwechsel setzt zurueck")
+  T.eq(q:hover_step(nil, 5), false, "Hover: neben der Liste kein Tooltip")
+  T.eq(q.hover_t, 0, "Hover: Uhr steht wieder auf null")
+end
+
+do -- Tooltip-Zeilen: Live-Wert und Stellbereich kommen aus model.params
+  local q = panelmod.new(apply)
+  local lines = q:tooltip_lines("gcd")
+  T.eq(#lines, 4, "Tooltip: vier Zeilen")
+  T.ok(lines[1]:find("gcd") ~= nil, "Tooltip: Kopfzeile nennt den Parameter")
+  T.ok(lines[1]:find(string.format("%g", model.params.gcd.wert), 1, true) ~= nil,
+    "Tooltip: Kopfzeile zeigt den LIVE-Wert")
+  T.eq(lines[2], docs.gcd[1], "Tooltip: Beschreibung")
+  T.eq(lines[3], docs.gcd[2], "Tooltip: Wirkungsrichtung")
+  T.ok(lines[4]:find("Kapitel") ~= nil and lines[4]:find("Bereich") ~= nil,
+    "Tooltip: Kapitel und Stellbereich")
+  local o = model.params.gcd.wert
+  apply("gcd", o + model.params.gcd.schritt)
+  local l2 = q:tooltip_lines("gcd")
+  T.ok(l2[1] ~= lines[1], "Tooltip: der Wert in der Kopfzeile zieht nach")
+  apply("gcd", o)
+  T.ok(q:tooltip_lines("hogger") ~= nil, "Tooltip: auch Kategorien erklaeren sich")
+  T.eq(q:tooltip_lines(nil), nil, "Tooltip: ohne Zeile kein Text")
+end
+
+do -- row_at: Geometrie der Listenzeilen (love-frei, line_h vom Aufrufer)
+  local q = panelmod.new(apply)
+  local W, H, LH = 1280, 800, 18
+  local pw, ph = 560, H - 120
+  local px, py = W - pw - 24, 60
+  local top = py + 32
+  T.eq(q:row_at(px + 20, py + 10, W, H, LH), nil,
+    "row_at: die Titelzeile trifft nichts")
+  T.eq(q:row_at(px - 5, top + 2, W, H, LH), nil,
+    "row_at: links neben dem Panel trifft nichts")
+  T.eq(q:row_at(px + 20, py + ph - 10, W, H, LH), nil,
+    "row_at: die Fusszeile trifft nichts")
+  T.eq(q:row_at(px + 20, top + 2, W, H, LH), q.kats[1],
+    "row_at: erste Kategorie auf der Einstiegsebene")
+  q:action("return")
+  local list = q.by_kat[q:current_kat()]
+  T.eq(q:row_at(px + 20, top + 2, W, H, LH), list[1],
+    "row_at: erste Parameterzeile")
+  T.eq(q:row_at(px + 20, top + LH + 2, W, H, LH), list[2],
+    "row_at: zweite Parameterzeile")
+  q.scroll = 3
+  T.eq(q:row_at(px + 20, top + 2, W, H, LH), list[4],
+    "row_at: Scroll-Offset wird beruecksichtigt")
+end
