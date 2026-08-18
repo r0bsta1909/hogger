@@ -989,14 +989,59 @@ local function hogger_try_eat(state, ev)
   return false
 end
 
-local function hogger_reset(state)
+-- Kein-Kontakt-Uhr (Runde 9, #117, GDD 9.1): laeuft NUR im Kampf und NUR,
+-- solange lebende, nicht verstohlene Spieler da sind, die Hogger nicht
+-- erreicht. Ein toter Raid haelt sie an — sonst wuerde Hogger nach jedem
+-- Wipe voll heilen und das Attrition-Modell (GDD 13.1) kippen.
+-- Rueckgabe: true = Abbruchschwelle erreicht.
+local function hogger_no_contact(state)
+  local h = state.hogger
+  -- Ausser Kampf gibt es nichts abzubrechen: Uhr zurueck.
+  if h.state ~= "combat" then
+    h.no_contact_t = 0
+    return false
+  end
+  -- Beschaeftigt (Fressen/Charge) PAUSIERT die Uhr, setzt sie aber NICHT
+  -- zurueck: sonst koennte eine Charge alle 10 s den 20-s-Abbruch ewig
+  -- verhindern, und Kiten waere nicht mehr abbrechbar.
+  if h.eating or h.charge then return false end
+  local reach = model.p("melee_range")
+  local any_alive, contact = false, false
+  for _, p in ipairs(state.players) do
+    if p.alive and not p.stealth then
+      -- Leeroy haelt die Uhr nicht am Laufen (er lebt und stirbt in
+      -- Dauerschleife und zaehlt nie in N, GDD 6/10) — aber wenn er in
+      -- Schlagweite steht, findet der Kampf statt.
+      if not p.is_leeroy then any_alive = true end
+      if world.dist(p.x, p.y, h.x, h.y) <= reach then contact = true break end
+    end
+  end
+  if not contact and state.npcs then
+    for id, npc in pairs(state.npcs) do
+      if (h.threat[id] or 0) > 0
+         and world.dist(npc.x, npc.y, h.x, h.y) <= reach then
+        contact = true
+        break
+      end
+    end
+  end
+  if contact or not any_alive then
+    h.no_contact_t = 0
+    return false
+  end
+  h.no_contact_t = h.no_contact_t + DT
+  return h.no_contact_t >= model.p("hogger_no_contact_reset")
+end
+
+-- Reset (Leash oder Kein-Kontakt): beendet den Try. Der Full Heal passiert
+-- bewusst NICHT hier, sondern erst in world.begin_try — sonst zeigte die
+-- Statistik-Tafel immer "Er hatte noch 100 %." (Runde 9, #117)
+local function hogger_reset(state, cause)
   local h = state.hogger
   h.state = "reset"
-  h.hp = h.max_hp -- Full Heal beim Leash-Reset (GDD 9.1)
-  h.threat = {}
   h.eating = nil
   h.charge = nil
-  h.out_of_leash_t = 0
+  h.reset_cause = cause -- S.step wertet den Try aus
 end
 
 local function hogger_tick(state, ev)
@@ -1008,12 +1053,14 @@ local function hogger_tick(state, ev)
   if h.charge_cd > 0 then h.charge_cd = h.charge_cd - DT end
   h.next_auto = h.next_auto - DT
 
-  -- Rueckweg nach Leash-Reset
-  if h.state == "reset" then
-    hogger_move_towards(state, map.hill.x, map.hill.y, model.p("hogger_speed"))
-    if world.dist(h.x, h.y, map.hill.x, map.hill.y) < 10 then
-      h.state = "idle"
-    end
+  -- Nach einem Reset endet der Try im selben Tick (S.step); der Zustand
+  -- lebt nur bis dahin — hier ist nichts mehr zu tun (Runde 9, #117)
+  if h.state == "reset" then return end
+
+  -- Kein-Kontakt-Abbruch VOR Fress- und Charge-Block: beide returnen frueh,
+  -- die Uhr muss aber in jedem Tick gestellt werden (Runde 9, #117)
+  if hogger_no_contact(state) then
+    hogger_reset(state, "no_contact")
     return
   end
 
@@ -1114,7 +1161,7 @@ local function hogger_tick(state, ev)
   if world.dist(h.x, h.y, map.hill.x, map.hill.y) > model.p("hogger_leash_radius") then
     h.out_of_leash_t = h.out_of_leash_t + DT
     if h.out_of_leash_t >= model.p("hogger_leash_hysteresis") then
-      hogger_reset(state)
+      hogger_reset(state, "leash")
       return
     end
   else
@@ -1398,6 +1445,14 @@ function S.step(state, inputs)
     end_try(state, ev, true)
     state.phase = "won"
     state.won_t = 0
+  elseif state.hogger.reset_cause then
+    -- Ein Reset beendet und wertet den Try (Runde 9, #117, GDD 6/9.1):
+    -- erst das Protokoll, dann die Tafel (die liest die Rest-HP), erst
+    -- danach begin_try mit dem Full Heal.
+    events.push(ev, state.tick, "hogger_reset", "hogger",
+      state.hogger.reset_cause, math.max(0, state.hogger.hp), nil)
+    end_try(state, ev, false)
+    world.begin_try(state, ev)
   elseif state.clock >= model.p("try_time_limit") then
     end_try(state, ev, false)
     world.begin_try(state, ev)
