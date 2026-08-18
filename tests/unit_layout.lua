@@ -32,10 +32,12 @@ do
   T.eq(L.frames.target.y, 10, "layout: Zielfenster y (Bestand)")
   T.eq(L.frames.cp.x, 232, "layout: CP-Anzeige x (Bestand)")
   T.eq(L.frames.cp.y, 14, "layout: CP-Anzeige y (Bestand)")
+  T.eq(L.frames.buffs_self.x, 12, "layout: eigene Auren x unter der Tafel (M13)")
+  T.eq(L.frames.buffs_self.y, 70, "layout: eigene Auren y = unit+60 (M13)")
   T.eq(L.frames.money.x, 14, "layout: Kupfer/Plunder x (Bestand)")
-  T.eq(L.frames.money.y, 70, "layout: Kupfer/Plunder y (Bestand)")
+  T.eq(L.frames.money.y, 104, "layout: Kupfer/Plunder y (M13: +34 fuer Auren)")
   T.eq(L.frames.hint.x, 14, "layout: STRG-Hinweis x (Bestand)")
-  T.eq(L.frames.hint.y, 88, "layout: STRG-Hinweis y (Bestand)")
+  T.eq(L.frames.hint.y, 122, "layout: STRG-Hinweis y (M13: +34 fuer Auren)")
   T.eq(L.frames.tot.y, 70, "layout: Ziel-des-Ziels y (Bestand)")
   T.eq(L.frames.buffs.y, 96, "layout: Buff-Leiste y (Bestand)")
   -- Verheiratung mit der Heil-Leisten-Konstante: dieselben Zahlen
@@ -54,7 +56,10 @@ do
   T.eq(L.frames.target.x, 959, "layout dock: Zielfenster x")
   T.eq(L.frames.target.y, 163, "layout dock: Zielfenster y")
   T.eq(L.frames.healbar.x, 106, "layout dock: Heil-Leiste folgt dem Fenster")
-  T.eq(L.frames.healbar.y, 163 + 98, "layout dock: Heil-Leiste y-Offset")
+  T.eq(L.frames.healbar.y, 163 + 132, "layout dock: Heil-Leiste y-Offset (M13)")
+  T.eq(L.frames.buffs_self.x, 106, "layout dock: eigene Auren folgen")
+  T.eq(L.frames.buffs_self.y, 163 + 60, "layout dock: eigene Auren y-Offset")
+  T.eq(L.frames.money.y, 163 + 94, "layout dock: Kupferzeile y-Offset (M13)")
   T.eq(L.frames.buffs.x, 959, "layout dock: Buffs folgen dem Zielfenster")
   T.eq(L.frames.buffs.y, 163 + 86, "layout dock: Buffs y-Offset")
   T.eq(L.frames.money.x, 106 + 2, "layout dock: Kupferzeile folgt")
@@ -87,6 +92,19 @@ for _, hh in ipairs({ 720, 800, 1080 }) do
     "layout: Uhr-Plakette im Bild bei h=" .. hh)
   T.ok(L.banner.cy - L.banner.h / 2 >= 4,
     "layout: Zonenbanner im Bild bei h=" .. hh)
+end
+
+-- Heil-Leiste laeuft nie unten aus dem Fenster (M13-Klemme): die Rechnung
+-- enthaelt die "+K weitere"-Zeile, die draw_healbar zusaetzlich zeichnet
+for _, hh in ipairs({ 720, 800, 1080 }) do
+  for _, docked in ipairs({ false, true }) do
+    local L = render.layout(1280, hh, docked)
+    local HB = L.frames.healbar
+    local bottom = HB.y + HB.header_h + (HB.max_rows + 1) * HB.row_h + 8
+    T.ok(bottom <= hh, "layout: Heil-Leisten-Unterkante im Bild bei h=" .. hh
+      .. (docked and " (dock, " or " (ecken, ") .. HB.max_rows .. " Zeilen)")
+    T.ok(HB.max_rows >= 4, "layout: Heil-Leisten-Untergrenze bei h=" .. hh)
+  end
 end
 
 -- healbar_row_at mit explizitem Layout (Dock-Pfad) --------------------------

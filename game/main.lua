@@ -145,7 +145,9 @@ function love.load(args)
   wire = require("game.net.wire")
   discovery = require("game.net.discovery")
   app.render = require("game.render").new()
-  app.render.docked = app.dock or false -- HUD-Andock-Vorschau (M12, --dock)
+  -- HUD am Ring ist seit M13 STANDARD (Rob-Freigabe der M12-Vorschau);
+  -- F12 [D] ist der Debug-Rueckweg in die Ecken-Variante
+  app.render.docked = true
   app.floating = require("game.ui.floating").new()
   app.debug = require("game.ui.debug").new()
   audio.load()
@@ -905,8 +907,9 @@ function love.mousepressed(mx, my, button)
     local me = app.view.players[app.view.me]
     local slot = me and me.alive and me.class and step_mod.ALLY_SLOT[me.class]
     if slot then
-      local rows, more_n = app.render.heal_rows(app.view, model.p("heal_range"))
       local HB = L.frames.healbar
+      local rows, more_n = app.render.heal_rows(app.view,
+        model.p("heal_range"), HB.max_rows)
       local ph = HB.header_h + (#rows + ((more_n > 0) and 1 or 0)) * HB.row_h + 8
       if #rows > 0 and mx >= HB.x and mx <= HB.x + HB.w
          and my >= HB.y and my <= HB.y + ph then

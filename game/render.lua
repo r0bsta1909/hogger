@@ -87,6 +87,15 @@ local AURA = {
                "Vicious Slice von Hogger",
                "Kein Krit, keine Heilung dagegen" }
     end },
+  -- Hoggers Frost-Slow (Runde 8, #107): existierte in der Sim, war aber
+  -- unsichtbar — jetzt als Debuff an seiner Zieltafel (Magier-Kit ablesbar)
+  slow = { kuerzel = "VL", name = "Verlangsamt", debuff = true,
+    text = function()
+      return { string.format("Hogger ist um %d %% verlangsamt",
+                 model.p("mage_frostarmor_slow") * 100),
+               string.format("Frostruestung, haelt %d s je Treffer",
+                 model.p("mage_frostarmor_slow_duration")) }
+    end },
 }
 
 function R.new()
@@ -286,7 +295,7 @@ end
 -- in Heil-Reichweite; Rechtsklick auf eine Zeile heilt diesen Spieler
 -- (HEAL_REQUEST), Linksklick waehlt ihn als Ziel. Layout/Builder/Hit-Test
 -- sind love-frei (Muster raid_rows).
-R.HEALBAR = { x = 12, y = 108, w = 190, header_h = 18, row_h = 18,
+R.HEALBAR = { x = 12, y = 142, w = 190, header_h = 18, row_h = 18,
               max_rows = 24 }
 
 -- Zeilen: selbst IMMER zuerst, danach alphabetisch nach Namen — STABIL,
@@ -359,6 +368,13 @@ function R.layout(w, h, docked)
     target = { x = w - 226, y = 10 }
   end
   local HB = R.HEALBAR
+  -- Eigene Auren sitzen seit M13 UNTER der eigenen Tafel (Runde 8, #107) —
+  -- Kupfer/Hinweis/Heil-Leiste ruecken dafuer 34 px nach unten.
+  local healbar_y = unit.y + 132
+  -- Klemme: die Heil-Leiste (plus "+K weitere"-Zeile) darf nie unten aus dem
+  -- Fenster laufen (Dock bei h=720 waere sonst 733 px tief)
+  local max_rows = math.max(4, math.min(HB.max_rows,
+    math.floor((h - healbar_y - HB.header_h - 8) / HB.row_h) - 1))
   return {
     ox = ox, oy = oy, radius = radius,
     ring_r = radius * 0.87, -- Bahn der Faehigkeits-Buttons
@@ -371,11 +387,12 @@ function R.layout(w, h, docked)
       unit = unit,
       target = target,
       cp = { x = unit.x + 220, y = unit.y + 4 },
-      money = { x = unit.x + 2, y = unit.y + 60 },
-      hint = { x = unit.x + 2, y = unit.y + 78 },
-      healbar = { x = unit.x, y = unit.y + 98, w = HB.w,
+      buffs_self = { x = unit.x, y = unit.y + 60 },
+      money = { x = unit.x + 2, y = unit.y + 94 },
+      hint = { x = unit.x + 2, y = unit.y + 112 },
+      healbar = { x = unit.x, y = healbar_y, w = HB.w,
                   header_h = HB.header_h, row_h = HB.row_h,
-                  max_rows = HB.max_rows },
+                  max_rows = max_rows },
       tot = { x = target.x, y = target.y + 60 },
       buffs = { x = target.x, y = target.y + 86 },
     },
@@ -393,9 +410,10 @@ end
 function R:draw_healbar(view, hb)
   local me = view.players[view.me]
   if not (me and me.alive and me.class and ALLY_SLOT[me.class]) then return end
-  local rows, more_n = R.heal_rows(view, model.p("heal_range"))
-  if #rows == 0 then return end
   local HB = hb or R.HEALBAR
+  -- max_rows aus dem Layout (M13-Klemme gegen die Fensterhoehe)
+  local rows, more_n = R.heal_rows(view, model.p("heal_range"), HB.max_rows)
+  if #rows == 0 then return end
   local extra = more_n > 0 and 1 or 0
   local ph = HB.header_h + (#rows + extra) * HB.row_h + 8
   love.graphics.setColor(0.07, 0.07, 0.11, 0.85)
@@ -573,6 +591,52 @@ local function plaque(x, y, pw, ph)
   love.graphics.setLineWidth(1)
   love.graphics.setColor(0.95, 0.85, 0.55, 0.5)
   love.graphics.rectangle("line", x + 2, y + 2, pw - 4, ph - 4, 3, 3)
+end
+
+-- Auren-Kacheln (GDD 4.3, Runde 8 #107): aura_list baut die Liste aus einem
+-- beliebigen Snapshot-Spielereintrag (die Flags stehen fuer JEDEN Spieler im
+-- Snapshot, nicht nur fuer me); draw_auras zeichnet sie an einen Anker und
+-- liefert ggf. den Hover-Tooltip zurueck.
+local function aura_list(p)
+  local auras = {}
+  if p.shout then auras[#auras + 1] = { AURA.shout, p.shout_rest } end
+  if p.seal then auras[#auras + 1] = { AURA.seal } end
+  if p.frost_armor then auras[#auras + 1] = { AURA.frost } end
+  if p.stealth then auras[#auras + 1] = { AURA.stealth } end
+  if p.bleeding then auras[#auras + 1] = { AURA.bleed } end
+  return auras
+end
+
+local function draw_auras(auras, ax, ay, ui)
+  local tip = nil
+  for i, a in ipairs(auras) do
+    local def, rest = a[1], a[2]
+    local bx, by = ax + (i - 1) * 34, ay
+    if def.debuff then
+      love.graphics.setColor(0.32, 0.10, 0.10, 0.95)
+    else
+      love.graphics.setColor(0.2, 0.25, 0.4, 0.9)
+    end
+    love.graphics.rectangle("fill", bx, by, 30, 30, 3, 3)
+    love.graphics.setColor(def.debuff and 0.85 or 0.45,
+      def.debuff and 0.25 or 0.42, def.debuff and 0.2 or 0.6, 1)
+    love.graphics.rectangle("line", bx, by, 30, 30, 3, 3)
+    love.graphics.setColor(0.9, 0.9, 0.95, 1)
+    love.graphics.print(def.kuerzel, bx + 6, by + 2)
+    if rest and rest > 0 then
+      love.graphics.print(tostring(rest), bx + 8, by + 15)
+    end
+    if ui.mouse and ui.mouse[1] >= bx and ui.mouse[1] <= bx + 30
+       and ui.mouse[2] >= by and ui.mouse[2] <= by + 30 then
+      local lines = { def.name }
+      for _, l in ipairs(def.text()) do lines[#lines + 1] = l end
+      if rest and rest > 0 then
+        lines[#lines + 1] = string.format("Noch %d s", rest)
+      end
+      tip = { lines = lines }
+    end
+  end
+  return tip
 end
 
 -- Balken der Eckfenster: links oben verankert, Beschriftung liegt IM Balken
@@ -1062,6 +1126,8 @@ function R:draw(view, ui)
     end
   end
 
+  local aura_tip = nil
+
   -- Oben links: das eigene Einheitenfenster (GDD 4.3). Es zeigt die eigene
   -- Klasse dauerhaft — Icon, Klassenfarbe und Klassenname (Issue #24)
   if me then
@@ -1086,6 +1152,10 @@ function R:draw(view, ui)
     love.graphics.setColor(0.6, 0.56, 0.45, 1)
     love.graphics.print(string.format("Kupfer %d   Plunder %d",
       me.kupfer or 0, me.plunder or 0), L.frames.money.x, L.frames.money.y)
+    -- Eigene Auren direkt unter der eigenen Tafel (Runde 8, #107) —
+    -- vorher hingen sie faelschlich unter dem Zielfenster
+    aura_tip = draw_auras(aura_list(me), L.frames.buffs_self.x,
+      L.frames.buffs_self.y, ui) or aura_tip
     -- Hinweis auf das Raid-Overview (Runde 6, Issue #95)
     love.graphics.setColor(0.45, 0.42, 0.35, 1)
     love.graphics.print("STRG fuer Raid-Overview",
@@ -1095,8 +1165,7 @@ function R:draw(view, ui)
   -- Heil-Leiste der Heilerklassen (Runde 7, #103, GDD 4.3)
   self:draw_healbar(view, L.frames.healbar)
 
-  -- Oben rechts: Zielfenster, Ziel des Ziels, Buff-Leiste (GDD 4.3)
-  local aura_tip = nil
+  -- Oben rechts: Zielfenster, Ziel des Ziels, Ziel-Auren (GDD 4.3)
   if me then
     local t = me.target
     local frame
@@ -1141,41 +1210,19 @@ function R:draw(view, ui)
         love.graphics.print("> " .. names[view.hogger.target],
           L.frames.tot.x + 6, L.frames.tot.y + 2)
       end
-    end
-    -- Buff-/Debuff-Leiste: nur was Level-1-Klassen haben (GDD 4.3), dazu
-    -- Hoggers Blutung als einziger Debuff (9.2). Tooltip bei Hover (#65)
-    local auras = {}
-    if me.shout then auras[#auras + 1] = { AURA.shout, me.shout_rest } end
-    if me.seal then auras[#auras + 1] = { AURA.seal } end
-    if me.frost_armor then auras[#auras + 1] = { AURA.frost } end
-    if me.stealth then auras[#auras + 1] = { AURA.stealth } end
-    if me.bleeding then auras[#auras + 1] = { AURA.bleed } end
-    for i, a in ipairs(auras) do
-      local def, rest = a[1], a[2]
-      local bx, by = L.frames.buffs.x + (i - 1) * 34, L.frames.buffs.y
-      if def.debuff then
-        love.graphics.setColor(0.32, 0.10, 0.10, 0.95)
-      else
-        love.graphics.setColor(0.2, 0.25, 0.4, 0.9)
-      end
-      love.graphics.rectangle("fill", bx, by, 30, 30, 3, 3)
-      love.graphics.setColor(def.debuff and 0.85 or 0.45,
-        def.debuff and 0.25 or 0.42, def.debuff and 0.2 or 0.6, 1)
-      love.graphics.rectangle("line", bx, by, 30, 30, 3, 3)
-      love.graphics.setColor(0.9, 0.9, 0.95, 1)
-      love.graphics.print(def.kuerzel, bx + 6, by + 2)
-      if rest and rest > 0 then
-        love.graphics.print(tostring(rest), bx + 8, by + 15)
-      end
-      if ui.mouse and ui.mouse[1] >= bx and ui.mouse[1] <= bx + 30
-         and ui.mouse[2] >= by and ui.mouse[2] <= by + 30 then
-        local lines = { def.name }
-        for _, l in ipairs(def.text()) do lines[#lines + 1] = l end
-        if rest and rest > 0 then
-          lines[#lines + 1] = string.format("Noch %d s", rest)
+      -- Ziel-Auren unter der Zieltafel (Runde 8, #107): die Auren des
+      -- ZIELS, nicht mehr die eigenen. Hogger zeigt hier seinen
+      -- Frost-Slow (Magier-Frostruestung); NPCs haben keine Auren.
+      local tauras = {}
+      if t == 0 then
+        if (view.hogger.slow_rest or 0) > 0 then
+          tauras[1] = { AURA.slow, view.hogger.slow_rest }
         end
-        aura_tip = { lines = lines }
+      elseif view.players[t] then
+        tauras = aura_list(view.players[t])
       end
+      aura_tip = draw_auras(tauras, L.frames.buffs.x, L.frames.buffs.y, ui)
+        or aura_tip
     end
   end
 

@@ -223,6 +223,9 @@ function T.run()
       end
       ok(snap.hogger.hp == math.max(0, math.floor(st.hogger.hp + 0.5)),
         "Codec: Hogger-HP")
+      ok(snap.hogger.slow_rest == math.max(0, math.min(255,
+           math.ceil((st.hogger.slow_until or 0) - st.time))),
+        "Codec: Hogger-Frost-Slow-Restsekunden (Runde 8, #107)")
     end
   end
 
