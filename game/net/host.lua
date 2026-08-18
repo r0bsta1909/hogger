@@ -304,6 +304,11 @@ function H:add_bots(n)
     self.bot_pids[#self.bot_pids + 1] = pid
     self.bot_next = self.bot_next + 1
   end
+  -- Debug-Bots skalieren SOFORT mit (Runde 9, #118): Hoggers Max-HP waechst,
+  -- sein HP-Anteil bleibt, Adds/Mob-Slots stocken auf. Echte Joins zaehlen
+  -- weiter erst ab dem naechsten Try (GDD 6).
+  local ev = {}
+  if world.rescale(self.state, ev) then self:_after_step(ev) end
   if next(self.clients) then
     self:_broadcast(wire.roster(self.state.players), CH_RELIABLE, "reliable")
   end

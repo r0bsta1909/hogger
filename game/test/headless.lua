@@ -140,7 +140,18 @@ function T.run()
     if iter == math.floor(50 / DT) then
       local n0 = #host.state.players
       local bots0 = #host.bot_pids
+      local nscale0 = host.state.n_scale
+      local max0, hp0 = host.state.hogger.max_hp, host.state.hogger.hp
+      local frac0 = hp0 / max0
       local total = host:add_bots(2)
+      -- Laufzeit-Skalierung (Runde 9, #118)
+      ok(host.state.n_scale == nscale0 + 2,
+        "Laufzeit-Bots: n_scale sofort nachgezogen")
+      ok(host.state.hogger.max_hp > max0,
+        "Laufzeit-Bots: Hoggers Max-HP waechst sofort")
+      ok(math.abs(host.state.hogger.hp / host.state.hogger.max_hp - frac0) < 0.01,
+        "Laufzeit-Bots: HP-Anteil bleibt erhalten")
+      ok(host.state.hogger.hp >= 1, "Laufzeit-Bots: Hogger lebt weiter")
       ok(total == n0 + 2, "Laufzeit-Bots: +2 Spieler (" .. total .. ")")
       ok(#host.bot_pids == bots0 + 2, "Laufzeit-Bots: pids registriert")
       local seen = {}
