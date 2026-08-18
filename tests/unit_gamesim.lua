@@ -825,6 +825,152 @@ do
   T.ok(pr.hp > fb_hp0, "heal: Fallback-Heilung wirkt")
 end
 
+-- Runde 11 (#131): die Endsequenz — Teleport, Verschmelzung, Abgang -------
+do
+  -- Ring-Formel: deterministisch, mehrere Ringe, alles im engsten Zoom
+  local x1, y1 = world.ring_pos(0, 0, 3, 8, 130)
+  local x2, y2 = world.ring_pos(0, 0, 3, 8, 130)
+  T.eq(x1, x2, "ring: deterministisch (x)")
+  T.eq(y1, y2, "ring: deterministisch (y)")
+  T.near(math.sqrt(x1 * x1 + y1 * y1), 130, "ring: Punkt liegt auf dem Radius")
+  local worst = 0
+  for i = 1, 40 do
+    local x, y = world.ring_pos(0, 0, i, 40, 130, 16)
+    worst = math.max(worst, math.sqrt(x * x + y * y))
+  end
+  T.ok(worst < model.p("zoom_radius_1"),
+    "ring: auch bei N=40 liegt alles im engsten Zoom (" ..
+      string.format("%.0f", worst) .. " px)")
+  -- Die acht Klassenicons duerfen sich durch die Verallgemeinerung nicht
+  -- verschoben haben (Wiederbelebung haengt daran, GDD 5)
+  local ix, iy = world.class_icon_pos(1)
+  local f = map.field()
+  T.near(world.dist(ix, iy, f.x, f.y), 140, "ring: Klassenicons unveraendert")
+end
+
+do -- Der kollektive Teleport: niemand verpasst das Ende
+  local st = world.new(21)
+  world.add_leeroy(st)
+  for i = 1, 4 do world.add_player(st, "f" .. i, { quest_done = true }) end
+  world.add_player(st, "neu") -- steckt noch im Onboarding
+  world.begin_try(st, {})
+  local by_name = {}
+  for _, p in ipairs(st.players) do by_name[p.name] = p end
+  -- vier verschiedene Ausgangslagen
+  local lebend, tot, geist, neu = by_name.f1, by_name.f2, by_name.f3, by_name.neu
+  lebend.alive, lebend.ghost, lebend.class = true, false, "mage"
+  lebend.hp, lebend.max_hp = 30, model.hp_for_class("mage")
+  lebend.x, lebend.y = map.hill.x + 40, map.hill.y
+  tot.alive, tot.ghost, tot.dead_until = false, false, 9
+  geist.alive, geist.ghost = false, true
+  geist.x, geist.y = map.graveyard().x, map.graveyard().y
+  neu.quest = 1
+  local rng0 = st.rng.state
+  local klasse0 = lebend.class
+
+  T.ok(step.admin_kill_hogger(st), "finale: Hogger stirbt auf Kommando")
+  local evs = step.step(st, {})
+  local h = st.hogger
+
+  T.eq(st.phase, "won", "finale: Phase steht auf won")
+  T.eq(st.won_stage, 1, "finale: Stufe 1 = versammelt")
+  for _, p in ipairs(st.players) do
+    T.ok(p.alive, "finale: " .. p.name .. " lebt")
+    T.ok(not p.ghost, "finale: " .. p.name .. " ist kein Geist mehr")
+    T.eq(p.dead_until, 0, "finale: " .. p.name .. " wartet auf nichts mehr")
+    T.ok((p.quest or 0) >= 2, "finale: " .. p.name .. " ist nicht gesperrt")
+    T.ok(p.hp > 0, "finale: " .. p.name .. " hat HP")
+  end
+  T.eq(lebend.class, klasse0, "finale: die Klasse bleibt, wie sie war")
+  -- Der Wams-Roll zieht zwei Werte; der Teleport selbst darf keinen ziehen,
+  -- sonst verschiebt sich der Zufallsstrom (GDD 13.2)
+  T.eq(st.rng.state ~= rng0, true, "finale: der Wams-Roll wuerfelt")
+  local rng1 = st.rng.state
+  step.step(st, {})
+  T.eq(st.rng.state, rng1, "finale: die Szene selbst wuerfelt nicht")
+
+  -- Kreis um Hoggers Leiche: alle drin, keiner auf dem anderen
+  local ring = {}
+  for _, p in ipairs(st.players) do
+    if not p.is_leeroy then ring[#ring + 1] = p end
+  end
+  for _, p in ipairs(ring) do
+    local d = world.dist(p.x, p.y, h.x, h.y)
+    T.ok(d > 60 and d < model.p("zoom_radius_1"),
+      "finale: " .. p.name .. " steht im Kreis (" .. string.format("%.0f", d) .. " px)")
+  end
+  for i = 1, #ring do
+    for j = i + 1, #ring do
+      T.ok(world.dist(ring[i].x, ring[i].y, ring[j].x, ring[j].y) > 30,
+        "finale: Icons ueberlagern sich nicht (" .. ring[i].name .. "/" .. ring[j].name .. ")")
+    end
+  end
+  -- Echo und Koerper stehen dicht beieinander in der Mitte
+  local lp = st.players[st.leeroy_pid]
+  T.ok(world.dist(st.echo.x, st.echo.y, h.x, h.y) < 120,
+    "finale: das Echo steht in der Mitte")
+  T.ok(world.dist(lp.x, lp.y, st.echo.x, st.echo.y) < 140,
+    "finale: Leeroys Koerper steht dicht daneben")
+  local saw_revive = 0
+  for _, e in ipairs(evs) do
+    if e.ev == "revive" then saw_revive = saw_revive + 1 end
+  end
+  T.eq(saw_revive, #st.players, "finale: jeder Teleport steht im Log")
+end
+
+do -- Verschmelzung, Monolog, Abgang — und die Welt bleibt eingefroren
+  local st = world.new(22)
+  world.add_leeroy(st)
+  for i = 1, 2 do world.add_player(st, "g" .. i, { quest_done = true }) end
+  world.begin_try(st, {})
+  for _, p in ipairs(st.players) do
+    p.alive, p.ghost, p.class = true, false, "warrior"
+    p.hp, p.max_hp = 80, 80
+  end
+  step.admin_kill_hogger(st)
+  step.step(st, {})
+  local lp = st.players[st.leeroy_pid]
+  local hp0, try0, corpses0, clock0 = st.hogger.hp, st.try_nr, #st.corpses, st.clock
+  local start_d = world.dist(lp.x, lp.y, st.echo.x, st.echo.y)
+  T.ok(start_d > 1, "finale: vor der Verschmelzung ist Abstand da")
+
+  local lines, stages, prev_d = {}, {}, start_d
+  local monoton = true
+  for _ = 1, math.ceil(28 / model.TICK_DT) do
+    local evs = step.step(st, {})
+    for _, e in ipairs(evs) do
+      if e.ev == "leeroy_line" then lines[#lines + 1] = e.dst end
+    end
+    stages[st.won_stage] = st.won_t
+    if st.won_stage == 2 then
+      local d = world.dist(lp.x, lp.y, st.echo.x, st.echo.y)
+      if d > prev_d + 0.001 then monoton = false end
+      prev_d = d
+    end
+  end
+
+  T.eq(#lines, 5, "finale: fuenf Monolog-Zeilen")
+  for i = 1, 5 do T.eq(lines[i], 30 + i, "finale: Zeile " .. i .. " in der Reihenfolge") end
+  T.ok(stages[2], "finale: Stufe 2 (Verschmelzung) wird erreicht")
+  T.ok(stages[3], "finale: Stufe 3 (Monolog) wird erreicht")
+  T.eq(st.won_stage, 4, "finale: am Ende ist Leeroy weg (Stufe 4)")
+  T.ok(monoton, "finale: der Koerper naehert sich dem Echo monoton")
+  T.near(world.dist(lp.x, lp.y, st.echo.x, st.echo.y), 0,
+    "finale: er ist im Echo aufgegangen")
+  T.eq(st.hogger.hp, hp0, "finale: die Welt steht still (Hogger-HP)")
+  T.eq(st.try_nr, try0, "finale: die Welt steht still (Try-Zaehler)")
+  T.eq(#st.corpses, corpses0, "finale: die Welt steht still (Leichen)")
+  T.eq(st.clock, clock0, "finale: die Try-Uhr laeuft nicht weiter")
+
+  -- REVANCHE (nur noch Debug-Werkzeug) raeumt die Szene sauber ab
+  T.ok(step.revanche(st, {}), "finale: REVANCHE beendet die Szene")
+  T.eq(st.won_stage, 0, "finale: Stufe zurueckgesetzt")
+  T.near(world.dist(st.echo.x, st.echo.y, map.graveyard().x, map.graveyard().y),
+    world.dist(map.echo_home().x, map.echo_home().y,
+               map.graveyard().x, map.graveyard().y),
+    "finale: das Echo steht wieder am Friedhof")
+end
+
 -- Runde 10 (#125): ein abgebrochener Cast sperrt nichts mehr --------------
 -- Es gab nie einen Lockout; die beim Cast-START gesetzte GCD lief nach dem
 -- Abbruch weiter und sperrte bis zu 1,5 s. break_cast nullt sie jetzt.
