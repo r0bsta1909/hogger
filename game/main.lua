@@ -157,6 +157,18 @@ function love.load(args)
     local data = require("game.assets").image_data("icon_app")
     if data then pcall(love.window.setIcon, data) end
   end
+  -- Sieg-Reset (Runde 8, #110): endete die letzte Session siegreich (und
+  -- ohne REVANCHE), ist dieser Start ein Erststart — voller Boot samt
+  -- Warteschlangen-Gag, neuer Name, volle Quest, frischer Try-Zaehler.
+  -- MUSS vor boot.new() laufen: das schreibt sofort boot_seen.dat.
+  if love.filesystem.getInfo("sieg.dat") then
+    love.filesystem.remove("sieg.dat")
+    love.filesystem.remove("charname.dat")
+    love.filesystem.remove("boot_seen.dat")
+    love.filesystem.remove("boot_queue.dat")
+    require("game.session").wipe()
+  end
+
   -- Boot-Sequenz (GDD Kap. 3) im Normalstart; Debug-Laeufe starten direkt
   if not app.auto then
     app.boot = require("game.ui.boot").new()
@@ -551,6 +563,10 @@ function love.update(dt)
     if board.header:find("^SIEG") then
       app.victory = require("game.ui.victory").new(board)
       app.stats = nil
+      -- Sieg-Marker (Runde 8, #110): endet der Abend siegreich, ist der
+      -- naechste Start ein Erststart (Auswertung in love.load). REVANCHE
+      -- entwertet den Marker wieder (unten).
+      love.filesystem.write("sieg.dat", "1")
     else
       app.stats = require("game.ui.stats").new(board)
     end
@@ -563,7 +579,10 @@ function love.update(dt)
   if app.victory then
     app.victory:update(dt)
     -- REVANCHE gedrueckt, der naechste Durchlauf laeuft: Sequenz beenden
-    if app.view and app.view.phase == "try" then app.victory = nil end
+    if app.view and app.view.phase == "try" then
+      love.filesystem.remove("sieg.dat") -- der Fluch ist zurueck (#110)
+      app.victory = nil
+    end
   end
 
   -- Questfenster des Echos (GDD Kap. 5): das Echo drueckt die Quest auf,
