@@ -53,12 +53,24 @@ local function note_interrupt(state, eating)
   end
 end
 
+-- Cast-Abbruch (Runde 10, #125): der Zauber ist weg UND die globale
+-- Abklingzeit faellt. Rob: "wenn ein cast oder heal abgebrochen wird, muss
+-- dieser oder auch jeder andere moegliche cast direkt wieder ausfuehrbar
+-- sein." Einen Lockout gab es nie — die beim Cast-START gesetzte GCD lief
+-- nach dem Abbruch einfach weiter und sperrte bis zu 1,5 s. Ein abgebrochener
+-- Zauber kostet ohnehin nichts (verbucht wird erst bei der Vollendung), also
+-- darf er auch keine Zeit kosten.
+local function break_cast(p)
+  p.cast = nil
+  p.gcd = 0
+end
+
 -- cause: Todesursache fuer die Killcam (killcam.CAUSE, GDD Kap. 11)
 local function kill_player(state, p, ev, was_crit, cause)
   p.alive = false
   p.ghost = false
   p.hp = 0
-  p.cast = nil
+  break_cast(p)
   p.revive = nil
   p.attack_on = false -- der naechste Anlauf beginnt friedlich (Issue #86)
   -- mit dem Tod ist jede Aura weg, Buff wie Debuff (Issue #71) — sonst
@@ -575,7 +587,7 @@ local function player_tick(state, p, inp, ev)
   if p.stealth then speed = speed * model.p("rogue_stealth_speed") end
   if moving then
     p.x, p.y = map.clamp(p.x + dx * speed * DT, p.y + dy * speed * DT)
-    if p.cast then p.cast = nil end -- Bewegung bricht den Cast
+    if p.cast then break_cast(p) end -- Bewegung bricht den Cast
   end
 
   -- Blutung (Vicious Slice, kein Krit)
@@ -611,7 +623,7 @@ local function player_tick(state, p, inp, ev)
     local enemy = spec and spec.target == "enemy" and current_enemy(state, p)
     if enemy and not input.facing_ok(p.facing, p.x, p.y, enemy.x, enemy.y,
                                      model.p("facing_arc_deg")) then
-      p.cast = nil
+      break_cast(p)
     end
   end
   if p.cast then
@@ -1147,7 +1159,7 @@ local function hogger_tick(state, ev)
       local kx = (target.x - ox) / d * model.p("hogger_charge_knockback")
       local ky = (target.y - oy) / d * model.p("hogger_charge_knockback")
       target.x, target.y = map.clamp(target.x + kx, target.y + ky)
-      if target.cast then target.cast = nil end
+      if target.cast then break_cast(target) end
       if state.stats then
         state.stats.hogger.charges = state.stats.hogger.charges + 1
       end
@@ -1355,7 +1367,7 @@ function S.admin_teleport(state, pid)
   p.alive = true
   p.ghost = false
   p.revive = nil
-  p.cast = nil
+  break_cast(p) -- frisch wiederbelebt heisst auch: keine Rest-GCD (#125)
   p.attack_on = false
   p.last_cast_t = -1000
   p.next_auto = 0

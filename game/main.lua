@@ -455,6 +455,22 @@ function love.update(dt)
   local view = build_view()
   process_cosmetics(view)
   app.view = view
+
+  -- Endet ein Cast, faellt die lokale Cooldown-Anzeige des Slots (Runde 10,
+  -- #125). Der lokale Timer ist nur eine Schaetzung der GCD; nach einem
+  -- Abbruch hat der Host sie genullt und der naechste Versuch ist sofort
+  -- erlaubt — die Schaetzung haette ihn mit "Das ist noch nicht bereit."
+  -- blockiert (bei der Klick-Heilung sogar wirklich: die Anfrage ging gar
+  -- nicht erst raus). Auch bei regulaerer Vollendung richtig, weil jede
+  -- Castzeit laenger ist als die GCD (Test in tests/unit_gamesim.lua).
+  local me_now = view and view.players[view.me]
+  local casting_now = (me_now ~= nil and me_now.casting) or false
+  if casting_now then
+    app.casting_slot = me_now.cast_slot
+  elseif app.was_casting and app.casting_slot and app.casting_slot > 0 then
+    app.cooldown_view[app.casting_slot] = 0
+  end
+  app.was_casting = casting_now
   app.floating:update(dt)
   app.render:update(dt)
 
