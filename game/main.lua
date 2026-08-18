@@ -952,7 +952,10 @@ function love.mousepressed(mx, my, button)
   end
 
   local best, best_d, best_enemy = nil, 24, false
-  for pid, p in pairs(app.view.players) do
+  -- pid-sortiert statt pairs(): der Gleichstands-Fall (exakt gleiche
+  -- Distanz) ist damit auf jedem Rechner derselbe (Runde 7)
+  for _, pid in ipairs(app.render.sorted_pids(app.view.players)) do
+    local p = app.view.players[pid]
     if pid ~= app.view.me then
       local x, y = to_screen(p.x, p.y)
       local d = math.sqrt((x - mx) ^ 2 + (y - my) ^ 2)

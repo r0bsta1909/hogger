@@ -173,6 +173,17 @@ function R:toast(text)
   if #self.toasts > 5 then table.remove(self.toasts) end
 end
 
+-- Deterministische Zeichenreihenfolge der Spieler (Runde 7): pairs() ueber
+-- view.players ist Hash-Reihenfolge — im Nahkampf-Klumpen flackerte damit,
+-- wer wen ueberdeckt, und der Klick-Gleichstand war zufaellig. pid-sortiert
+-- zeichnet die hoehere pid stabil ueber die niedrigere.
+function R.sorted_pids(players)
+  local pids = {}
+  for pid in pairs(players) do pids[#pids + 1] = pid end
+  table.sort(pids)
+  return pids
+end
+
 -- Raid-Overview (Runde 6, Issue #95): love-freie Zeilenaufbereitung —
 -- wer ist dabei, welche Klasse, lebend/Geist/tot. Sortierung: Lebende,
 -- dann Geister, dann Tote; innerhalb alphabetisch.
@@ -538,9 +549,20 @@ function R:draw(view, ui)
     end
   end
 
+  -- Hoggers Icon UNTER den Spielern (Runde 7): das 113-px-Icon verdeckte
+  -- sonst den Nahkampf-Klumpen; Balken, Fresszaehler und Charge-Telegraph
+  -- bleiben weiter oben gezeichnet (GDD 4.1)
+  local hg = view.hogger
+  if hg.state ~= "reset" then
+    local x, y = to_screen(hg.x, hg.y)
+    assets.draw("icon_hogger", x, y, scale * 2)
+  end
+
   -- Geister zuerst (gedimmt), dann Lebende (GDD 4.1)
+  local draw_pids = R.sorted_pids(view.players)
   for pass = 1, 2 do
-    for pid, p in pairs(view.players) do
+    for _, pid in ipairs(draw_pids) do
+      local p = view.players[pid]
       if pid ~= view.me then
         local is_ghost_pass = pass == 1
         if (p.ghost and is_ghost_pass) or (p.alive and not is_ghost_pass) then
@@ -601,8 +623,9 @@ function R:draw(view, ui)
     end
   end
 
-  -- Hogger
-  local hg = view.hogger
+  -- Hoggers Balken, Fresszaehler und Charge-Telegraph — bewusst NACH den
+  -- Spielern, damit sie im Klumpen sichtbar bleiben; das Icon selbst liegt
+  -- seit Runde 7 unter den Spielern (GDD 4.1)
   do
     local x, y = to_screen(hg.x, hg.y)
     -- Charge-Telegraph: blinkende Ziellinie (GDD 9.2)
@@ -616,7 +639,6 @@ function R:draw(view, ui)
       love.graphics.setLineWidth(1)
     end
     if hg.state ~= "reset" then
-      assets.draw("icon_hogger", x, y, scale * 2)
       hp_bar(x, y + 20, 26, hg.hp / math.max(1, hg.max_hp), 0.85, 0.2, 0.15)
       -- Unterbrechungszaehler: Pflicht-UI waehrend des Fressens (GDD 9.2)
       if hg.eat and hg.eat.phase == "channel" then
