@@ -150,6 +150,9 @@ function E.player_damage_hogger(run, p, amount, kind)
   if p.shout_until > run.t then amount = amount * (1 + model.p("warrior_shout_bonus")) end
   h.hp = h.hp - amount
   p.dmg_done = p.dmg_done + amount
+  -- Kein-Kontakt-Uhr (Runde 10, #124): jeder Treffer haelt Hogger im Kampf
+  run.engaged = true
+  run.no_contact_t = 0
   local tf = p.is_leeroy and model.p("leeroy_threat_factor") or 1
   p.threat = p.threat + model.threat_for(amount, false) * tf
   run.c.dmg_to_hogger = run.c.dmg_to_hogger + amount
@@ -419,12 +422,13 @@ local function hogger_tick(run, dt)
     return
   end
 
-  -- Charge: weitestes Ziel mit Bedrohung im Leash-Radius (GDD 9.2)
+  -- Charge: weitestes Ziel mit Bedrohung in Hoggers Revier (GDD 9.2);
+  -- p.d ist die Distanz zu Hogger — genau so misst das Spiel seit Runde 10
   local charge_cd = model.p("hogger_charge_cd")
   if run.t >= h.charge_ready then
     local far, far_d = nil, 0
     for _, p in ipairs(run.players) do
-      if p.alive and p.threat > 0 and p.d <= model.p("hogger_leash_radius") and p.d > far_d then
+      if p.alive and p.threat > 0 and p.d <= model.p("hogger_zone_radius") and p.d > far_d then
         far, far_d = p, p.d
       end
     end
@@ -628,7 +632,8 @@ function E.run_try(cfg)
     adds = {},
     c = { deaths = 0, dmg_to_hogger = 0, dmg_to_players = 0, healing = 0,
           crit_kills = 0, eat_channels = 0, eat_interrupted = 0,
-          eat_completed = 0, eat_healing = 0, charges = 0, add_deaths = 0 },
+          eat_completed = 0, eat_healing = 0, charges = 0, add_deaths = 0,
+          resets = 0 },
   }
   run.agent = agents.make(cfg.agent, run)
 
@@ -668,6 +673,9 @@ function E.run_try(cfg)
 
   local dt = model.SIM_TICK_DT
   local limit = model.p("try_time_limit")
+  local melee_r = model.p("melee_range")
+  local frist = model.p("hogger_no_contact_reset")
+  run.engaged, run.no_contact_t = false, 0
   while run.t < limit do
     run.t = run.t + dt
     if run.agent.tick then run.agent.tick(run) end
@@ -676,6 +684,26 @@ function E.run_try(cfg)
     end
     hogger_tick(run, dt)
     if run.hogger.hp <= 0 then break end
+    -- Kein-Kontakt-Uhr (Runde 10, #124) — dieselbe Regel wie im Spiel: ab dem
+    -- ersten Treffer laeuft sie und wird von jedem Treffer sowie von jedem
+    -- lebenden Spieler in Schlagweite auf 0 gestellt. Laeuft sie ab, trabt
+    -- Hogger heim und heilt voll: der Try ist verloren. Im 1D-Modell trifft
+    -- das praktisch nur den totalen Wipe (Todesstrafe 24 s gegen Frist 30 s).
+    if run.engaged then
+      local contact = false
+      for _, p in ipairs(run.players) do
+        if p.alive and p.d <= melee_r then contact = true break end
+      end
+      if contact then
+        run.no_contact_t = 0
+      else
+        run.no_contact_t = run.no_contact_t + dt
+        if run.no_contact_t >= frist then
+          run.c.resets = run.c.resets + 1
+          break
+        end
+      end
+    end
   end
 
   local win = run.hogger.hp <= 0

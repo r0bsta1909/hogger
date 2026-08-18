@@ -119,3 +119,29 @@ engine.player_damage_hogger(run3, a3, 3, "autohit")
 T.ok(run3.hogger.eating == nil, "engine: 3 verschiedene Angreifer unterbrechen bei N=5")
 T.eq(run3.c.eat_interrupted, 1, "engine: Unterbrechung gezaehlt")
 
+-- Kein-Kontakt-Abbruch (Runde 10, #124): dieselbe Regel wie im Spiel. Im
+-- 1D-Modell greift sie praktisch nur beim totalen Wipe — die Todesstrafe
+-- (24 s) liegt unter der Frist (30 s), der Nachschub schafft es also.
+do
+  local entry = model.params.hogger_no_contact_reset
+  local orig = entry.wert
+
+  -- Mit der GDD-Frist laeuft ein normaler Lauf ohne Abbruch durch.
+  local ruhig = engine.run_try({ n = 10, walk = 15, crits = false,
+                                 agent = "koordiniert", seed = 7, log = false })
+  T.eq(ruhig.c.resets, 0, "engine: Frist von 30 s bricht einen normalen Lauf nicht ab")
+
+  -- Mit einer absurd kurzen Frist muss die Regel greifen und den Lauf
+  -- vorzeitig als Niederlage beenden — der Beweis, dass sie verdrahtet ist.
+  entry.wert = 0.5
+  local kurz = engine.run_try({ n = 10, walk = 15, crits = false,
+                                agent = "unkoordiniert", seed = 7, log = false })
+  entry.wert = orig
+  T.eq(kurz.c.resets, 1, "engine: kurze Frist loest den Abbruch aus")
+  T.ok(not kurz.win, "engine: der Abbruch wertet den Lauf als Niederlage")
+  T.ok(kurz.duration < model.p("try_time_limit"),
+    "engine: der Abbruch beendet den Lauf vorzeitig")
+  T.eq(model.p("hogger_no_contact_reset"), orig,
+    "engine: der Test stellt die Frist wieder her")
+end
+

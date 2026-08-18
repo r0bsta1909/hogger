@@ -3,6 +3,8 @@
 -- der Sim am Try-Ende gebaut (bevor begin_try die Zaehler zuruecksetzt)
 -- und haengt als e.board am try_end-Event (nicht im JSONL serialisiert).
 
+local model = require("sim.model")
+
 local B = {}
 
 -- Maximum ueber die Spieler; deterministisch (ipairs, Gleichstand: kleinere ID)
@@ -40,7 +42,10 @@ function B.build(state, won)
   hrow("Unterbrechungen kassiert", h.interrupts)
   hrow("Charges", h.charges)
 
-  -- Rest-HP: beim Wipe gross inszeniert ("Er hatte noch 4 %.", GDD 11)
+  -- Rest-HP: beim Wipe gross inszeniert ("Er hatte noch 4 %.", GDD 11).
+  -- Bei einem Abbruch (Runde 10, #124) steht der Grund davor — Rob soll nicht
+  -- raten muessen, warum der Try auf einmal vorbei war.
+  local cause = state.hogger.reset_cause
   local big = nil
   if won then
     hrow("Rest-HP", "0 (tot)")
@@ -50,7 +55,16 @@ function B.build(state, won)
     local shown = pct >= 1 and string.format("%d", math.floor(pct + 0.5))
                             or string.format("%.1f", pct)
     hrow("Rest-HP", shown .. " %")
-    big = "Er hatte noch " .. shown .. " %."
+    local rest = "Er hatte noch " .. shown .. " %."
+    if cause == "no_contact" then
+      big = string.format("Er hat %d s lang niemanden erreicht. %s",
+        math.floor(model.p("hogger_no_contact_reset") + 0.5), rest)
+    elseif cause == "wipe" then
+      big = string.format("Der Raid lag %d s lang. %s",
+        math.floor(model.p("hogger_no_contact_reset") + 0.5), rest)
+    else
+      big = rest
+    end
   end
 
   local raid = {}
@@ -102,7 +116,8 @@ function B.build(state, won)
   end
 
   return {
-    header = (won and "SIEG" or "Wipe") .. " - Try " .. tostring(state.try_nr),
+    header = (won and "SIEG" or (cause and "Abbruch" or "Wipe"))
+             .. " - Try " .. tostring(state.try_nr),
     hogger = hogger, raid = raid,
     titles = titles, title_awards = title_awards, big = big,
   }

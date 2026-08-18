@@ -14,10 +14,8 @@ return {
   -- Hogger: Statemachine (9.1) ---------------------------------------------
   hogger_aggro_radius = { "Umkreis, in dem Hogger von selbst in den Kampf geht.",
     "hoeher = er reagiert frueher" },
-  hogger_leash_hysteresis = { "Zeit ausserhalb der Leash-Zone, bis Hogger zuruecksetzt.",
-    "hoeher = Ausreisser verzeiht er laenger" },
-  hogger_no_contact_reset = { "Zeit ohne erreichtes Ziel, bis Hogger zuruecksetzt und der Try abbricht.",
-    "hoeher = Kiten wird laenger geduldet" },
+  hogger_no_contact_reset = { "Zeit ohne Ziel und ohne Treffer, bis Hogger heimtrabt und der Try endet.",
+    "hoeher = Kiten und Wipes werden laenger geduldet" },
 
   -- Hogger: Werte und Faehigkeiten (9.2) -----------------------------------
   hogger_autohit_dmg = { "Schaden eines Hogger-Autohits.",
@@ -26,8 +24,8 @@ return {
     "hoeher = er schlaegt seltener zu" },
   hogger_speed = { "Lauftempo von Hogger.",
     "hoeher = Weglaufen hilft weniger" },
-  hogger_leash_radius = { "Umkreis um den Huegel, den Hogger nicht verlaesst.",
-    "hoeher = er folgt weiter" },
+  hogger_zone_radius = { "Hoggers Revier: Charge-Reichweite ab ihm und Groesse der Huegelzone.",
+    "hoeher = die Charge greift weiter nach hinten" },
   hogger_cleave_divisor = { "Teiler, der aus der Raidgroesse die Zahl der Cleave-Ziele macht.",
     "hoeher = weniger Ziele je Schlag" },
   hogger_charge_cd = { "Abklingzeit der Rushing Charge.",

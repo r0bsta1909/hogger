@@ -120,8 +120,8 @@ end
 for i, sp in ipairs(map.MOB_SPAWNS) do
   T.ok(map.dist_to_path(sp.x, sp.y) > 250,
     "map: Spawn " .. i .. " nicht auf der Friedhof-Huegel-Achse")
-  T.ok(world.dist(sp.x, sp.y, map.hill.x, map.hill.y) > model.p("hogger_leash_radius"),
-    "map: Spawn " .. i .. " ausserhalb der Leash-Zone")
+  T.ok(world.dist(sp.x, sp.y, map.hill.x, map.hill.y) > model.p("hogger_zone_radius"),
+    "map: Spawn " .. i .. " ausserhalb der Huegelzone")
   T.ok(sp.x > 0 and sp.x < map.WIDTH and sp.y > 0 and sp.y < map.HEIGHT,
     "map: Spawn " .. i .. " in Weltgrenzen")
   if sp.typ == "murloc" then
@@ -825,10 +825,12 @@ do
   T.ok(pr.hp > fb_hp0, "heal: Fallback-Heilung wirkt")
 end
 
--- Runde 9 (#117): Reset beendet und wertet den Try -------------------------
--- Aufbau: ein lebender Kaempfer mit Bedrohung, Hogger im Kampf. Wo die
--- Kein-Kontakt-Uhr isoliert getestet wird, pinnen wir Hogger auf den
--- Huegel, damit der Leash nicht dazwischenfunkt.
+-- Runde 9 (#117) / Runde 10 (#124): eine einzige Reset-Regel ---------------
+-- Hogger trabt heim, wenn er die Frist lang weder ein lebendes Ziel erreicht
+-- NOCH Spielerschaden genommen hat. Kein Leash mehr — er darf ueberall
+-- stehen; der alte Radius um den Huegel riss Trys am Wiederbelebungsfeld
+-- auseinander (Diagnose 1) und feuerte nach einem Wipe beim Re-Aggro sofort
+-- (Diagnose 2). Beides ist unten als Regressionstest festgenagelt.
 local function reset_world(opts)
   opts = opts or {}
   local st = world.new(7)
@@ -839,6 +841,7 @@ local function reset_world(opts)
   world.begin_try(st, {})
   local h = st.hogger
   h.state = "combat"
+  h.engaged = true -- der Try laeuft: die Uhr ist scharf
   for _, p in ipairs(st.players) do
     p.alive, p.ghost, p.class = true, false, "warrior"
     p.hp, p.max_hp = 80, 80
@@ -852,24 +855,120 @@ local function tick_n(st, secs)
   for _ = 1, math.ceil(secs / model.TICK_DT) do step.step(st, {}) end
 end
 
-do -- Uhr steht bei totem Raid: die Attrition bleibt (GDD 13.1)
-  local st, h = reset_world({ n = 3 })
-  for _, p in ipairs(st.players) do p.alive = false end
-  h.hp = h.max_hp * 0.5
-  local hp0, try0 = h.hp, st.try_nr
-  tick_n(st, 40)
-  T.eq(st.try_nr, try0, "reset: toter Raid bricht den Try NICHT ab")
-  T.eq(st.hogger.hp, hp0, "reset: toter Raid laesst Hoggers HP stehen")
-  T.eq(st.hogger.no_contact_t, 0, "reset: Uhr steht bei totem Raid")
+-- Wie tick_n, haelt aber alle Positionen fest: sonst laeuft Hogger seinem
+-- Ziel hinterher und stellt die Uhr durch Nahkampf-Kontakt selbst zurueck.
+local function tick_pinned(st, secs)
+  local hx, hy = st.hogger.x, st.hogger.y
+  local pos = {}
+  for i, p in ipairs(st.players) do pos[i] = { p.x, p.y } end
+  for _ = 1, math.ceil(secs / model.TICK_DT) do
+    st.hogger.x, st.hogger.y = hx, hy
+    for i, p in ipairs(st.players) do p.x, p.y = pos[i][1], pos[i][2] end
+    step.step(st, {})
+  end
 end
 
-do -- Uhr steht vor dem ersten Kontakt (Hogger patrouilliert)
+do -- KERNBEFUND Runde 10: Schaden aus der Ferne haelt Hogger im Kampf.
+  -- Ein Jaeger schiesst aus 200 px (Autoschuss-Reichweite 230) — Hogger
+  -- erreicht ihn nie, nimmt aber dauernd Treffer. Frueher brach genau das
+  -- den Try ab, obwohl Hogger die ganze Zeit Schaden frass.
+  local st, h = reset_world({ n = 1 })
+  local p = st.players[1]
+  p.class, p.target = "hunter", world.HOGGER_ID
+  p.max_hp, p.hp = model.hp_for_class("hunter"), model.hp_for_class("hunter")
+  local hp0, try0 = h.hp, st.try_nr
+  local worst = 0
+  for _ = 1, math.ceil(60 / model.TICK_DT) do
+    st.hogger.x, st.hogger.y = map.hill.x, map.hill.y -- Hogger festnageln
+    p.x, p.y = map.hill.x + 200, map.hill.y
+    p.alive, p.hp = true, p.max_hp
+    st.hogger.threat[p.id] = 5
+    step.step(st, { [1] = { mask = 0,
+      facing = input.facing_towards(p.x, p.y, st.hogger.x, st.hogger.y) } })
+    if st.hogger.no_contact_t > worst then worst = st.hogger.no_contact_t end
+  end
+  T.ok(st.hogger.hp < hp0, "kiten: der Jaeger trifft aus der Ferne wirklich")
+  T.eq(st.try_nr, try0, "kiten: Schaden aus der Ferne bricht den Try NICHT ab")
+  T.ok(worst < model.p("autohit_interval") + 0.5,
+    "kiten: jeder Treffer stellt die Uhr zurueck (max "
+      .. string.format("%.1f", worst) .. " s)")
+end
+
+do -- Uhr steht vor dem ersten Aggro des Trys (Hogger patrouilliert)
   local st, h = reset_world({ n = 1 })
   h.state = "idle"
+  h.engaged = false
   h.threat = {}
+  for _, p in ipairs(st.players) do p.x = map.hill.x + 900 end -- ausser Aggro
   local try0 = st.try_nr
   tick_n(st, 40)
   T.eq(st.try_nr, try0, "reset: idle-Hogger bricht keinen Try ab")
+  T.eq(st.hogger.no_contact_t, 0, "reset: Uhr steht vor dem ersten Aggro")
+end
+
+do -- Toter Raid: die Uhr laeuft weiter (Wipe-Ausnahme aus Runde 9 gestrichen).
+  -- Der Nachschub hat die Gnadenfrist — schafft er es nicht, ist der Try
+  -- gelaufen und die Tafel sagt warum.
+  local st, h = reset_world({ n = 3 })
+  for _, p in ipairs(st.players) do p.alive = false end
+  h.hp = h.max_hp * 0.5
+  local try0 = st.try_nr
+  local cause, board
+  for _ = 1, math.ceil((model.p("hogger_no_contact_reset") + 5) / model.TICK_DT) do
+    local evs = step.step(st, {})
+    for _, e in ipairs(evs) do
+      if e.ev == "hogger_reset" then cause = e.dst end
+      if e.ev == "try_end" then board = e.board end
+    end
+    if cause then break end
+  end
+  T.eq(cause, "wipe", "reset: toter Raid bricht den Try nach der Frist ab")
+  T.eq(st.try_nr, try0 + 1, "reset: der Wipe-Abbruch wertet den Try")
+  T.ok(board and board.header:find("^Abbruch"),
+    "reset: Tafel meldet einen Abbruch (" .. tostring(board and board.header) .. ")")
+  T.ok(board and board.big:find("Der Raid lag"),
+    "reset: Tafel nennt den Wipe als Grund (" .. tostring(board and board.big) .. ")")
+end
+
+do -- Rueckkehr innerhalb der Frist rettet den Try: Hogger behaelt seine
+  -- Rest-HP, nichts wird zurueckgesetzt. Das ist Robs Aggro-Ping-Pong.
+  local st, h = reset_world({ n = 2 })
+  for _, p in ipairs(st.players) do p.alive = false end
+  h.hp = h.max_hp * 0.5
+  local hp0, try0 = h.hp, st.try_nr
+  tick_n(st, 24) -- Todesstrafe: der erste Wiederbelebte ist zurueck
+  T.eq(st.try_nr, try0, "reset: waehrend der Frist bleibt der Try am Leben")
+  local back = st.players[1]
+  for _ = 1, math.ceil(20 / model.TICK_DT) do
+    back.alive, back.hp = true, back.max_hp
+    back.x, back.y = st.hogger.x, st.hogger.y -- er steht wieder an ihm
+    step.step(st, {})
+  end
+  T.eq(st.try_nr, try0, "reset: rechtzeitiger Nachschub rettet den Try")
+  T.eq(st.hogger.hp, hp0, "reset: Hogger behaelt seine Rest-HP")
+  T.eq(st.hogger.no_contact_t, 0, "reset: Kontakt stellt die Uhr zurueck")
+end
+
+do -- REGRESSION Diagnose 2: der alte Leash-Zaehler ueberlebte den
+  -- Aggro-Verlust und feuerte beim Re-Aggro sofort — Hogger stand mit vollen
+  -- HP da, obwohl gerade jemand angegriffen hatte. Darf nie wiederkommen.
+  local st, h = reset_world({ n = 1 })
+  h.hp = h.max_hp * 0.6
+  local hp0, try0 = h.hp, st.try_nr
+  local p = st.players[1]
+  p.alive = false
+  for _ = 1, math.ceil(10 / model.TICK_DT) do
+    st.hogger.x, st.hogger.y = map.hill.x + 900, map.hill.y -- weit drausssen
+    step.step(st, {})
+  end
+  for _ = 1, math.ceil(5 / model.TICK_DT) do
+    p.alive, p.hp = true, p.max_hp
+    p.x, p.y = st.hogger.x, st.hogger.y
+    st.hogger.threat[p.id] = 5
+    step.step(st, {})
+  end
+  T.eq(st.try_nr, try0, "reset: Re-Aggro weit vom Huegel bricht nichts ab")
+  T.eq(st.hogger.hp, hp0, "reset: Hogger behaelt seine HP beim Re-Aggro")
 end
 
 do -- Kiting bricht ab: Try gewertet, Zaehler +1, Hogger voll am Huegel
@@ -878,10 +977,10 @@ do -- Kiting bricht ab: Try gewertet, Zaehler +1, Hogger voll am Huegel
   local try0, max0 = st.try_nr, h.max_hp
   local seen_reset, cause, board, endval
   for _ = 1, math.ceil((model.p("hogger_no_contact_reset") * 2) / model.TICK_DT) do
-    st.hogger.x, st.hogger.y = map.hill.x, map.hill.y -- Leash isolieren
+    st.hogger.x, st.hogger.y = map.hill.x, map.hill.y
     for _, p in ipairs(st.players) do
       p.x, p.y = map.hill.x + 300, map.hill.y
-      p.alive, p.hp = true, 80 -- am Leben halten: ein toter Raid haelt die Uhr an
+      p.alive, p.hp = true, 80 -- am Leben: sonst heisst der Abbruch "wipe"
       st.hogger.threat[p.id] = 5
     end
     local evs = step.step(st, {})
@@ -895,9 +994,13 @@ do -- Kiting bricht ab: Try gewertet, Zaehler +1, Hogger voll am Huegel
   T.eq(cause, "no_contact", "reset: Ursache im Event")
   T.eq(st.try_nr, try0 + 1, "reset: Try-Zaehler tickt")
   T.eq(endval, 0, "reset: try_end wird als Wipe gewertet (val 0)")
-  T.ok(board and board.big == "Er hatte noch 42 %.",
+  T.ok(board and board.big:find("Er hatte noch 42 %%%."),
     "reset: Tafel zeigt die Rest-HP VOR dem Full Heal ("
       .. tostring(board and board.big) .. ")")
+  T.ok(board and board.big:find("niemanden erreicht"),
+    "reset: Tafel nennt den Grund des Abbruchs")
+  T.ok(board and board.header:find("^Abbruch"),
+    "reset: Kopfzeile meldet den Abbruch statt eines Wipes")
   T.eq(st.hogger.hp, max0, "reset: neuer Try startet mit vollen HP")
   T.near(st.hogger.x, map.hill.x, "reset: Hogger steht wieder am Huegel")
   T.ok(st.clock < 1, "reset: die Uhr des neuen Trys laeuft frisch")
@@ -907,26 +1010,24 @@ do -- Kiting bricht ab: Try gewertet, Zaehler +1, Hogger voll am Huegel
   T.eq(st.stats.hogger.dmg, 0, "reset: neuer Try mit frischen Statistiken")
 end
 
-do -- Leash-Reset beendet den Try ebenfalls
+do -- REGRESSION Diagnose 1: Kaempfen weit weg vom Huegel ist erlaubt, solange
+  -- Kontakt besteht. Frueher riss der Leash hier jeden Try am
+  -- Wiederbelebungsfeld auseinander (840 px, Reset-Punkt lag bei ~910 px).
   local st, h = reset_world({ n = 1 })
   local try0 = st.try_nr
-  local cause
-  for _ = 1, math.ceil((model.p("hogger_leash_hysteresis") + 0.5) / model.TICK_DT) do
-    st.hogger.x = map.hill.x + model.p("hogger_leash_radius") + 100
-    st.hogger.y = map.hill.y
+  local f = map.field()
+  for _ = 1, math.ceil(60 / model.TICK_DT) do
+    st.hogger.x, st.hogger.y = f.x, f.y
     for _, p in ipairs(st.players) do
       p.x, p.y = st.hogger.x, st.hogger.y
-      p.alive, p.hp = true, 80 -- sonst geht Hogger auf idle und leasht nie
+      p.alive, p.hp = true, 80
       st.hogger.threat[p.id] = 5
     end
-    local evs = step.step(st, {})
-    for _, e in ipairs(evs) do
-      if e.ev == "hogger_reset" then cause = e.dst end
-    end
-    if cause then break end
+    step.step(st, {})
   end
-  T.eq(cause, "leash", "reset: Leash meldet seine eigene Ursache")
-  T.eq(st.try_nr, try0 + 1, "reset: Leash beendet den Try")
+  T.ok(world.dist(f.x, f.y, map.hill.x, map.hill.y) > model.p("hogger_zone_radius"),
+    "reset: das Wiederbelebungsfeld liegt ausserhalb der Huegelzone")
+  T.eq(st.try_nr, try0, "reset: Kampf am Wiederbelebungsfeld bricht nichts ab")
 end
 
 do -- Kontakt stellt die Uhr zurueck
@@ -948,32 +1049,53 @@ do -- Kontakt stellt die Uhr zurueck
   T.eq(st.hogger.no_contact_t, 0, "reset: Kontakt stellt die Uhr zurueck")
 end
 
-do -- Kein Abbruch waehrend Fressen oder Charge
+do -- Fressen pausiert die Uhr seit Runde 10 NICHT mehr (sonst dehnten
+  -- Fresskanaele die Frist unvorhersehbar), die kurze Charge schon.
   local st, h = reset_world({ n = 1 })
   h.eating = { phase = "channel", t_left = 999, corpse = 1,
                hitters = {}, hitter_count = 0, dmg_accum = 0 }
-  local try0 = st.try_nr
-  tick_n(st, 40)
-  T.eq(st.hogger.no_contact_t, 0, "reset: Fressen zaehlt als Kontakt")
-  T.eq(st.try_nr, try0, "reset: kein Abbruch waehrend des Fressens")
+  tick_pinned(st, 5)
+  T.ok(st.hogger.no_contact_t > 4, "reset: Fressen haelt die Uhr nicht an")
 
   local st2, h2 = reset_world({ n = 1 })
   h2.charge = { target = st2.players[1].id, t_left = 999 }
   local try2 = st2.try_nr
   tick_n(st2, 40)
-  T.eq(st2.hogger.no_contact_t, 0, "reset: Charge zaehlt als Kontakt")
+  T.eq(st2.hogger.no_contact_t, 0, "reset: die Charge pausiert die Uhr")
   T.eq(st2.try_nr, try2, "reset: kein Abbruch waehrend der Charge")
 end
 
-do -- Leeroy allein haelt die Uhr nicht am Laufen, in Schlagweite aber schon
+do -- Leeroy in Schlagweite ist Kontakt (er kaempft ja), aus der Ferne nicht
   local st, h = reset_world({ leeroy = true, n = 1 })
   for _, p in ipairs(st.players) do
     if not p.is_leeroy then p.alive = false end
   end
-  local try0 = st.try_nr
-  tick_n(st, 40)
-  T.eq(st.try_nr, try0, "reset: Leeroy allein bricht keinen Try ab")
-  T.eq(st.hogger.no_contact_t, 0, "reset: Uhr steht bei nur lebendem Leeroy")
+  tick_pinned(st, 5)
+  T.ok(st.hogger.no_contact_t > 4, "reset: Leeroy aus der Ferne ist kein Kontakt")
+  for _, p in ipairs(st.players) do
+    if p.is_leeroy then p.x, p.y = st.hogger.x, st.hogger.y end
+  end
+  step.step(st, {})
+  T.eq(st.hogger.no_contact_t, 0, "reset: Leeroy in Schlagweite ist Kontakt")
+end
+
+do -- Charge misst ihr Ziel ab HOGGER, nicht mehr ab dem Huegel (Runde 10):
+  -- weit draussen bleibt sie sein Gegenmittel gegen Kiter.
+  local st, h = reset_world({ n = 1 })
+  local p = st.players[1]
+  h.x, h.y = map.hill.x + 1400, map.hill.y
+  h.charge_cd = 0
+  p.x, p.y = h.x + 300, h.y
+  step.step(st, {})
+  T.ok(st.hogger.charge ~= nil,
+    "charge: Ziel im Umkreis um Hogger wird gechargt, egal wo er steht")
+
+  local st2, h2 = reset_world({ n = 1 })
+  local q = st2.players[1]
+  h2.charge_cd = 0
+  q.x, q.y = h2.x + model.p("hogger_zone_radius") + 200, h2.y
+  step.step(st2, {})
+  T.eq(st2.hogger.charge, nil, "charge: Ziel jenseits seines Reviers wird nicht gechargt")
 end
 
 -- Runde 9 (#118): Laufzeit-Skalierung fuer die F12-Debug-Bots -------------
