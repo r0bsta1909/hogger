@@ -8,6 +8,9 @@ S.__index = S
 
 local SHOW_T = 10 -- ~10 s (GDD 11)
 
+-- Hinweis auf der Tafel (Runde 10, #126). ASCII-Konvention wie ueberall im UI.
+S.HINT = "Klick zum Schliessen"
+
 -- opts.sticky: bleibt stehen (finale Sieg-Tafel); opts.buttons: Liste von
 -- { id, label } unten mittig (REVANCHE + Ausloggen, GDD 11 / #85) —
 -- Klick liefert die id des getroffenen Knopfs
@@ -141,6 +144,16 @@ function S:draw()
       love.graphics.print(b.label,
         bx + bw2 / 2 - font:getWidth(b.label), by + 6, 0, 2, 2)
     end
+  else
+    -- Hinweis unten rechts (Runde 10, #126): dass ein Klick die Tafel
+    -- schliesst, stand nirgends. Muster wie ui/victory.lua und ui/boot.lua,
+    -- zusaetzlich mit dem Ausblend-Alpha multipliziert — sonst bliebe der
+    -- Hinweis beim Ausfaden stehen. Nicht auf der klebrigen Sieg-Tafel:
+    -- die soll bewusst stehenbleiben und hat ihre eigenen Knoepfe.
+    love.graphics.setColor(0.6, 0.56, 0.45,
+      a * (0.6 + 0.3 * math.sin(self.t * 3)))
+    love.graphics.print(S.HINT,
+      px + pw - font:getWidth(S.HINT) - 14, py + ph - 22)
   end
 end
 
