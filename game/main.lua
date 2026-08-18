@@ -715,10 +715,20 @@ function love.keypressed(key)
     app.debug.note = "session.json geloescht (wirkt beim naechsten Host-Start)"
     return
   elseif action == "dock" then
-    -- HUD-Andock-Vorschau (M12): live umschaltbar, damit Rob vergleichen kann
+    -- HUD-Dock (M12/M13): live umschaltbar; Standard ist AN
     app.render.docked = not app.render.docked
     app.debug.note = app.render.docked
-      and "HUD am Ring angedockt (Vorschau)" or "HUD in den Ecken"
+      and "HUD am Ring angedockt (Standard)" or "HUD in den Ecken (Debug)"
+    return
+  elseif type(action) == "table" and action.bots then
+    -- Laufzeit-Bots (Runde 8, #109): joinen wie echte Nachzuegler
+    if app.mode == "host" and app.net and app.net.add_bots then
+      local total = app.net:add_bots(action.bots)
+      app.debug.note = string.format("+%d Bots (jetzt %d Spieler)",
+        action.bots, total)
+    else
+      app.debug.note = "Nur der Host kann Bots hinzufuegen."
+    end
     return
   elseif action == "kill" then
     -- Hogger sofort toeten: Fluchbruch allein testbar (Issue #35)

@@ -49,6 +49,7 @@ function H.new(opts)
     self.bot_pids[#self.bot_pids + 1] = world.add_player(self.state, "bot" .. i,
       { quest_done = true })
   end
+  self.bot_next = (opts.bots or 0) + 1 -- Laufzeit-Bots (Runde 8, #109)
   local ev = {}
   world.begin_try(self.state, ev)
   self:_after_step(ev)
@@ -281,6 +282,32 @@ end
 -- Nahkampf des lokalen Spielers anschalten (Issue #86)
 function H:engage()
   return step.engage(self.state, self.local_pid)
+end
+
+-- Laufzeit-Bots (Runde 8, #109, F12 [B/G/J]): n Bots joinen mitten im
+-- Spiel wie echte Nachzuegler — world.add_player spawnt sie als Geist am
+-- Friedhof, der Bot-Input-Pfad in H:update greift automatisch. n_scale und
+-- Hogger-HP zaehlen wie bei echten Joins erst ab dem naechsten Try-Start.
+function H:add_bots(n)
+  local function name_taken(name)
+    for _, p in ipairs(self.state.players) do
+      if p.name == name then return true end
+    end
+    return false
+  end
+  for _ = 1, n do
+    while name_taken("bot" .. self.bot_next) do
+      self.bot_next = self.bot_next + 1
+    end
+    local pid = world.add_player(self.state, "bot" .. self.bot_next,
+      { quest_done = true })
+    self.bot_pids[#self.bot_pids + 1] = pid
+    self.bot_next = self.bot_next + 1
+  end
+  if next(self.clients) then
+    self:_broadcast(wire.roster(self.state.players), CH_RELIABLE, "reliable")
+  end
+  return #self.state.players
 end
 
 -- Klick-Heilung des lokalen Spielers (Heil-Leiste, Runde 7, #103)
