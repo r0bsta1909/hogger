@@ -124,7 +124,7 @@ function C:accept_quest()
   self:_send(wire.quest_accept(), CH_RELIABLE, "reliable")
 end
 
--- Nahkampf anschalten (Issue #86): Rechtsklick oder Taste 4
+-- Autoattack anschalten (Issue #86): Rechtsklick aufs Ziel
 function C:send_engage()
   self:_send(wire.engage(), CH_RELIABLE, "reliable")
 end

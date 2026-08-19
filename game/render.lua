@@ -24,7 +24,6 @@ local ABILITY_ICON = {
   smite = "ab_smite", heal = "ab_heal", holylight = "ab_holylight",
   seal = "ab_seal", fireball = "ab_fireball", frostarmor = "ab_frostarmor",
   bolt = "ab_bolt", imp = "ab_imp", wrath = "ab_wrath", touch = "ab_touch",
-  melee = "ab_melee", -- Standard-Aktion Nahkampf (Issue #86)
 }
 local ABILITIES = require("game.gamesim.step").ABILITIES
 local ICON_RADIUS = require("game.gamesim.step").ICON_RADIUS
@@ -42,10 +41,11 @@ local CLASS_COL = {
 }
 -- Autoangriff je Klasse in Worten (GDD 8.1) — beim Jaeger IST der Autoschuss
 -- die erste "Faehigkeit", er hat deshalb nur einen Button (GDD 8.2).
--- Der Nahkampf-Autohit will seit Runde 5 angeschaltet werden (Issue #86).
+-- Seit Runde 12 (#145) gibt es keinen Nahkampf-Button mehr: Rechtsklick
+-- aufs Ziel schaltet jede Autoattack an, der Jaeger wechselt automatisch.
 local AUTO_DE = {
-  melee = "Nahkampf-Autohit (Rechtsklick oder Taste 4 startet ihn)",
-  shot = "Autoschuss (laeuft automatisch)",
+  melee = "Rechtsklick auf Ziel = Autoattack",
+  shot = "Rechtsklick auf Ziel = Autoattack (nah: Nahkampf, fern: Schuss)",
 }
 local RES_DE = { mana = "Mana", rage = "Wut", energy = "Energie" }
 
@@ -1355,13 +1355,13 @@ function R:draw(view, ui)
   if me and me.class and me.alive then
     local specs = ABILITIES[me.class] or {}
     local defs = model.classes[me.class].abilities or {}
-    -- Klassen-Slots 1..3, dahinter die Standard-Aktion Nahkampf als
-    -- eigener Button mit Taste 4 (Issue #86) — jede Klasse hat ihn
+    -- Klassen-Slots 1..3. Den frueheren Nahkampf-Button gibt es nicht mehr
+    -- (Runde 12, #145): Rechtsklick aufs Ziel genuegt, die Hinweiszeile
+    -- unterm Ring sagt es
     local slots = {}
     for i, spec in ipairs(specs) do
       slots[#slots + 1] = { spec = spec, def = defs[i], slot = i }
     end
-    slots[#slots + 1] = { melee = true }
     local n = #slots
     local BR = 23                       -- Buttonradius
     local ring_r = L.ring_r             -- Bahn knapp innerhalb des Rings
@@ -1372,7 +1372,7 @@ function R:draw(view, ui)
       local x, y = L.ox + math.cos(a) * ring_r, L.oy + math.sin(a) * ring_r
       love.graphics.setColor(0.10, 0.09, 0.07, 0.95)
       love.graphics.circle("fill", x, y, BR)
-      local icon = entry.melee and "ab_melee" or ABILITY_ICON[entry.spec.id]
+      local icon = ABILITY_ICON[entry.spec.id]
       if icon then assets.draw(icon, x, y, (BR * 1.7) / assets.size(icon)) end
       -- Cooldown-Sweep im Uhrzeigersinn (Original-Verhalten)
       local cd = entry.slot and ui.cooldowns and ui.cooldowns[entry.slot] or 0
@@ -1389,8 +1389,7 @@ function R:draw(view, ui)
       love.graphics.circle("line", x, y, BR)
       love.graphics.setLineWidth(1)
       love.graphics.setColor(0.95, 0.92, 0.8, 1)
-      love.graphics.print(entry.melee and "4" or tostring(entry.slot),
-        x + BR - 10, y + BR - 16)
+      love.graphics.print(tostring(entry.slot), x + BR - 10, y + BR - 16)
       -- Tooltip: der Grund, warum "RS" niemanden mehr ratlos laesst (#28)
       if ui.mouse then
         local d = math.sqrt((ui.mouse[1] - x) ^ 2 + (ui.mouse[2] - y) ^ 2)
@@ -1442,18 +1441,7 @@ function R:draw(view, ui)
   end
 
   -- Faehigkeits-Tooltip ueber dem Button (Original-Stil, GDD 4.2)
-  if hover_tip and hover_tip.melee then
-    -- Standard-Aktion Nahkampf (Issue #86)
-    local lines = { "Nahkampf", "Kostenlos",
-      string.format("Startet den Autohit: %d Schaden alle %.1f s",
-        model.p("autohit_melee_dmg"), model.p("autohit_interval")),
-      string.format("Reichweite %d px", model.p("melee_range")),
-      "Taste 4 oder Rechtsklick aufs Ziel" }
-    if me and me.class and model.classes[me.class].attack == "shot" then
-      lines[#lines + 1] = "(dein Autoschuss laeuft weiter von selbst)"
-    end
-    draw_tooltip(lines, ui.mouse[1], ui.mouse[2], w, h)
-  elseif hover_tip then
+  if hover_tip then
     local spec, def = hover_tip.spec, hover_tip.def
     local font = love.graphics.getFont()
     local lines = { def and def.name_de or spec.id }

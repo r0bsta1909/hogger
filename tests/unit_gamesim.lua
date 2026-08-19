@@ -1112,6 +1112,7 @@ do -- KERNBEFUND Runde 10: Schaden aus der Ferne haelt Hogger im Kampf.
   local p = st.players[1]
   p.class, p.target = "hunter", world.HOGGER_ID
   p.max_hp, p.hp = model.hp_for_class("hunter"), model.hp_for_class("hunter")
+  p.attack_on = true -- seit Runde 12 (#145) will auch der Autoschuss Engage
   local hp0, try0 = h.hp, st.try_nr
   local worst = 0
   for _ = 1, math.ceil(60 / model.TICK_DT) do

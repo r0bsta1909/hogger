@@ -74,7 +74,6 @@ return {
   ab_wrath      = { form = "quadrat", groesse = 40, farbe = { 0.95, 0.60, 0.25 }, kuerzel = "ZO", datei = "ab_wrath.png" },
   ab_touch      = { form = "quadrat", groesse = 40, farbe = { 0.45, 0.85, 0.45 }, kuerzel = "HB", datei = "ab_touch.png" },
   -- Standard-Aktion Nahkampf, jede Klasse (Runde 5, Issue #86)
-  ab_melee      = { form = "quadrat", groesse = 40, farbe = { 0.75, 0.72, 0.65 }, kuerzel = "NK", datei = "ab_melee.png" },
 
   -- =========================================================================
   -- Sounds — vollstaendige Liste aus GDD Kap. 12, eine ID je Position.

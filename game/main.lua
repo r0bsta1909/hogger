@@ -944,14 +944,6 @@ function love.keypressed(key)
         app.cooldown_max[slot] = cd
       end
     end
-  elseif key == "4" then
-    -- Standard-Aktion Nahkampf (Issue #86): schaltet den Autohit an;
-    -- tot loest nichts aus, der Host prueft ohnehin noch einmal
-    local me = app.view and app.view.players[app.view.me]
-    if me and me.alive and app.net then
-      if app.mode == "host" then app.net:engage()
-      elseif app.net.send_engage then app.net:send_engage() end
-    end
   elseif key == "tab" then
     if app.mode == "host" then app.net:set_local_target(world.HOGGER_ID)
     else app.net:set_target(world.HOGGER_ID) end
@@ -1154,7 +1146,8 @@ function love.mousepressed(mx, my, button)
   if best then
     if app.mode == "host" then app.net:set_local_target(best)
     else app.net:set_target(best) end
-    -- Rechtsklick auf Hogger oder Mob schaltet den Nahkampf an (Issue #86)
+    -- Rechtsklick auf Hogger oder Mob schaltet die Autoattack an (Issue #86;
+    -- seit Runde 12 #145 der einzige Weg neben dem Faehigkeitsdruck)
     if button == 2 and best_enemy then
       if app.mode == "host" then app.net:engage()
       elseif app.net.send_engage then app.net:send_engage() end
