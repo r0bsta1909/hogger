@@ -812,7 +812,7 @@ function R:draw(view, ui)
     end
   end
 
-  -- Das Echo von Leeroy Jenkins (GDD 10.1): blasses Krieger-Icon, gruener
+  -- Das Echo von Leeroy Jenkins (GDD 10.1): blasses Paladin-Icon, gruener
   -- Name, goldenes Ausrufezeichen solange es eine Quest zu vergeben hat
   -- (Referenz questgeber-ausrufezeichen.jpg)
   -- nur Geister sehen es (Issue #63), wie die Klassen-Bodenicons (GDD 4.1).
@@ -826,7 +826,7 @@ function R:draw(view, ui)
     local pulse = 0.7 + 0.3 * math.sin(love.timer.getTime() * 3)
     love.graphics.setColor(0.75, 0.85, 1.0, 0.18 * pulse)
     love.graphics.circle("fill", ex, ey, 26 * scale)
-    assets.draw("icon_warrior", ex, ey, scale * 1.9, 0.55)
+    assets.draw("icon_paladin", ex, ey, scale * 1.9, 0.55)
     love.graphics.setColor(0.72, 0.86, 0.55, 0.95) -- freundlicher NPC: gruen
     local font = love.graphics.getFont()
     -- Mit der Verschmelzung heilt der Name: aus dem doppelten wird wieder
@@ -875,7 +875,7 @@ function R:draw(view, ui)
           if icon then
             assets.draw(icon, x, y - (p.jumping and 4 or 0),
               scale * 1.8 * jump, alpha)
-            if p.is_leeroy then -- markiertes Krieger-Icon (GDD 4.1)
+            if p.is_leeroy then -- markiertes Paladin-Icon (GDD 4.1)
               love.graphics.setColor(0.95, 0.78, 0.2, alpha)
               love.graphics.setLineWidth(2)
               love.graphics.circle("line", x, y, 34 * scale)

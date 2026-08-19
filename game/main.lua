@@ -637,8 +637,8 @@ function love.update(dt)
   if view and (not app.boot or not app.boot:active()) then
     if me_now and (me_now.quest or 2) == 1 and not app.quest then
       app.quest = require("game.ui.quest").new(app.name_given and app.name or nil)
-      -- Charge des Echos (GDD 12 Nr. 17) — nicht der Schrei, der gehoert
-      -- dem Raid-Leeroy (GDD 10.2, Issue #73)
+      -- Anflug des Echos (GDD 12 Nr. 17; seit #138 keine Charge mehr, der
+      -- Whoosh bleibt) — nicht der Schrei, der gehoert dem Raid-Leeroy
       audio.play("snd_echo_charge")
     elseif app.rejoin_known and not app.rejoin_greeted then
       app.rejoin_greeted = true
