@@ -161,7 +161,13 @@ function T.run()
         seen[p.name] = true
       end
       local newbie = host.state.players[host.bot_pids[#host.bot_pids]]
-      ok(newbie.name:find("^bot") ~= nil, "Laufzeit-Bots: bot-Praefix")
+      -- Runde 12 (#146): Bots heissen nach Robs Liste, botN nur als Fallback
+      local in_list = false
+      for _, nm in ipairs(require("game.data.names").BOT_NAMES) do
+        if newbie.name == nm then in_list = true break end
+      end
+      ok(in_list or newbie.name:find("^bot") ~= nil,
+        "Laufzeit-Bots: Name aus Robs Liste (oder botN-Fallback)")
       ok(newbie.ghost and not newbie.alive,
         "Laufzeit-Bots: Spawn als Geist am Friedhof (wie ein echter Join)")
       addbot_pid = host.bot_pids[#host.bot_pids]

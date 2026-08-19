@@ -75,6 +75,33 @@ T.eq(names.echo_name(4), names.WHOLE, "beim Abgang: wieder einer")
 T.eq(names.WHOLE, "Leeroy Jenkins", "der ganze Name ist der aus der Legende")
 T.ok(names.LEEROY_LEFT:find(names.WHOLE, 1, true) == 1,
   "die Systemnachricht meldet genau diesen Namen")
+
+-- Bot-Namen (Runde 12, #146): Robs Liste, deterministisch zugelost
+do
+  T.eq(#names.BOT_NAMES, 42, "botnamen: Robs Liste ist komplett (42)")
+  local seen = {}
+  for _, nm in ipairs(names.BOT_NAMES) do
+    T.ok(not seen[nm], "botnamen: kein Duplikat (" .. nm .. ")")
+    seen[nm] = true
+    T.ok(nm:find("[\128-\255]") == nil, "botnamen: ASCII (" .. nm .. ")")
+  end
+  local a = names.bot_names_for_seed(7)
+  local b = names.bot_names_for_seed(7)
+  local c = names.bot_names_for_seed(8)
+  T.eq(#a, 42, "botnamen: Zulosung verliert keinen Namen")
+  local same_ab, same_ac = true, true
+  local in_a = {}
+  for i = 1, #a do
+    if a[i] ~= b[i] then same_ab = false end
+    if a[i] ~= c[i] then same_ac = false end
+    in_a[a[i]] = true
+  end
+  T.ok(same_ab, "botnamen: gleicher Seed -> gleiche Reihenfolge")
+  T.ok(not same_ac, "botnamen: anderer Seed -> andere Reihenfolge")
+  for _, nm in ipairs(names.BOT_NAMES) do
+    T.ok(in_a[nm], "botnamen: Zulosung ist eine Permutation (" .. nm .. ")")
+  end
+end
 do
   local erklaert = false
   for _, s in ipairs(quest.BODY or {}) do
