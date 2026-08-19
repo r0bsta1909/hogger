@@ -1151,29 +1151,12 @@ function love.mousepressed(mx, my, button)
     end
   end
 
-  local best, best_d, best_enemy = nil, 24, false
-  -- pid-sortiert statt pairs(): der Gleichstands-Fall (exakt gleiche
-  -- Distanz) ist damit auf jedem Rechner derselbe (Runde 7)
-  for _, pid in ipairs(app.render.sorted_pids(app.view.players)) do
-    local p = app.view.players[pid]
-    if pid ~= app.view.me then
-      local x, y = to_screen(p.x, p.y)
-      local d = math.sqrt((x - mx) ^ 2 + (y - my) ^ 2)
-      if d < best_d then best, best_d, best_enemy = pid, d, false end
-    end
-  end
-  for nid, npc in pairs(app.view.npcs or {}) do
-    if npc.kind ~= "imp" then
-      local x, y = to_screen(npc.x, npc.y)
-      local d = math.sqrt((x - mx) ^ 2 + (y - my) ^ 2)
-      if d < best_d then best, best_d, best_enemy = nid, d, true end
-    end
-  end
-  do
-    local x, y = to_screen(app.view.hogger.x, app.view.hogger.y)
-    local d = math.sqrt((x - mx) ^ 2 + (y - my) ^ 2)
-    if d < best_d then best, best_d, best_enemy = world.HOGGER_ID, d, true end
-  end
+  -- Karten-Klickziel (Runde 13, #154): eine love-freie Wahrheit in
+  -- render.pick_target — der Rechtsklick ist der Angriffsklick und
+  -- bevorzugt Feinde (Hogger gewinnt in seinem Icon-Radius), der
+  -- Linksklick waehlt wie seit Runde 7 das naechste Zentrum
+  local best, best_enemy = app.render.pick_target(app.view, mx, my,
+    to_screen, scale, button == 2)
   if best then
     if app.mode == "host" then app.net:set_local_target(best)
     else app.net:set_target(best) end
