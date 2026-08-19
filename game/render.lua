@@ -26,6 +26,7 @@ local ABILITY_ICON = {
   bolt = "ab_bolt", imp = "ab_imp", wrath = "ab_wrath", touch = "ab_touch",
   taunt = "ab_taunt", kick = "ab_kick", -- Spott/Tritt (Runde 12, #140/#141)
   loh = "ab_loh", -- Handauflegung (Runde 13, #155)
+  pws = "ab_pws", -- Machtwort: Schild (Runde 13, #156)
 }
 local ABILITIES = require("game.gamesim.step").ABILITIES
 local ABILITIES_ENABLED = require("game.gamesim.step").ability_enabled
@@ -82,6 +83,18 @@ local AURA = {
                  model.p("rogue_stealth_speed") * 100),
                "Hogger ignoriert dich",
                "Bricht beim Angriff" }
+    end },
+  pws = { kuerzel = "MS", name = "Machtwort: Schild", debuff = false,
+    text = function()
+      return { string.format("Absorbiert die naechsten %d Schaden",
+                 model.p("priest_pws_absorb")),
+               string.format("Haelt %d s", model.p("priest_pws_duration")) }
+    end },
+  weak_soul = { kuerzel = "SS", name = "Schwache Seele", debuff = true,
+    text = function()
+      return { "Kann kein neues Machtwort: Schild",
+               string.format("erhalten (%d s je Ziel)",
+                 model.p("priest_pws_weaksoul")) }
     end },
   bleed = { kuerzel = "BL", name = "Blutung", debuff = true,
     text = function()
@@ -669,6 +682,10 @@ local function aura_list(p)
   if p.seal then auras[#auras + 1] = { AURA.seal } end
   if p.frost_armor then auras[#auras + 1] = { AURA.frost } end
   if p.stealth then auras[#auras + 1] = { AURA.stealth } end
+  if p.shielded then auras[#auras + 1] = { AURA.pws } end
+  if p.weak_soul and not p.shielded then
+    auras[#auras + 1] = { AURA.weak_soul } -- erst sichtbar, wenn der Schild weg ist
+  end
   if p.bleeding then auras[#auras + 1] = { AURA.bleed } end
   return auras
 end

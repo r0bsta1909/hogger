@@ -65,6 +65,15 @@ local function act_class(run, p, heal_others)
     end
     E.cast_ability(run, p, "sinister_strike")
   elseif class == "priest" then
+    -- Machtwort: Schild (Runde 13, #156): der koordinierte Priester
+    -- schildet Hoggers aktuelles Ziel, bevor er heilt
+    if heal_others then
+      local tank = run.hogger.target
+      if tank and tank.alive and run.t >= (tank.weak_soul_until or 0)
+         and E.cast_ability(run, p, "power_word_shield", tank) then
+        return
+      end
+    end
     local target = heal_others and lowest_ally(run, 0.7, false, p)
                    or (hp_pct < 0.5 and p or nil)
     if target and E.cast_ability(run, p, "lesser_heal", target) then return end

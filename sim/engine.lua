@@ -70,6 +70,7 @@ local function make_player(run, id, class, is_leeroy)
     d = HUGE, state = "dead", dead_until = 0,
     gcd_ready = 0, cast = nil, last_cast_t = -1000,
     next_auto = 0, raptor_ready = 0, kick_ready = 0, loh_used = false,
+    shield_hp = 0, shield_until = 0, weak_soul_until = 0,
     threat = 0,
     bleed_until = 0, bleed_next = HUGE,
     shout_until = 0, seal_hits = 0, has_frost_armor = false,
@@ -117,6 +118,8 @@ local function spawn_player(run, p, at_range)
   p.imp_alive = false
   p.want_melee = false -- Stab-Phase (#86) endet mit dem Tod
   p.loh_used = false -- Handauflegung: einmal PRO LEBEN (Runde 13, #155)
+  p.shield_hp = 0 -- Machtwort haftet nicht am neuen Leben (Runde 13, #156)
+  p.weak_soul_until = 0
   p.add_idx = nil
   -- Adds fangen fruehe Ankommende ab (1v1), solange welche leben
   for ai = 1, #run.adds do
@@ -192,6 +195,12 @@ function E.hogger_damage_player(run, p, amount, kind)
     amount = amount * model.p("crit_mult_hogger")
     run.c.crit_kills = run.c.crit_kills + (amount >= p.hp and 1 or 0)
   end
+  -- Machtwort: Schild (Runde 13, #156): der Schild frisst zuerst
+  if (p.shield_hp or 0) > 0 and run.t < (p.shield_until or 0) then
+    local a = math.min(amount, p.shield_hp)
+    p.shield_hp = p.shield_hp - a
+    amount = amount - a
+  end
   p.hp = p.hp - amount
   run.c.dmg_to_players = run.c.dmg_to_players + amount
   -- Wut nur je erlittenem AUTOHIT (GDD 8.1), nicht fuer Charge/Slice/DoT
@@ -255,6 +264,18 @@ local INSTANT = {
     E.heal_player(run, p, t, t.max_hp, "heal")
     p.resource = 0
     p.loh_used = true
+    return true
+  end,
+  -- Machtwort: Schild (Runde 13, #156): dieselben Regeln wie in step.lua
+  power_word_shield = function(run, p, target)
+    if model.p("priest_pws_enabled") < 1 then return false end
+    local t = target or p
+    if run.t < (t.weak_soul_until or 0) then return false end
+    if not res_cost(p, model.p("priest_pws_mana")) then return false end
+    p.last_cast_t = run.t
+    t.shield_hp = model.p("priest_pws_absorb")
+    t.shield_until = run.t + model.p("priest_pws_duration")
+    t.weak_soul_until = run.t + model.p("priest_pws_weaksoul")
     return true
   end,
   raptor_strike = function(run, p)

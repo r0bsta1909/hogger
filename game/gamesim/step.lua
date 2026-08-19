@@ -107,6 +107,8 @@ local function revive_as(state, p, class, race)
   p.ghost = false
   p.revive = nil
   p.loh_used = false -- Handauflegung: einmal PRO LEBEN (Runde 13, #155)
+  p.shield_hp = 0 -- Machtwort haftet nicht am neuen Leben (Runde 13, #156)
+  p.weak_soul_until = 0
   break_cast(p) -- frisch erwacht heisst auch: keine Rest-GCD (#125)
   p.attack_on = false -- der naechste Anlauf beginnt friedlich (Issue #86)
   p.last_cast_t = -1000
@@ -182,6 +184,8 @@ local function kill_player(state, p, ev, was_crit, cause)
   p.shout_until = 0
   p.bleed_t = 0
   p.bleed_next = 0
+  p.shield_hp = 0 -- Machtwort verfaellt mit dem Tod (Runde 13, #156)
+  p.weak_soul_until = 0
   if p.imp_id and state.npcs[p.imp_id] then -- Wichtel stirbt mit dem Meister
     state.hogger.threat[p.imp_id] = nil
     state.npcs[p.imp_id] = nil
@@ -213,10 +217,23 @@ local function kill_player(state, p, ev, was_crit, cause)
   end
 end
 
+-- Machtwort: Schild (Runde 13, #156): der Schild frisst zuerst — auch
+-- Krits ("der Schild hat den Sechziger gefressen"); nur der Rest trifft
+-- die HP. Rueckgabe: Restschaden.
+local function absorb_damage(state, p, amount)
+  if (p.shield_hp or 0) > 0 and state.time < (p.shield_until or 0) then
+    local a = math.min(amount, p.shield_hp)
+    p.shield_hp = p.shield_hp - a
+    return amount - a
+  end
+  return amount
+end
+
 local function hogger_damage_player(state, p, amount, kind, ev)
   if not p.alive then return end
   local crit = crit_roll(state, "hogger", kind)
   if crit then amount = amount * model.p("crit_mult_hogger") end
+  amount = absorb_damage(state, p, amount)
   p.hp = p.hp - amount
   if state.stats then
     state.stats.hogger.dmg = state.stats.hogger.dmg + amount
@@ -497,6 +514,23 @@ local ABILITIES = {
       range = "cast_range", target = "enemy", effect = dmg_fx("priest_smite_dmg") },
     { id = "heal", cost = "priest_heal_mana", cast = "priest_heal_cast",
       target = "ally", effect = heal_fx("priest_heal_amount") },
+    -- Machtwort: Schild (Runde 13, #156): absorbiert Schaden, bevor er die
+    -- HP trifft — auch Krits. Schwache Seele: dasselbe Ziel fruehestens
+    -- alle priest_pws_weaksoul Sekunden wieder.
+    { id = "pws", cost = "priest_pws_mana", target = "ally",
+      enabled = "priest_pws_enabled",
+      ready_ally = function(state, _, ally)
+        return state.time >= (ally.weak_soul_until or 0)
+      end,
+      effect = function(state, _, target, ev)
+        local t = target
+        if not t then return end
+        t.shield_hp = model.p("priest_pws_absorb")
+        t.shield_until = state.time + model.p("priest_pws_duration")
+        t.weak_soul_until = state.time + model.p("priest_pws_weaksoul")
+        events.push(ev, state.tick, "shield", t.id, nil,
+          model.p("priest_pws_absorb"), nil)
+      end },
   },
   mage = {
     { id = "fireball", cost = "mage_fireball_mana", cast = "mage_fireball_cast",
@@ -601,6 +635,10 @@ local function try_ability(state, p, slot, ev, ally_id)
       ally = ally_target(state, p)
     end
     if not ally_in_range(p, ally) then return false end
+    -- Ziel-Gate (Runde 13, #156): z. B. Schwache Seele beim Machtwort
+    if spec.ready_ally and not spec.ready_ally(state, p, ally) then
+      return false
+    end
   end
   if p.stealth and spec.id ~= "stealth" then
     set_stealth(state, p, false) -- bricht beim Angriff (GDD 8.2)
@@ -820,6 +858,7 @@ local function npc_damage_player(state, npc, p, ev)
   local kind = MOB_TYPES[npc.kind] and "mob" or "add"
   local crit = crit_roll(state, "hogger", kind)
   if crit then dmg = dmg * model.p("crit_mult_hogger") end
+  dmg = absorb_damage(state, p, dmg) -- Machtwort: Schild (Runde 13, #156)
   p.hp = p.hp - dmg
   if p.class == "warrior" then -- auch ein Wolfsbiss macht wuetend (8.1)
     p.resource = math.min(model.p("rage_max"),

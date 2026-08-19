@@ -67,6 +67,7 @@ return {
   ab_holylight  = { form = "quadrat", groesse = 40, farbe = { 1.00, 0.95, 0.55 }, kuerzel = "HL", datei = "ab_holylight.png" },
   ab_seal       = { form = "quadrat", groesse = 40, farbe = { 0.95, 0.75, 0.35 }, kuerzel = "SG", datei = "ab_seal.png" },
   ab_loh        = { form = "quadrat", groesse = 40, farbe = { 1.00, 0.92, 0.60 }, kuerzel = "HA", datei = "ab_loh.png" },
+  ab_pws        = { form = "quadrat", groesse = 40, farbe = { 0.85, 0.85, 0.95 }, kuerzel = "MS", datei = "ab_pws.png" },
   ab_sinister   = { form = "quadrat", groesse = 40, farbe = { 0.85, 0.80, 0.35 }, kuerzel = "FS", datei = "ab_sinister.png" },
   ab_evis       = { form = "quadrat", groesse = 40, farbe = { 0.80, 0.30, 0.30 }, kuerzel = "AW", datei = "ab_evis.png" },
   ab_stealth    = { form = "quadrat", groesse = 40, farbe = { 0.45, 0.45, 0.60 }, kuerzel = "VS", datei = "ab_stealth.png" },

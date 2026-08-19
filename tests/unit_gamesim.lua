@@ -1497,6 +1497,69 @@ do
   model.params.paladin_loh_enabled.wert = 1
 end
 
+-- Runde 13 (#156): Machtwort: Schild — Absorb vor HP, Schwache Seele -------
+do
+  local st = world.new(43)
+  world.add_player(st, "pri", { quest_done = true })
+  world.add_player(st, "tank", { quest_done = true })
+  world.begin_try(st, {})
+  local pri, tank = st.players[1], st.players[2]
+  pri.alive, pri.ghost, pri.class, pri.race = true, false, "priest", "mensch"
+  pri.max_hp, pri.hp = model.hp_for_class("priest"), model.hp_for_class("priest")
+  pri.resource = 100
+  tank.alive, tank.ghost, tank.class = true, false, "warrior"
+  tank.max_hp, tank.hp = model.hp_for_class("warrior"), model.hp_for_class("warrior")
+  pri.x, pri.y = st.hogger.x + 500, st.hogger.y -- ausserhalb des Aggro-Radius
+  tank.x, tank.y = pri.x + 10, pri.y
+  pri.target = tank.id
+
+  step.step(st, { [1] = { mask = input.AB3, facing = 0 } })
+  T.near(tank.shield_hp, model.p("priest_pws_absorb"), "pws: Schild liegt an")
+  T.ok(tank.weak_soul_until > st.time, "pws: Schwache Seele gesetzt")
+  T.near(pri.resource, 100 - model.p("priest_pws_mana"), "pws: kostet Mana")
+
+  -- der Schild frisst zuerst: ein Blutungs-Tick (kritfrei) trifft nur ihn
+  local hp0 = tank.hp
+  tank.bleed_t = 10
+  tank.bleed_next = 0.001
+  step.step(st, {})
+  T.eq(tank.hp, hp0, "pws: der Schild frisst den Blutungs-Tick")
+  T.near(tank.shield_hp,
+    model.p("priest_pws_absorb") - model.p("hogger_slice_bleed_dmg"),
+    "pws: der Schild-Rest zaehlt runter")
+  tank.bleed_t = 0
+
+  -- zweites Schild auf dieselbe Seele prallt ab, ohne Mana zu kosten
+  pri.gcd = 0
+  step.step(st, { [1] = { mask = 0, facing = 0 } })
+  local mana_before = pri.resource
+  step.step(st, { [1] = { mask = input.AB3, facing = 0 } })
+  T.near(pri.resource, mana_before, "pws: Schwache Seele blockt kostenlos")
+
+  -- nach Ablauf der Haltbarkeit schuetzt nichts mehr
+  for _ = 1, math.ceil(model.p("priest_pws_duration") / model.TICK_DT) + 5 do
+    step.step(st, {})
+  end
+  local hp1 = tank.hp
+  tank.bleed_t = 10
+  tank.bleed_next = 0.001
+  step.step(st, {})
+  T.ok(tank.hp < hp1, "pws: nach Ablauf schuetzt nichts mehr")
+  tank.bleed_t = 0
+
+  -- F10-Schalter: aus -> verworfen (kein neuer Schild, kein Mana weg)
+  model.params.priest_pws_enabled.wert = 0
+  pri.gcd = 0
+  tank.weak_soul_until = 0
+  tank.shield_hp = 0
+  local mana2 = pri.resource
+  step.step(st, { [1] = { mask = 0, facing = 0 } })
+  step.step(st, { [1] = { mask = input.AB3, facing = 0 } })
+  T.eq(tank.shield_hp, 0, "pws: per F10 abgeschaltet -> verworfen")
+  T.ok(pri.resource >= mana2, "pws: der abgeschaltete Druck kostet nichts")
+  model.params.priest_pws_enabled.wert = 1
+end
+
 -- Runde 12 (#141): Krieger-Spott zwingt Hoggers Ziel -----------------------
 do
   local st, h = reset_world({ n = 2 })
