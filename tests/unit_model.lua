@@ -125,7 +125,7 @@ end
 -- sein Autoschuss IST Faehigkeit 1 und laeuft automatisch, GDD 8.1)
 local expected_kits = {
   warrior = { "Heroischer Stoss", "Schlachtruf", "Spott" },
-  paladin = { "Heiliges Licht", "Siegel der Rechtschaffenheit" },
+  paladin = { "Heiliges Licht", "Siegel der Rechtschaffenheit", "Handauflegung" },
   hunter  = { "Raptorstoss" },
   rogue   = { "Finsterer Stoss", "Ausweiden", "Verstohlenheit", "Tritt" },
   priest  = { "Goettliche Pein", "Geringes Heilen" },

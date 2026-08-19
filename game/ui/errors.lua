@@ -17,6 +17,7 @@ E.WRONG_WAY = "Ziel ist nicht vor dir."
 E.NOT_READY = "Das ist noch nicht bereit."
 E.NO_CP = "Keine Combopunkte."
 E.NOT_EATING = "Hogger frisst gerade nicht."
+E.ONCE_PER_LIFE = "Das geht nur einmal pro Leben."
 
 -- me: eigener Spieler aus der Sicht; spec: Faehigkeits-Spezifikation;
 -- ctx: { x, y, facing, cooldown, hogger = {x,y,hp,state}, npcs = {},
@@ -26,6 +27,9 @@ E.NOT_EATING = "Hogger frisst gerade nicht."
 function E.check(me, spec, ctx)
   if not (me and spec and ctx) then return nil end
   if (ctx.cooldown or 0) > 0 then return E.NOT_READY end
+  -- Handauflegung (Runde 13, #155): einmal pro Leben — me.loh_used kommt
+  -- als Snapshot-Flag (flags3)
+  if spec.id == "loh" and me.loh_used then return E.ONCE_PER_LIFE end
   local cls = model.classes[me.class]
   local cost = spec.cost and model.p(spec.cost) or 0
   if cost > 0 and (me.resource or 0) + 0.5 < cost then

@@ -136,6 +136,9 @@ M.params = {
   paladin_seal_hits      = p(3, 1, 10, 1, "8.2"),
   paladin_seal_bonus_dmg = p(3, 1, 10, 1, "8.2"),
   paladin_seal_mana      = p(10, 0, 50, 5, "8.2"),
+  -- Handauflegung (Runde 13, #155): heilt VOLL, kostet ALLES Mana, einmal
+  -- pro Leben — beides Regel statt Zahl, deshalb nur der Schalter
+  paladin_loh_enabled    = p(1, 0, 1, 1, "8.2"),
   hunter_raptor_dmg      = p(7, 1, 20, 1, "8.2"),
   hunter_raptor_cd       = p(8, 2, 30, 1, "8.2"),
   rogue_sinister_dmg     = p(5, 1, 20, 1, "8.2"),
@@ -286,6 +289,7 @@ M.classes = {
         cast = "paladin_holylight_cast", cost = "paladin_holylight_mana" },
       { id = "seal_of_righteousness", name_de = "Siegel der Rechtschaffenheit", bonus_hits = "paladin_seal_hits",
         bonus_dmg = "paladin_seal_bonus_dmg", cost = "paladin_seal_mana" },
+      { id = "lay_on_hands", name_de = "Handauflegung", enabled = "paladin_loh_enabled" },
     },
   },
   hunter = {

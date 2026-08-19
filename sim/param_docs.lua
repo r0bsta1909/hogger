@@ -166,6 +166,8 @@ return {
     "hoeher = Paladine schlagen haerter zu" },
   paladin_seal_mana = { "Manakosten des Siegels der Rechtschaffenheit.",
     "hoeher = seltener nachbuffen" },
+  paladin_loh_enabled = { "Schalter fuer die Handauflegung des Paladins.",
+    "hoeher = Faehigkeit ist an" },
   hunter_raptor_dmg = { "Schaden des Raptorstosses.",
     "hoeher = mehr Burst aus der Nahdistanz" },
   hunter_raptor_cd = { "Abklingzeit des Raptorstosses.",
