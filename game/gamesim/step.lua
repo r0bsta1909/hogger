@@ -621,10 +621,13 @@ local function player_tick(state, p, inp, ev)
   local dx, dy = input.move_vec(mask)
   local moving = dx ~= 0 or dy ~= 0
 
-  -- Springen: reines Feel-Feature (GDD 4.1), Host zaehlt
+  -- Springen: Feel-Feature (GDD 4.1), Host zaehlt. Seit Runde 12 (#142)
+  -- bricht der Absprung einen laufenden Cast wie Bewegung — die Autoattack
+  -- laeuft weiter (break_cast loescht auch die GCD, #125)
   if input.pressed(mask, p.prev_mask, input.JUMP) and p.jump_t <= 0 then
     p.jump_t = 0.4
     p.jumps = p.jumps + 1
+    if p.cast then break_cast(p) end
   end
   if p.jump_t > 0 then p.jump_t = p.jump_t - DT end
 
