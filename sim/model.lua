@@ -179,6 +179,12 @@ M.params = {
   warlock_bolt_mana      = p(25, 5, 100, 5, "8.2"),
   warlock_imp_cast       = p(3.0, 0.5, 6.0, 0.5, "8.2"),
   warlock_imp_mana       = p(30, 5, 100, 5, "8.2"),
+  -- Blutpakt (Runde 13, #159): der lebende Wichtel staerkt alle Spieler
+  -- in seinem Umkreis um einen Anteil Maximal-HP (Robs Variante statt
+  -- Gesundheitsstein). Kein Gratis-Heil: nur der Deckel steigt.
+  warlock_pact_enabled   = p(1, 0, 1, 1, "8.2"),
+  warlock_pact_hp_pct    = p(0.10, 0, 0.5, 0.01, "8.2"),
+  warlock_pact_radius    = p(200, 50, 600, 10, "8.2"),
   imp_hp                 = p(15, 5, 50, 5, "8.2"),
   imp_dmg                = p(2, 1, 10, 1, "8.2"),
   imp_interval           = p(2.0, 0.5, 4.0, 0.5, "8.2"),

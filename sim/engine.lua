@@ -71,6 +71,7 @@ local function make_player(run, id, class, is_leeroy)
     gcd_ready = 0, cast = nil, last_cast_t = -1000,
     next_auto = 0, raptor_ready = 0, kick_ready = 0, loh_used = false,
     shield_hp = 0, shield_until = 0, weak_soul_until = 0, feign_ready = 0,
+    pact = false,
     threat = 0,
     bleed_until = 0, bleed_next = HUGE,
     shout_until = 0, seal_hits = 0, has_frost_armor = false,
@@ -215,11 +216,22 @@ function E.hogger_damage_player(run, p, amount, kind)
   if p.hp <= 0 then E.kill_player(run, p) end
 end
 
+-- Effektive Maximal-HP (Runde 13, #159): der Blutpakt hebt den Deckel,
+-- solange der Spieler in der Wichtel-Aura steht — dieselbe Formel wie
+-- step.effective_max_hp
+local function eff_max(p)
+  if p.pact then
+    return p.max_hp * (1 + model.p("warlock_pact_hp_pct"))
+  end
+  return p.max_hp
+end
+E.eff_max = eff_max
+
 function E.heal_player(run, src, dst, amount, kind)
   if not dst.alive then return end
   local crit = crit_roll(run, "player", kind or "heal")
   if crit then amount = amount * model.p("crit_mult_player") end
-  local effective = math.min(amount, dst.max_hp - dst.hp)
+  local effective = math.min(amount, eff_max(dst) - dst.hp)
   dst.hp = dst.hp + effective
   src.heal_done = src.heal_done + effective
   local tf = src.is_leeroy and model.p("leeroy_threat_factor") or 1
@@ -261,7 +273,7 @@ local INSTANT = {
   lay_on_hands = function(run, p, target)
     if model.p("paladin_loh_enabled") < 1 or p.loh_used then return false end
     local t = target or p
-    E.heal_player(run, p, t, t.max_hp, "heal")
+    E.heal_player(run, p, t, eff_max(t), "heal") -- voll = inkl. Blutpakt
     p.resource = 0
     p.loh_used = true
     return true
@@ -722,6 +734,33 @@ function E.run_try(cfg)
   run.engaged, run.no_contact_t = false, 0
   while run.t < limit do
     run.t = run.t + dt
+    -- Blutpakt (Runde 13, #159) im 1D-Modell: der Wichtel steht beim
+    -- Besitzer, die Aura gilt fuer |d - d_besitzer| <= Radius. Beim
+    -- Verlassen (oder Abschalten) klemmt der Deckel die Bonus-HP.
+    do
+      local imp_ds = {}
+      if model.p("warlock_pact_enabled") >= 1 then
+        for _, o in ipairs(run.players) do
+          if o.alive and o.imp_alive then imp_ds[#imp_ds + 1] = o.d end
+        end
+      end
+      local pr = model.p("warlock_pact_radius")
+      for _, q in ipairs(run.players) do
+        local inside = false
+        if q.alive then
+          for _, dd in ipairs(imp_ds) do
+            if math.abs(q.d - dd) <= pr then
+              inside = true
+              break
+            end
+          end
+        end
+        if q.pact and not inside and q.alive then
+          q.hp = math.min(q.hp, q.max_hp)
+        end
+        q.pact = inside
+      end
+    end
     if run.agent.tick then run.agent.tick(run) end
     for _, p in ipairs(run.players) do
       player_tick(run, p, dt)

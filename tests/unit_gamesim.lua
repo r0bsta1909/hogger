@@ -1672,6 +1672,62 @@ do
   model.params.druid_roots_enabled.wert = 1
 end
 
+-- Runde 13 (#159): Blutpakt — der Wichtel hebt den HP-Deckel ---------------
+do
+  local st = world.new(59)
+  world.add_player(st, "hexer", { quest_done = true })
+  world.add_player(st, "krieger", { quest_done = true })
+  world.add_player(st, "heiler", { quest_done = true })
+  world.begin_try(st, {})
+  local g = map.graveyard()
+  local hx, kr, pr = st.players[1], st.players[2], st.players[3]
+  hx.alive, hx.ghost, hx.class, hx.race = true, false, "warlock", "mensch"
+  hx.max_hp, hx.hp = model.hp_for_class("warlock"), model.hp_for_class("warlock")
+  kr.alive, kr.ghost, kr.class = true, false, "warrior"
+  kr.max_hp, kr.hp = model.hp_for_class("warrior"), model.hp_for_class("warrior")
+  pr.alive, pr.ghost, pr.class = true, false, "priest"
+  pr.max_hp, pr.hp = model.hp_for_class("priest"), model.hp_for_class("priest")
+  pr.resource = 100
+  hx.x, hx.y = g.x + 150, g.y
+  kr.x, kr.y = hx.x + 20, hx.y
+  pr.x, pr.y = hx.x + 40, hx.y
+  local imp = world.add_npc(st, "imp", hx.x + 10, hx.y, model.p("imp_hp"), 1)
+  hx.imp_id = imp.id
+
+  step.step(st, {})
+  T.ok(kr.pact and hx.pact, "pact: alle im Umkreis stehen im Blutpakt")
+  T.near(step.effective_max_hp(kr),
+    kr.max_hp * (1 + model.p("warlock_pact_hp_pct")),
+    "pact: der Deckel steigt um den Prozentsatz")
+  T.eq(kr.hp, kr.max_hp, "pact: KEIN Gratis-Heil beim Betreten")
+
+  -- Heilung darf jetzt ueber das Basis-Maximum
+  kr.hp = kr.max_hp - 5
+  T.ok(step.heal_request(st, pr.id, kr.id, {}), "pact: Heilung startet")
+  for _ = 1, math.ceil(model.p("priest_heal_cast") / model.TICK_DT) + 5 do
+    step.step(st, {})
+  end
+  T.ok(kr.hp > kr.max_hp, "pact: Heilung fuellt ueber das Basis-Maximum ("
+    .. string.format("%.0f von %.0f", kr.hp, step.effective_max_hp(kr)) .. ")")
+
+  -- Verlassen der Aura: der Deckel klemmt die Bonus-HP zurueck
+  kr.x = hx.x + model.p("warlock_pact_radius") + 200
+  step.step(st, {})
+  T.ok(not kr.pact, "pact: draussen ist draussen")
+  T.eq(kr.hp, kr.max_hp, "pact: beim Verlassen klemmt der Deckel")
+
+  -- F10-Schalter: aus -> Flag faellt ueberall, Bonus-HP klemmen
+  kr.x, kr.y = hx.x + 20, hx.y
+  step.step(st, {})
+  T.ok(kr.pact, "pact: wieder in der Aura")
+  kr.hp = kr.max_hp + 5
+  model.params.warlock_pact_enabled.wert = 0
+  step.step(st, {})
+  T.ok(not kr.pact, "pact: per F10 abgeschaltet")
+  T.eq(kr.hp, kr.max_hp, "pact: das Abschalten klemmt die Bonus-HP")
+  model.params.warlock_pact_enabled.wert = 1
+end
+
 -- Runde 12 (#141): Krieger-Spott zwingt Hoggers Ziel -----------------------
 do
   local st, h = reset_world({ n = 2 })
