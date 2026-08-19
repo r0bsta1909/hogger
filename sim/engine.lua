@@ -70,7 +70,7 @@ local function make_player(run, id, class, is_leeroy)
     d = HUGE, state = "dead", dead_until = 0,
     gcd_ready = 0, cast = nil, last_cast_t = -1000,
     next_auto = 0, raptor_ready = 0, kick_ready = 0, loh_used = false,
-    shield_hp = 0, shield_until = 0, weak_soul_until = 0,
+    shield_hp = 0, shield_until = 0, weak_soul_until = 0, feign_ready = 0,
     threat = 0,
     bleed_until = 0, bleed_next = HUGE,
     shout_until = 0, seal_hits = 0, has_frost_armor = false,
@@ -282,6 +282,18 @@ local INSTANT = {
     if run.t < p.raptor_ready then return false end
     p.raptor_ready = run.t + model.p("hunter_raptor_cd")
     E.player_damage_hogger(run, p, model.p("hunter_raptor_dmg"), "ability")
+    return true
+  end,
+  -- Totstellen (Runde 13, #157): loescht die eigene Bedrohung; die
+  -- Liegezeit kostet den naechsten Autoschuss
+  feign_death = function(run, p)
+    if model.p("hunter_feign_enabled") < 1 then return false end
+    if run.t < (p.feign_ready or 0) then return false end
+    p.feign_ready = run.t + model.p("hunter_feign_cd")
+    p.threat = 0
+    if run.hogger.target == p then run.hogger.target = nil end
+    p.next_auto = math.max(p.next_auto,
+      run.t + model.p("hunter_feign_duration"))
     return true
   end,
   sinister_strike = function(run, p)

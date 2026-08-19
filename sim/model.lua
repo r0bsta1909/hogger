@@ -141,6 +141,11 @@ M.params = {
   paladin_loh_enabled    = p(1, 0, 1, 1, "8.2"),
   hunter_raptor_dmg      = p(7, 1, 20, 1, "8.2"),
   hunter_raptor_cd       = p(8, 2, 30, 1, "8.2"),
+  -- Totstellen (Runde 13, #157): das Gegenstueck zum Spott — die einzige
+  -- Klasse, die Aggro LOSWIRD. Rettet nur den Jaeger, nicht den Raid.
+  hunter_feign_enabled   = p(1, 0, 1, 1, "8.2"),
+  hunter_feign_cd        = p(30, 5, 120, 5, "8.2"),
+  hunter_feign_duration  = p(2, 0.5, 6, 0.5, "8.2"),
   rogue_sinister_dmg     = p(5, 1, 20, 1, "8.2"),
   rogue_sinister_energy  = p(40, 10, 100, 5, "8.2"),
   rogue_evis_dmg_per_cp  = p(4, 1, 10, 1, "8.2"),
@@ -305,6 +310,8 @@ M.classes = {
     armor = "leather", resource = "mana", attack = "shot",
     abilities = {
       { id = "raptor_strike", name_de = "Raptorstoss", dmg = "hunter_raptor_dmg", cd = "hunter_raptor_cd" },
+      { id = "feign_death", name_de = "Totstellen", cd = "hunter_feign_cd",
+        duration = "hunter_feign_duration", enabled = "hunter_feign_enabled" },
     },
   },
   rogue = {

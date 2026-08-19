@@ -126,7 +126,7 @@ end
 local expected_kits = {
   warrior = { "Heroischer Stoss", "Schlachtruf", "Spott" },
   paladin = { "Heiliges Licht", "Siegel der Rechtschaffenheit", "Handauflegung" },
-  hunter  = { "Raptorstoss" },
+  hunter  = { "Raptorstoss", "Totstellen" },
   rogue   = { "Finsterer Stoss", "Ausweiden", "Verstohlenheit", "Tritt" },
   priest  = { "Goettliche Pein", "Geringes Heilen", "Machtwort: Schild" },
   mage    = { "Feuerball", "Frostruestung" },
