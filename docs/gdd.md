@@ -287,9 +287,9 @@ Was von Leeroy übrig ist, während sein Körper da vorne schon wieder losrennt.
 - **Easter Egg:** Wer es als Geist erneut anklickt, bekommt die ganze Geschichte — mehrere durchblätterbare Seiten (Raid, Sturmangriff, Fluch, Erwachen, Teilung, warum es fragt). Null Spielwirkung, keine Belohnung, kein Hinweis darauf. Nur wer es findet.
 - **Questlog:** Taste `L` blendet die Quest weg und zurück; nach der Annahme zeigt sie dieselbe Seite als Log (ohne Namensfeld, ohne Knöpfe).
 - **Erzähler:** die Quest, kurze Zwischen-Zeilen am Friedhof, "Ah. Wieder da." beim Rejoin.
-- **Announcer** (siehe 10.4): alle Kommentare gehören dem Echo — Fress-Alarm, HP-Meilensteine, Todeskommentare, Wipe-Ansage, der Kragen-Platzer. **Einzige Ausnahme: DER Schrei** beim Losrennen gehört dem Raid-Leeroy.
+- **Announcer** (siehe 10.4): alle Kommentare gehören dem Echo — Fress-Alarm, HP-Meilensteine, Todeskommentare, Wipe-Ansage, der Kragen-Platzer. **Einzige Ausnahme: DER Schrei** beim Losrennen gehört dem Raid-Leeroy — als Sprechblase an seiner Figur, nie als Banner (Runde 12, #144).
 - Der Sieg-Monolog (Kap. 11) gehört ebenfalls dem Echo: es sieht seinen eigenen Körper endlich zur Ruhe kommen.
-- Anzeige: Zeilen des Echos werden mit "Echo:" ausgezeichnet, der Schrei mit "Leeroy:".
+- Anzeige: Zeilen des Echos werden mit "Echo:" im Ansage-Banner ausgezeichnet. **Der Schrei läuft NICHT über das Banner** (Runde 12, #144): Er erscheint als Sprechblase an der Figur des Raid-Leeroy, die gerade losrennt — es schreit der Paladin, nicht das Echo. Kartenweit bleibt nur der Sound.
 
 ### 10.2 Der Raid-Leeroy (Kampf)
 
@@ -298,7 +298,7 @@ Was von Leeroy übrig ist, während sein Körper da vorne schon wieder losrennt.
 1. **Erzähler (jetzt beim Echo, 10.1):** Quest und Zwischen-Zeilen.
 2. **Try-Starter:** Jeder Try beginnt damit, dass Leeroy vom Friedhof seinen Pfad Richtung Hügel aufnimmt, dabei seinen ikonischen Schrei ausstößt — **"LEEEEEROY JEEENKINNNS"** (kartenweit hörbar, das akustische Startsignal) — und als Erster in Hogger rennt (KEINE Charge: Leeroy ist Paladin, Runde 12 #138).
 3. **Mitkämpfer (KI-Verhaltensmodell, host-seitig):**
-   - **Try-Start-Bedingung:** Der allererste Anmarsch des Abends beginnt erst, wenn **der erste Spieler auf dem Realm die Quest des Echos angenommen hat** (Notbremse: `leeroy_first_march_wait`, 120 s). Losrennen, während das Echo noch redet, zerreißt die Szene (Playtest 2026-08-16). Für alle weiteren Trys gilt wieder die normale kurze Wartezeit am Friedhof.
+   - **Try-Start-Bedingung:** Der allererste Anmarsch des Abends beginnt erst, wenn **der erste Spieler auf dem Realm die Quest des Echos angenommen hat** (Notbremse: `leeroy_first_march_wait`, 120 s). Losrennen, während das Echo noch redet, zerreißt die Szene (Playtest 2026-08-16). **Bis dahin steht Leeroy als sichtbarer Geist auf dem Friedhof neben dem Echo** (Runde 12, #139) — kein stilles Vorab-Erwachen irgendwo auf der Karte, kein erster Tod ohne Publikum, und damit auch kein Kein-Kontakt-Abbruch eines Trys, den nie ein Spieler gesehen hat. Erst die Freigabe schickt ihn als Geist zum Wiederbelebungsfeld. Für alle weiteren Trys gilt wieder die normale kurze Wartezeit.
    - Zustände: `WARTEN_FRIEDHOF` (zwischen Trys, bis Try-Start-Bedingung) → `ANMARSCH` (Pfad zum Hügel, Schrei beim Losrennen) → `KAMPF` (Paladin-Kit seit Runde 12, #138: hält Nahkampf, hält das Siegel der Rechtschaffenheit oben, Heiliges Licht auf sich selbst unter 50 % HP — einen Gruppenbeitrag wie den früheren Schlachtruf hat er nicht mehr; sein Beitrag sind DPS und die Dauer-Leiche) → `TOT/GEIST` (Geisterlauf zum Wiederbelebungsfeld) → `WIEDERBELEBUNG` (immer als Mensch-Paladin, fluchbedingt) → `ANMARSCH` … im Loop bis Try-Ende.
    - Er weicht **nichts** aus: keine Charge-Reaktion, kein Fress-Fokus über das Normale hinaus — Leeroy ist tapfer, nicht klug. Sein Sterben als meist Erster ist der Running Gag und emergent aus dem Verhaltensmodell, nicht geskriptet.
    - Er zählt nie in die N-Skalierung, seine Bedrohung ist halbiert (Comedy, nicht Tank), seine DPS steckt im Sim-Modell (17.2).

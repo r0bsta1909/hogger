@@ -439,6 +439,10 @@ do
   T.eq(p.quest, 1, "Quest: aufgedrueckt, aber noch nicht angenommen")
   T.eq(st.leeroy_started, false, "Leeroy: wartet auf die Annahme")
   T.ok(lee.ai == nil or lee.ai.phase ~= "march", "Leeroy: kein Anmarsch vorher")
+  -- Runde 12 (#139): vor der Annahme steht er als sichtbarer Geist am
+  -- Friedhof — kein Vorab-Erwachen, kein erster Tod ohne Publikum
+  T.ok(lee.ghost and not lee.alive, "Leeroy: vor der Annahme noch Geist")
+  T.ok(map.in_graveyard(lee.x, lee.y), "Leeroy: steht dabei auf dem Friedhof")
 
   -- Annahme: Bewegung frei, Leeroy laeuft
   T.eq(step.accept_quest(st, pid, {}), true, "Quest: Annahme greift")
@@ -449,7 +453,10 @@ do
     step.step(st, { [pid] = { mask = input.RIGHT, facing = 0 } })
   end
   T.ok(world.dist(p.x, p.y, x1, y1) > 50, "Quest: nach der Annahme laeuft er")
-  for _ = 1, 60 * 12 do step.step(st, { [pid] = { mask = 0, facing = 0 } }) end
+  -- Geisterlauf (~8 s) + Wiederbelebung (2 s) + Sammeln (2 s) + Anmarsch:
+  -- nach 24 Sim-Sekunden muss er lebendig unterwegs zum Huegel sein
+  for _ = 1, 60 * 24 do step.step(st, { [pid] = { mask = 0, facing = 0 } }) end
+  T.ok(lee.alive or lee.deaths > 0, "Leeroy: nach der Annahme wiederbelebt")
   T.ok(world.dist(lee.x, lee.y, map.hill.x, map.hill.y)
        < model.p("field_to_hill_dist") * 0.95, "Leeroy: marschiert danach los")
 
