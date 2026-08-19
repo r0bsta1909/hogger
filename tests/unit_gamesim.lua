@@ -1560,6 +1560,61 @@ do
   model.params.priest_pws_enabled.wert = 1
 end
 
+-- Runde 13 (#157): Totstellen loescht Bedrohung, liegen = wehrlos ----------
+do
+  local st = world.new(47)
+  world.add_player(st, "jg", { quest_done = true })
+  world.begin_try(st, {})
+  local jg = st.players[1]
+  jg.alive, jg.ghost, jg.class, jg.race = true, false, "hunter", "zwerg"
+  jg.max_hp, jg.hp = model.hp_for_class("hunter"), model.hp_for_class("hunter")
+  jg.resource = 100
+  jg.x, jg.y = st.hogger.x + 200, st.hogger.y
+  jg.facing = input.facing_towards(jg.x, jg.y, st.hogger.x, st.hogger.y)
+  st.hogger.threat[1] = 50
+  st.hogger.state = "combat"
+  st.hogger.engaged = true
+
+  step.step(st, { [1] = { mask = input.AB2, facing = jg.facing } })
+  T.eq(st.hogger.threat[1], nil, "feign: Bedrohung geloescht")
+  T.ok((jg.feign_until or 0) > st.time, "feign: er liegt")
+  T.near(jg.feign_cd, model.p("hunter_feign_cd"), "feign: Cooldown gesetzt")
+  T.ok(not jg.attack_on, "feign: Autoattack aus")
+
+  -- liegend schiesst er nicht, auch wenn der Angriff wieder anginge
+  jg.attack_on = true
+  jg.next_auto = 0
+  local hp0 = st.hogger.hp
+  step.step(st, {})
+  T.eq(st.hogger.hp, hp0, "feign: liegend schiesst er nicht")
+
+  -- Aufstehen: Bewegung beendet das Liegen sofort
+  step.step(st, { [1] = { mask = input.RIGHT, facing = jg.facing } })
+  T.ok((jg.feign_until or 0) <= st.time, "feign: Bewegung beendet das Liegen")
+
+  -- auch Mobs lassen ab
+  local wolf = world.add_npc(st, "wolf", jg.x + 30, jg.y, 10)
+  wolf.state, wolf.target_pid = "combat", 1
+  wolf.spawn_x, wolf.spawn_y = wolf.x, wolf.y
+  jg.feign_cd = 0
+  jg.gcd = 0
+  step.step(st, { [1] = { mask = 0, facing = jg.facing } })
+  step.step(st, { [1] = { mask = input.AB2, facing = jg.facing } })
+  T.ok(wolf.target_pid == nil and wolf.state ~= "combat",
+    "feign: der Wolf laesst ab")
+
+  -- F10-Schalter: aus -> verworfen
+  model.params.hunter_feign_enabled.wert = 0
+  jg.feign_cd = 0
+  jg.feign_until = 0
+  jg.gcd = 0
+  st.hogger.threat[1] = 50
+  step.step(st, { [1] = { mask = 0, facing = jg.facing } })
+  step.step(st, { [1] = { mask = input.AB2, facing = jg.facing } })
+  T.eq(st.hogger.threat[1], 50, "feign: per F10 abgeschaltet -> verworfen")
+  model.params.hunter_feign_enabled.wert = 1
+end
+
 -- Runde 12 (#141): Krieger-Spott zwingt Hoggers Ziel -----------------------
 do
   local st, h = reset_world({ n = 2 })

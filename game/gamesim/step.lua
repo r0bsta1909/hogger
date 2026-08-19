@@ -109,6 +109,7 @@ local function revive_as(state, p, class, race)
   p.loh_used = false -- Handauflegung: einmal PRO LEBEN (Runde 13, #155)
   p.shield_hp = 0 -- Machtwort haftet nicht am neuen Leben (Runde 13, #156)
   p.weak_soul_until = 0
+  p.feign_until = 0 -- niemand erwacht liegend (Runde 13, #157)
   break_cast(p) -- frisch erwacht heisst auch: keine Rest-GCD (#125)
   p.attack_on = false -- der naechste Anlauf beginnt friedlich (Issue #86)
   p.last_cast_t = -1000
@@ -186,6 +187,7 @@ local function kill_player(state, p, ev, was_crit, cause)
   p.bleed_next = 0
   p.shield_hp = 0 -- Machtwort verfaellt mit dem Tod (Runde 13, #156)
   p.weak_soul_until = 0
+  p.feign_until = 0 -- echt tot schlaegt gespielt tot (Runde 13, #157)
   if p.imp_id and state.npcs[p.imp_id] then -- Wichtel stirbt mit dem Meister
     state.hogger.threat[p.imp_id] = nil
     state.npcs[p.imp_id] = nil
@@ -472,6 +474,26 @@ local ABILITIES = {
     { id = "raptor", cd_field = "raptor_cd", cd = "hunter_raptor_cd",
       range = "melee_range", target = "enemy",
       effect = dmg_fx("hunter_raptor_dmg") },
+    -- Totstellen (Runde 13, #157): loescht die eigene Bedrohung ueberall —
+    -- das Gegenstueck zum Spott. Der Jaeger liegt hunter_feign_duration
+    -- lang wehrlos (keine Angriffe, keine Faehigkeiten); Bewegung beendet
+    -- das Liegen sofort. Rettet nur ihn: Hogger wechselt zum Naechsten.
+    { id = "feign", cd_field = "feign_cd", cd = "hunter_feign_cd",
+      target = "self", enabled = "hunter_feign_enabled",
+      effect = function(state, p, _, ev)
+        state.hogger.threat[p.id] = nil
+        for id = world.NPC_ID_BASE, 250 do
+          local npc = state.npcs[id]
+          if npc and npc.target_pid == p.id then
+            npc.target_pid = nil
+            npc.state = MOB_TYPES[npc.kind] and "leash" or "idle"
+          end
+        end
+        p.feign_until = state.time + model.p("hunter_feign_duration")
+        p.attack_on = false
+        break_cast(p)
+        events.push(ev, state.tick, "feign", p.id, nil, nil, nil)
+      end },
   },
   rogue = {
     { id = "sinister", cost = "rogue_sinister_energy", range = "melee_range",
@@ -613,6 +635,8 @@ local function try_ability(state, p, slot, ev, ally_id)
   local spec = ABILITIES[p.class] and ABILITIES[p.class][slot]
   if not spec then return false end
   if not S.ability_enabled(spec) then return false end -- F10-Schalter (R13)
+  -- Totstellen (Runde 13, #157): wer liegt, drueckt nichts
+  if state.time < (p.feign_until or 0) then return false end
   -- Off-GCD-Faehigkeiten (Tritt, Runde 12 #140) ignorieren die globale
   -- Abklingzeit in beide Richtungen: sie warten nicht auf sie und setzen
   -- keine — sonst waere der Unterbrecher im Rotations-Takt gefangen.
@@ -758,6 +782,9 @@ local function player_tick(state, p, inp, ev)
   if moving then
     p.x, p.y = map.clamp(p.x + dx * speed * DT, p.y + dy * speed * DT)
     if p.cast then break_cast(p) end -- Bewegung bricht den Cast
+    if (p.feign_until or 0) > state.time then
+      p.feign_until = 0 -- Aufstehen beendet das Totstellen (Runde 13, #157)
+    end
   end
 
   -- Blutung (Vicious Slice, kein Krit)
@@ -787,6 +814,7 @@ local function player_tick(state, p, inp, ev)
   if p.raptor_cd > 0 then p.raptor_cd = p.raptor_cd - DT end
   if (p.taunt_cd or 0) > 0 then p.taunt_cd = p.taunt_cd - DT end
   if (p.kick_cd or 0) > 0 then p.kick_cd = p.kick_cd - DT end
+  if (p.feign_cd or 0) > 0 then p.feign_cd = p.feign_cd - DT end
 
   -- Cast abschliessen; Wegdrehen bricht ihn ab wie Bewegung (GDD 8.1,
   -- Issue #32) — das Ziel muss die ganze Zeit vor einem bleiben
@@ -818,7 +846,8 @@ local function player_tick(state, p, inp, ev)
   -- Reichweite drischt er (zu nah zum Schiessen), weiter draussen schiesst
   -- er. Nicht aus Verstohlenheit.
   p.next_auto = p.next_auto - DT
-  if p.next_auto <= 0 and not p.cast and not p.stealth and p.attack_on then
+  if p.next_auto <= 0 and not p.cast and not p.stealth and p.attack_on
+     and state.time >= (p.feign_until or 0) then -- liegend schiesst keiner
     local attack = model.classes[p.class].attack
     if attack == "shot"
        and not enemy_in_reach(state, p, model.p("melee_range")) then

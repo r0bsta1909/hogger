@@ -27,6 +27,7 @@ local ABILITY_ICON = {
   taunt = "ab_taunt", kick = "ab_kick", -- Spott/Tritt (Runde 12, #140/#141)
   loh = "ab_loh", -- Handauflegung (Runde 13, #155)
   pws = "ab_pws", -- Machtwort: Schild (Runde 13, #156)
+  feign = "ab_feign", -- Totstellen (Runde 13, #157)
 }
 local ABILITIES = require("game.gamesim.step").ABILITIES
 local ABILITIES_ENABLED = require("game.gamesim.step").ability_enabled
@@ -950,8 +951,19 @@ function R:draw(view, ui)
           local jump = p.jumping and 1.25 or 1
           local alpha = p.ghost and 0.35 or p.stealth and 0.4 or 1
           if icon then
-            assets.draw(icon, x, y - (p.jumping and 4 or 0),
-              scale * 1.8 * jump, alpha)
+            if p.feigning then
+              -- Totstellen (Runde 13, #157): das Icon liegt flach auf der
+              -- Seite und ist blass — "liegt einfach da"
+              love.graphics.push()
+              love.graphics.translate(x, y)
+              love.graphics.rotate(math.pi / 2)
+              love.graphics.translate(-x, -y)
+              assets.draw(icon, x, y, scale * 1.8, 0.55)
+              love.graphics.pop()
+            else
+              assets.draw(icon, x, y - (p.jumping and 4 or 0),
+                scale * 1.8 * jump, alpha)
+            end
             if p.is_leeroy then -- markiertes Paladin-Icon (GDD 4.1)
               love.graphics.setColor(0.95, 0.78, 0.2, alpha)
               love.graphics.setLineWidth(2)

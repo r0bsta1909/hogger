@@ -58,6 +58,11 @@ local function act_class(run, p, heal_others)
     if target and E.cast_ability(run, p, "holy_light", target) then return end
     if p.seal_hits == 0 then E.cast_ability(run, p, "seal_of_righteousness") end
   elseif class == "hunter" then
+    -- Totstellen (Runde 13, #157): der koordinierte Jaeger wirft die Aggro
+    -- ab, sobald Hogger IHN als Ziel fuehrt — der Unkoordinierte reagiert
+    -- nicht (heal_others ist der Koordinations-Marker)
+    if heal_others and run.hogger.target == p
+       and E.cast_ability(run, p, "feign_death") then return end
     if p.d <= model.p("melee_range") then E.cast_ability(run, p, "raptor_strike") end
   elseif class == "rogue" then
     if p.cp >= 5 then
