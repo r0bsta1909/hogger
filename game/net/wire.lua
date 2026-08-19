@@ -420,8 +420,13 @@ function W.snapshot_body(state)
   parts[#parts + 1] = pack("<B", #npc_ids)
   for _, id in ipairs(npc_ids) do
     local npc = state.npcs[id]
-    parts[#parts + 1] = pack("<BBI2I2B", id, NPC_KIND_IDX[npc.kind] or 0,
-      q16(npc.x), q16(npc.y), math.max(0, math.min(255, math.floor(npc.hp + 0.5))))
+    -- NPC-Flags (Runde 13): Bit 1 = gewurzelt (#158) — Erweiterung ohne
+    -- PROTO-Bump, dieselbe Politik wie flags3 am Spieler
+    local nflags = 0
+    if state.time < (npc.rooted_until or 0) then nflags = nflags + 1 end
+    parts[#parts + 1] = pack("<BBI2I2BB", id, NPC_KIND_IDX[npc.kind] or 0,
+      q16(npc.x), q16(npc.y),
+      math.max(0, math.min(255, math.floor(npc.hp + 0.5))), nflags)
   end
   -- Bodenbeute
   local loot_ids = {}
@@ -520,9 +525,11 @@ function W.read_snapshot(data, off)
   ncount, off = love.data.unpack("<B", data, off)
   s.npcs = {}
   for _ = 1, ncount do
-    local nid, nkind, nx, ny, nhp
-    nid, nkind, nx, ny, nhp, off = love.data.unpack("<BBI2I2B", data, off)
-    s.npcs[nid] = { id = nid, kind = W.NPC_KINDS[nkind], x = nx, y = ny, hp = nhp }
+    local nid, nkind, nx, ny, nhp, nflags
+    nid, nkind, nx, ny, nhp, nflags, off =
+      love.data.unpack("<BBI2I2BB", data, off)
+    s.npcs[nid] = { id = nid, kind = W.NPC_KINDS[nkind], x = nx, y = ny,
+                    hp = nhp, rooted = nflags % 2 >= 1 }
   end
   local lcount
   lcount, off = love.data.unpack("<B", data, off)

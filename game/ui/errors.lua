@@ -19,6 +19,7 @@ E.NO_CP = "Keine Combopunkte."
 E.NOT_EATING = "Hogger frisst gerade nicht."
 E.ONCE_PER_LIFE = "Das geht nur einmal pro Leben."
 E.WEAK_SOUL = "Schwache Seele."
+E.IMMUNE = "Immun."
 
 -- me: eigener Spieler aus der Sicht; spec: Faehigkeits-Spezifikation;
 -- ctx: { x, y, facing, cooldown, hogger = {x,y,hp,state}, npcs = {},
@@ -70,6 +71,9 @@ function E.check(me, spec, ctx)
     tx, ty = ctx.npcs[t].x, ctx.npcs[t].y
   end
   if not tx then return E.NO_TARGET end
+  -- Gnarlwurzeln (Runde 13, #158): Hogger ist immun — Bosse wurzelt man
+  -- nicht, das sagt der Client, bevor der Host still verwirft
+  if spec.id == "roots" and t == world.HOGGER_ID then return E.IMMUNE end
   if spec.range and world.dist(ctx.x, ctx.y, tx, ty) > model.p(spec.range) then
     return E.TOO_FAR
   end

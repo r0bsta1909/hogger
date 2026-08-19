@@ -1615,6 +1615,63 @@ do
   model.params.hunter_feign_enabled.wert = 1
 end
 
+-- Runde 13 (#158): Gnarlwurzeln — Mob steht fest, Hogger ist immun ---------
+do
+  local st = world.new(53)
+  world.add_player(st, "dru", { quest_done = true })
+  world.begin_try(st, {})
+  local g = map.graveyard()
+  local dru = st.players[1]
+  dru.alive, dru.ghost, dru.class, dru.race = true, false, "druid", "nachtelf"
+  dru.max_hp, dru.hp = model.hp_for_class("druid"), model.hp_for_class("druid")
+  dru.resource = 100
+  dru.x, dru.y = g.x + 120, g.y -- weit weg von Hogger
+  local wolf = world.add_npc(st, "wolf", dru.x + 100, dru.y, model.p("wolf_hp"))
+  wolf.state, wolf.target_pid = "combat", 1
+  wolf.spawn_x, wolf.spawn_y = dru.x + 400, dru.y -- Leash bleibt fern
+  dru.target = wolf.id
+  dru.facing = input.facing_towards(dru.x, dru.y, wolf.x, wolf.y)
+
+  step.step(st, { [1] = { mask = input.AB3, facing = dru.facing } })
+  T.ok((wolf.rooted_until or 0) > st.time, "roots: der Wolf ist gewurzelt")
+  T.near(dru.roots_cd, model.p("druid_roots_cd"), "roots: Cooldown gesetzt")
+
+  -- gewurzelt: keine Bewegung, obwohl der Druide sein Kampfziel ist
+  local wx = wolf.x
+  for _ = 1, 30 do step.step(st, {}) end
+  T.near(wolf.x, wx, "roots: keine Bewegung im Wurzelgriff")
+
+  -- Schaden bricht die Wurzeln (Autohit des Druiden)
+  dru.x, dru.y = wolf.x + 20, wolf.y
+  dru.facing = input.facing_towards(dru.x, dru.y, wolf.x, wolf.y)
+  dru.attack_on = true
+  dru.next_auto = 0
+  step.step(st, {})
+  T.eq(wolf.rooted_until, 0, "roots: Schaden bricht die Wurzeln")
+
+  -- Hogger ist immun: das ready-Gate verwirft, ohne Cooldown zu verbrennen
+  dru.target = world.HOGGER_ID
+  dru.x, dru.y = st.hogger.x + 100, st.hogger.y
+  dru.facing = input.facing_towards(dru.x, dru.y, st.hogger.x, st.hogger.y)
+  dru.gcd, dru.roots_cd = 0, 0
+  dru.attack_on = false
+  step.step(st, { [1] = { mask = 0, facing = dru.facing } })
+  step.step(st, { [1] = { mask = input.AB3, facing = dru.facing } })
+  T.eq(dru.roots_cd, 0, "roots: Hogger immun — kein Cooldown verbrannt")
+
+  -- F10-Schalter: aus -> verworfen (zurueck auf den Wolf)
+  model.params.druid_roots_enabled.wert = 0
+  wolf.x, wolf.y = dru.x + 50, dru.y
+  wolf.rooted_until = 0
+  dru.target = wolf.id
+  dru.gcd = 0
+  dru.facing = input.facing_towards(dru.x, dru.y, wolf.x, wolf.y)
+  step.step(st, { [1] = { mask = 0, facing = dru.facing } })
+  step.step(st, { [1] = { mask = input.AB3, facing = dru.facing } })
+  T.eq(wolf.rooted_until, 0, "roots: per F10 abgeschaltet -> verworfen")
+  model.params.druid_roots_enabled.wert = 1
+end
+
 -- Runde 12 (#141): Krieger-Spott zwingt Hoggers Ziel -----------------------
 do
   local st, h = reset_world({ n = 2 })

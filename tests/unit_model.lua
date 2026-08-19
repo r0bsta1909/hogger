@@ -131,7 +131,7 @@ local expected_kits = {
   priest  = { "Goettliche Pein", "Geringes Heilen", "Machtwort: Schild" },
   mage    = { "Feuerball", "Frostruestung" },
   warlock = { "Schattenblitz", "Wichtel beschwoeren" },
-  druid   = { "Zorn", "Heilende Beruehrung" },
+  druid   = { "Zorn", "Heilende Beruehrung", "Gnarlwurzeln" },
 }
 -- Seit Runde 5 (Issue #86): der Jaeger hat die einzige Fernkampf-
 -- Autoattack, alle anderen schlagen im Nahkampf (Zauberstab gestrichen)

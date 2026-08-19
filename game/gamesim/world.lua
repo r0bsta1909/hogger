@@ -151,6 +151,7 @@ function M.add_player(state, name, opts)
     gcd = 0, next_auto = 0, raptor_cd = 0,
     taunt_cd = 0, kick_cd = 0, -- Spott/Tritt (Runde 12, #140/#141)
     feign_cd = 0, feign_until = 0, -- Totstellen (Runde 13, #157)
+    roots_cd = 0, -- Gnarlwurzeln (Runde 13, #158)
     last_cast_t = -1000,
     bleed_t = 0, bleed_next = 0,
     shout_until = 0, seal_hits = 0,
