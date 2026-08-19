@@ -28,4 +28,31 @@ end
 -- Wortlaut des Originals — genau so meldet WoW einen Abgang.
 N.LEEROY_LEFT = "Leeroy Jenkins hat das Spiel verlassen."
 
+-- Bot-Namen (Runde 12, #146): Robs Liste — WoW-Groessen von Reckful bis
+-- Red Shirt Guy. Reihenfolge hier = Robs Reihenfolge; zugelost wird per
+-- bot_names_for_seed. Erweiterung nur hier.
+N.BOT_NAMES = {
+  "Reckful", "Vurtne", "Drakedog", "Laintime", "Neilyo", "Hydramist",
+  "Cdew", "Venruki", "Pikaboo", "Snutz", "Whaazz", "Raiku",
+  "Chas", "Chanimal", "Jahmilli", "Mes", "Absterge", "Kungen",
+  "Sco", "Scripe", "Gingi", "Naowh", "Fragnance", "Rogerbrown",
+  "Justwait", "Zaelia", "Mione", "Rextroy", "Doubleagent", "Swifty",
+  "Asmongold", "Sodapoppin", "Athene", "Angwe", "Bajheera", "Esfand",
+  "Towelliee", "Preach", "Nobbel87", "Barney", "Red Shirt Guy", "Payo",
+}
+
+-- Zufaellig zugeloste Reihenfolge der Bot-Namen — deterministisch aus dem
+-- Realm-Seed (eigener RNG-Strom; der Try-RNG des Hosts bleibt unberuehrt,
+-- Zufallsregel GDD 13.2/14). Fisher-Yates ueber eine Kopie der Liste.
+function N.bot_names_for_seed(seed)
+  local rng = require("sim.rng").new((seed or 0) * 2 + 999331)
+  local pool = {}
+  for i, nm in ipairs(N.BOT_NAMES) do pool[i] = nm end
+  for i = #pool, 2, -1 do
+    local j = rng:range(1, i)
+    pool[i], pool[j] = pool[j], pool[i]
+  end
+  return pool
+end
+
 return N

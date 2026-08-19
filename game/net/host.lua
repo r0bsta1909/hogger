@@ -43,13 +43,17 @@ function H.new(opts)
     { quest_done = opts.skip_quest })
   self:_restore_char(self.local_pid)
   self.cosmetics = {}     -- Ereignisse fuer die eigene Darstellung
-  -- Debug-Bots (Solo-Test): eigene Eingabequelle je Bot (ADR-002)
+  -- Debug-Bots (Solo-Test): eigene Eingabequelle je Bot (ADR-002).
+  -- Namen aus Robs Liste, zugelost per Seed (Runde 12, #146) — der
+  -- Try-RNG bleibt unberuehrt; sind alle vergeben, faellt es auf botN.
+  self.bot_names = require("game.data.names").bot_names_for_seed(opts.seed)
+  self.bot_name_i = 1
   self.bot_pids = {}
-  for i = 1, (opts.bots or 0) do
-    self.bot_pids[#self.bot_pids + 1] = world.add_player(self.state, "bot" .. i,
-      { quest_done = true })
+  self.bot_next = 1 -- botN-Fallback-Zaehler (Runde 8, #109)
+  for _ = 1, (opts.bots or 0) do
+    self.bot_pids[#self.bot_pids + 1] = world.add_player(self.state,
+      self:_next_bot_name(), { quest_done = true })
   end
-  self.bot_next = (opts.bots or 0) + 1 -- Laufzeit-Bots (Runde 8, #109)
   local ev = {}
   world.begin_try(self.state, ev)
   self:_after_step(ev)
@@ -282,25 +286,38 @@ function H:engage()
   return step.engage(self.state, self.local_pid)
 end
 
--- Laufzeit-Bots (Runde 8, #109, F12 [B/G/J]): n Bots joinen mitten im
--- Spiel wie echte Nachzuegler — world.add_player spawnt sie als Geist am
--- Friedhof, der Bot-Input-Pfad in H:update greift automatisch. n_scale und
--- Hogger-HP zaehlen wie bei echten Joins erst ab dem naechsten Try-Start.
-function H:add_bots(n)
-  local function name_taken(name)
+-- Naechster freier Bot-Name (Runde 12, #146): erst die zugeloste Liste,
+-- bei Kollision (Mensch heisst schon so / Rejoin) den Namen ueberspringen;
+-- ist die Liste leer, zaehlt der alte botN-Fallback weiter.
+function H:_next_bot_name()
+  local function taken(name)
     for _, p in ipairs(self.state.players) do
       if p.name == name then return true end
     end
     return false
   end
+  while self.bot_name_i <= #self.bot_names do
+    local nm = self.bot_names[self.bot_name_i]
+    self.bot_name_i = self.bot_name_i + 1
+    if not taken(nm) then return nm end
+  end
+  while taken("bot" .. self.bot_next) do
+    self.bot_next = self.bot_next + 1
+  end
+  local nm = "bot" .. self.bot_next
+  self.bot_next = self.bot_next + 1
+  return nm
+end
+
+-- Laufzeit-Bots (Runde 8, #109, F12 [B/G/J]): n Bots joinen mitten im
+-- Spiel wie echte Nachzuegler — world.add_player spawnt sie als Geist am
+-- Friedhof, der Bot-Input-Pfad in H:update greift automatisch. n_scale und
+-- Hogger-HP zaehlen wie bei echten Joins erst ab dem naechsten Try-Start.
+function H:add_bots(n)
   for _ = 1, n do
-    while name_taken("bot" .. self.bot_next) do
-      self.bot_next = self.bot_next + 1
-    end
-    local pid = world.add_player(self.state, "bot" .. self.bot_next,
+    local pid = world.add_player(self.state, self:_next_bot_name(),
       { quest_done = true })
     self.bot_pids[#self.bot_pids + 1] = pid
-    self.bot_next = self.bot_next + 1
   end
   -- Debug-Bots skalieren SOFORT mit (Runde 9, #118): Hoggers Max-HP waechst,
   -- sein HP-Anteil bleibt, Adds/Mob-Slots stocken auf. Echte Joins zaehlen
