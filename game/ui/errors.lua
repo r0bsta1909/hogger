@@ -16,6 +16,7 @@ E.TOO_FAR = "Zu weit entfernt."
 E.WRONG_WAY = "Ziel ist nicht vor dir."
 E.NOT_READY = "Das ist noch nicht bereit."
 E.NO_CP = "Keine Combopunkte."
+E.NOT_EATING = "Hogger frisst gerade nicht."
 
 -- me: eigener Spieler aus der Sicht; spec: Faehigkeits-Spezifikation;
 -- ctx: { x, y, facing, cooldown, hogger = {x,y,hp,state}, npcs = {},
@@ -62,6 +63,16 @@ function E.check(me, spec, ctx)
   if not input.facing_ok(ctx.facing, ctx.x, ctx.y, tx, ty,
                          model.p("facing_arc_deg")) then
     return E.WRONG_WAY
+  end
+  -- Tritt (Runde 12, #140): nur waehrend Hoggers Fresskanal sinnvoll —
+  -- der Host wuerde ihn sonst verwerfen (spec.ready), ohne den Cooldown
+  -- anzufassen; hier steht der Grund
+  if spec.id == "kick" then
+    local eat = h and h.eat
+    if t ~= world.HOGGER_ID
+       or not (eat and eat.phase == "channel") then
+      return E.NOT_EATING
+    end
   end
   return nil
 end

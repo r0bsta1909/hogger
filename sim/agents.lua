@@ -105,7 +105,10 @@ function A.make(name, run)
       local want = {
         hunter = math.floor(0.5 * r.cfg.n + 0.5),
         priest = math.max(2, math.floor(r.cfg.n / 8 + 0.5)),
-        rogue = math.max(2, math.floor(r.cfg.n / 10 + 0.5)),
+        -- Schurken seit Runde 12 (#140) hoeher gewichtet: sie sind die
+        -- einzigen Unterbrecher, und einer muss den Tritt bereit haben
+        -- und LEBEN — zwei reichten nicht (Messreihe in GDD 17.9)
+        rogue = math.max(3, math.floor(r.cfg.n / 8 + 0.5)),
       }
       local have = { hunter = 0, priest = 0, rogue = 0 }
       for i = 1, r.cfg.n do
@@ -119,18 +122,33 @@ function A.make(name, run)
       return mixed[r.rng:range(1, #mixed)]
     end
 
-    -- Fress-Fokus: 80 % Unterbrechungs-Erfolg je Kanal, frueh im Kanal
+    -- Fress-Fokus seit Runde 12 (#140): unterbrechen kann NUR der
+    -- Schurken-Tritt. Der Koordinations-Wurf (80 %) ist gestrichen — ob
+    -- die Unterbrechung gelingt, entscheiden jetzt die physischen
+    -- Bedingungen: lebt ein Schurke in Schlagweite, ist sein Tritt bereit
+    -- (10 s CD), reicht die Energie (25)? Reaktionszeit 0,5 s ab
+    -- Kanalbeginn: die 1-s-Schleppphase telegrafiert das Fressen, der
+    -- Dienst-Schurke (unten) wartet auf genau diesen Moment. Die alte
+    -- Spielerzahl-Unterbrechung feuerte real in unter einer Sekunde —
+    -- eine traege 1,5-s-Reaktion liess Hogger je Kanal 2,25 % Max-HP
+    -- ziehen und drueckte F1 trotz 97 % Abdeckung auf 26 % (N=10).
     agent.tick = function(r)
-      local h = r.hogger
-      local e = h.eating
+      local e = r.hogger.eating
       if e and e.phase == "channel" then
-        if e.coord_roll == nil then
-          e.coord_roll = r.rng:roll(0.8)
-          e.coord_at = r.t + 1.5
-        end
-        if e.coord_roll and r.t >= e.coord_at then
-          local E = require("sim.engine")
-          E.interrupt_eat(r, model.eat_interrupters(r.cfg.n))
+        if e.react_at == nil then e.react_at = r.t + 0.5 end
+        if r.t >= e.react_at then
+          for i = 1, r.cfg.n do
+            local p = r.players[i]
+            if p and p.alive and p.class == "rogue"
+               and p.d <= model.p("melee_range")
+               and r.t >= (p.kick_ready or 0)
+               and p.resource >= model.p("rogue_kick_energy") then
+              p.resource = p.resource - model.p("rogue_kick_energy")
+              p.kick_ready = r.t + model.p("rogue_kick_cd")
+              require("sim.engine").interrupt_eat(r, 1)
+              break
+            end
+          end
         end
       end
     end
@@ -139,7 +157,27 @@ function A.make(name, run)
       return r.rng:roll(0.6)
     end
 
-    agent.act = function(r, p) act_class(r, p, true) end
+    -- Unterbrecher-Dienst (Runde 12, #140): der erste lebende Schurke haelt
+    -- sich mit JEDEM Angriff zurueck. Ohne Bedrohung ignorieren ihn Hoggers
+    -- Ziel-, Cleave- und Charge-Wahl (GDD 9.4: alles verlangt Threat > 0) —
+    -- er steht sicher im Nahkampf und traegt den Tritt, wann immer der
+    -- Kanal beginnt. Das ist der Kern dessen, was "koordiniert" nach dem
+    -- Wegfall der Spieleranzahl-Unterbrechung bedeutet: einer opfert seine
+    -- DPS fuer die Unterbrechungs-Garantie. Ohne Dienst-Schurken (nur
+    -- sterbliche Kaempfer-Schurken) fiel F1 auf 40,7/0/0 % — Messreihe in
+    -- GDD 17.9.
+    local function duty_rogue(r)
+      for i = 1, r.cfg.n do
+        local p = r.players[i]
+        if p and p.alive and p.class == "rogue" then return p end
+      end
+      return nil
+    end
+    agent.no_auto = function(r, p) return duty_rogue(r) == p end
+    agent.act = function(r, p)
+      if duty_rogue(r) == p then return end -- Dienst: nur der Tritt
+      act_class(r, p, true)
+    end
     return agent
   end
 

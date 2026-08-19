@@ -25,7 +25,7 @@ local app = {
   net = nil, search = nil, beacon = nil,
   render = nil, panel = nil, floating = nil, debug = nil,
   boot = nil, dialog = nil, auto_hosted = false, uptime = 0,
-  cooldown_view = { 0, 0, 0 }, cooldown_max = { 1, 1, 1 },
+  cooldown_view = { 0, 0, 0, 0 }, cooldown_max = { 1, 1, 1, 1 }, -- Slot 4: Tritt (#140)
   discover_t = 0,
 }
 
@@ -340,6 +340,12 @@ local function process_cosmetics(view)
       audio.play("snd_hogger_charge") -- Boss-Lesbarkeit (GDD 12 Nr. 10)
     elseif e.ev == "eat_start" then
       app.render:announce("HOGGER FRISST!", 2.5)
+    elseif e.ev == "eat_interrupt" then
+      -- der Tritt hat gesessen (Runde 12, #140): kurzes, lautes Feedback
+      app.render:announce("UNTERBROCHEN!", 2)
+    elseif e.ev == "taunt" then
+      local tx, ty = entity_pos(e.dst)
+      app.floating:add("Spott!", tx, ty, { 1, 0.75, 0.3 }, 2)
     elseif e.ev == "eat_complete" then
       app.render:announce("Hogger hat gefressen ...", 2.5)
     elseif e.ev == "try_end" then
@@ -459,7 +465,7 @@ function love.update(dt)
     return
   end
 
-  for i = 1, 3 do
+  for i = 1, 4 do
     if app.cooldown_view[i] > 0 then
       app.cooldown_view[i] = math.max(0, app.cooldown_view[i] - dt)
     end
@@ -718,7 +724,7 @@ function love.draw()
     love.graphics.print("F12: Debug (manuelle IP, Host erzwingen)", 40, 62)
   else
     local cds = {}
-    for i = 1, 3 do
+    for i = 1, 4 do -- Slot 4: Schurken-Tritt (Runde 12, #140)
       cds[i] = app.cooldown_max[i] > 0
         and app.cooldown_view[i] / app.cooldown_max[i] or 0
     end
@@ -942,6 +948,31 @@ function love.keypressed(key)
         local cd = spec.cd and model.p(spec.cd) or model.p("gcd")
         app.cooldown_view[slot] = cd
         app.cooldown_max[slot] = cd
+      end
+    end
+  elseif key == "4" then
+    -- Schurken-Tritt (Runde 12, #140): Slot 4 hat kein Masken-Bit — er geht
+    -- als reliable Wire-Msg an den Host (Muster ENGAGE/HEAL_REQUEST); die
+    -- Fehlerzeile sagt vorab, warum nichts passieren wuerde (Issue #56)
+    local me = app.view and app.view.players[app.view.me]
+    local spec = me and me.alive and me.class
+      and require("game.gamesim.step").ABILITIES[me.class][4]
+    if spec then
+      local err = require("game.ui.errors").check(me, spec, {
+        x = app.view.me_x, y = app.view.me_y,
+        facing = input.facing_from_angle(app.facing_angle or 0),
+        cooldown = app.cooldown_view[4] or 0,
+        hogger = app.view.hogger, npcs = app.view.npcs,
+        players = app.view.players,
+      })
+      if err then
+        app.render:error(err)
+      else
+        if app.mode == "host" then app.net:kick()
+        elseif app.net.send_kick then app.net:send_kick() end
+        local cd = model.p(spec.cd)
+        app.cooldown_view[4] = cd
+        app.cooldown_max[4] = cd
       end
     end
   elseif key == "tab" then

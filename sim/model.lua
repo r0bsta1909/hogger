@@ -65,9 +65,9 @@ M.params = {
   eat_drag_duration      = p(1.0, 0, 3.0, 0.1, "9.2"),
   eat_channel_duration   = p(8, 2, 20, 1, "9.2"),
   eat_heal_rate          = p(0.015, 0.005, 0.05, 0.001, "9.2"),  -- Anteil Max-HP pro s
-  eat_interrupt_divisor  = p(6, 2, 20, 1, "9.3"),                -- Unterbrecher = ceil(N/div) + offset
-  eat_interrupt_offset   = p(1, 0, 5, 1, "9.3"),                 -- Runde 6 (#96): 10/2 -> 6/1
-  eat_dmg_threshold_pct  = p(0.05, 0.005, 0.15, 0.005, "9.2"),   -- Anteil Max-HP im Kanal (v2.6)
+  -- Fress-Unterbrechung seit Runde 12 (#140) NUR noch per Schurken-Tritt:
+  -- die Spieleranzahl-Bedingung (max(3; ceil(N/6)+1) verschiedene Spieler)
+  -- und die 5-%-Schadensschwelle sind ersatzlos gestrichen (Rob-Entscheid).
 
   -- Krits (GDD 13.2, je Seite getrennt stellbar)
   crit_chance_player     = p(0.05, 0, 0.5, 0.01, "13.2"),
@@ -123,6 +123,13 @@ M.params = {
   warrior_shout_radius   = p(300, 100, 800, 25, "8.2"),  -- "im Umkreis", GDD unbeziffert
   warrior_shout_duration = p(15, 5, 60, 5, "8.2"),
   warrior_shout_rage     = p(10, 0, 50, 5, "8.2"),
+  -- Spott (Runde 12, #141): einzige Klasse, die Aggro kurzfristig erzwingt
+  -- — "um sich zu opfern" (Rob). 10 s Cooldown und 3 s Zwang wie im
+  -- Vanilla-Original; Reichweite etwas ueber Nahkampf, damit der Krieger
+  -- den Zug ansagen kann, bevor er drinsteht.
+  warrior_taunt_cd       = p(10, 2, 60, 1, "8.2"),
+  warrior_taunt_duration = p(3, 1, 10, 0.5, "8.2"),
+  warrior_taunt_range    = p(100, 40, 300, 10, "8.2"),
   paladin_holylight_cast = p(2.5, 0.5, 5.0, 0.1, "8.2"),
   paladin_holylight_heal = p(25, 5, 60, 1, "8.2"),
   paladin_holylight_mana = p(35, 5, 100, 5, "8.2"),
@@ -136,6 +143,10 @@ M.params = {
   rogue_evis_dmg_per_cp  = p(4, 1, 10, 1, "8.2"),
   rogue_evis_energy      = p(30, 10, 100, 5, "8.2"),
   rogue_stealth_speed    = p(0.6, 0.3, 1.0, 0.05, "8.2"),
+  -- Tritt (Runde 12, #140): der EINZIGE Fress-Unterbrecher. 10 s Cooldown
+  -- ist Robs Vorgabe; 25 Energie ist der Vanilla-Kick-Preis.
+  rogue_kick_energy      = p(25, 0, 100, 5, "8.2"),
+  rogue_kick_cd          = p(10, 2, 60, 1, "8.2"),
   priest_smite_cast      = p(1.5, 0.5, 4.0, 0.1, "8.2"),
   priest_smite_dmg       = p(6, 1, 20, 1, "8.2"),
   priest_smite_mana      = p(15, 5, 60, 5, "8.2"),
@@ -263,6 +274,8 @@ M.classes = {
       { id = "heroic_strike", name_de = "Heroischer Stoss", dmg = "warrior_heroic_dmg", cost = "warrior_heroic_rage" },
       { id = "battle_shout", name_de = "Schlachtruf", buff_bonus = "warrior_shout_bonus",
         duration = "warrior_shout_duration", cost = "warrior_shout_rage" },
+      { id = "taunt", name_de = "Spott", cd = "warrior_taunt_cd",
+        duration = "warrior_taunt_duration" },
     },
   },
   paladin = {
@@ -289,6 +302,7 @@ M.classes = {
       { id = "sinister_strike", name_de = "Finsterer Stoss", dmg = "rogue_sinister_dmg", cost = "rogue_sinister_energy" },
       { id = "eviscerate", name_de = "Ausweiden", dmg_per_cp = "rogue_evis_dmg_per_cp", cost = "rogue_evis_energy" },
       { id = "stealth", name_de = "Verstohlenheit", speed_factor = "rogue_stealth_speed" },
+      { id = "kick", name_de = "Tritt", cost = "rogue_kick_energy", cd = "rogue_kick_cd" },
     },
   },
   priest = {
@@ -381,20 +395,9 @@ function M.eat_heal_per_channel(n)
   return M.eat_heal_per_second(n) * M.p("eat_channel_duration")
 end
 
--- Unterbrecher-Formel seit Runde 6 (#96): ceil(N/6)+1 statt ceil(N/10)+2 —
--- oben steiler (N=40: 8 statt 6), N=10 unveraendert bei 3. Grund: der feste
--- Respawn schenkt auch Unkoordinierten die Materialschlacht; bei grossen N
--- erfuellten sie die alte Spielerzahl-Bedingung nebenbei (F2 fiel auf 38,6 %).
-function M.eat_interrupters(n)
-  -- mindestens 3: sonst reissen Kleingruppen die Unterbrechung nebenbei
-  -- und N=5 kippt aus dem F1-Band (gemessen: 89 % statt 76 %)
-  return math.max(3,
-    math.ceil(n / M.p("eat_interrupt_divisor")) + M.p("eat_interrupt_offset"))
-end
-
-function M.eat_dmg_threshold(n)
-  return M.hogger_hp(n) * M.p("eat_dmg_threshold_pct")
-end
+-- Die Unterbrecher-Formel (max(3; ceil(N/6)+1) verschiedene Spieler) und
+-- die Schadensschwelle sind seit Runde 12 (#140) GESTRICHEN: Unterbrechen
+-- kann nur noch der Schurken-Tritt (rogue_kick_cd/energy, 8.2).
 
 function M.adds(n)
   return math.floor(n / M.p("add_divisor"))

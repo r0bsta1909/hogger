@@ -175,6 +175,10 @@ function H:_handle(peer, data)
     if step.accept_quest(self.state, c.pid, ev) then self:_after_step(ev) end
   elseif c and msg == wire.MSG.ENGAGE then
     step.engage(self.state, c.pid) -- Nahkampf anschalten (Issue #86)
+  elseif c and msg == wire.MSG.KICK then
+    -- Schurken-Tritt (Runde 12, #140): autoritativ ueber try_ability
+    local ev = {}
+    if step.kick(self.state, c.pid, ev) then self:_after_step(ev) end
   elseif c and msg == wire.MSG.HEAL_REQUEST then
     -- Klick-Heilung aus der Heil-Leiste (Runde 7, #103): autoritativ
     -- validiert und als normaler Cast gestartet, p.target unberuehrt
@@ -286,6 +290,16 @@ function H:engage()
   return step.engage(self.state, self.local_pid)
 end
 
+-- Schurken-Tritt des lokalen Spielers (Runde 12, #140)
+function H:kick()
+  local ev = {}
+  if step.kick(self.state, self.local_pid, ev) then
+    self:_after_step(ev)
+    return true
+  end
+  return false
+end
+
 -- Naechster freier Bot-Name (Runde 12, #146): erst die zugeloste Liste,
 -- bei Kollision (Mensch heisst schon so / Rejoin) den Namen ueberspringen;
 -- ist die Liste leer, zaehlt der alte botN-Fallback weiter.
@@ -393,7 +407,14 @@ function H:update(dt, local_input)
     if #self.bot_pids > 0 then
       local bot = require("game.gamesim.bot")
       for _, pid in ipairs(self.bot_pids) do
-        inputs[pid] = bot.decide(self.state, pid)
+        local dec = bot.decide(self.state, pid)
+        inputs[pid] = dec
+        -- Schurken-Tritt der Bots (Runde 12, #140): wie die Wire-Msg,
+        -- autoritativ ueber denselben step.kick-Pfad
+        if dec.kick then
+          local kev = {}
+          if step.kick(self.state, pid, kev) then self:_after_step(kev) end
+        end
         -- Debug-Bots druecken ihren Knopf selbst (GDD Kap. 11); die Sim
         -- laesst die Freigabe ohnehin erst nach Ablauf des Timers zu
         step.release_spirit(self.state, pid)

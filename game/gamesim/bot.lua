@@ -54,6 +54,7 @@ function M.decide(state, pid)
 
   local d = world.dist(p.x, p.y, h.x, h.y)
   local mask = 0
+  local kick = false
   if d > range * 0.9 then
     mask = move_mask_towards(p.x, p.y, h.x, h.y, 8)
   else
@@ -75,6 +76,12 @@ function M.decide(state, pid)
     if cls == "rogue" and (p.cp or 0) >= 5 and state.tick % 30 == 15 then
       mask = mask + input.AB2
     end
+    -- Schurken-Tritt (Runde 12, #140): frisst Hogger im Kanal und der Bot
+    -- steht in Schlagweite, tritt er — CD/Energie prueft der S.kick-Pfad
+    if cls == "rogue" and h.eating and h.eating.phase == "channel"
+       and d <= model.p("melee_range") then
+      kick = true
+    end
     if cls == "warlock" and state.tick % 600 == 30 then
       mask = mask + input.AB2 -- Wichtel nachbeschwoeren (wirkt nur ohne Wichtel)
     end
@@ -83,8 +90,10 @@ function M.decide(state, pid)
     -- Huepfen bleibt den Menschen ueberlassen.
   end
   -- Blickrichtung immer aufs Ziel: seit der Frontbogen-Regel (GDD 8.1)
-  -- trifft nur, wer sein Ziel ansieht
-  return { mask = mask, facing = input.facing_towards(p.x, p.y, h.x, h.y) }
+  -- trifft nur, wer sein Ziel ansieht. kick liegt NEBEN der Maske: Slot 4
+  -- hat kein Bit, der Traeger (Host/Testrunner) ruft step.kick auf.
+  return { mask = mask, facing = input.facing_towards(p.x, p.y, h.x, h.y),
+           kick = kick }
 end
 
 -- Bequemer Runner fuer Tests: laeuft n Ticks mit Bots, sammelt Events
@@ -93,7 +102,10 @@ function M.run(state, ticks, evsink)
   for _ = 1, ticks do
     local inputs = {}
     for _, p in ipairs(state.players) do
-      inputs[p.id] = M.decide(state, p.id)
+      local dec = M.decide(state, p.id)
+      inputs[p.id] = dec
+      -- Tritt wie der Host: vor dem Tick, in Spieler-Reihenfolge (#140)
+      if dec.kick then step.kick(state, p.id, evsink or {}) end
     end
     local evs = step.step(state, inputs)
     if evsink then

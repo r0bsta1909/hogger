@@ -32,8 +32,9 @@ return {
   [22] = "Wipe. Ueberraschung. Aufstehen, weitermachen.",
   [23] = "Er hatte noch Restleben. Ich sage nur: Restleben.",
   [24] = "Das haben wir gleich. Definitiv. Vermutlich.",
-  -- 25: Kragen-Mechanik (Sicherheitsnetz, GDD 10.4)
-  [25] = "IHR MUESST IHN SCHLAGEN, WAEHREND ER FRISST!",
+  -- 25: Kragen-Mechanik (Sicherheitsnetz, GDD 10.4; Wortlaut neu seit
+  -- Runde 12, #140 — unterbrechen kann nur noch der Schurken-Tritt)
+  [25] = "EIN SCHURKE MUSS IHN TRETEN, WAEHREND ER FRISST!",
   -- 26-28: Zwischen-Zeilen am Friedhof
   [26] = "Der Geistheiler? Der funktioniert nicht mehr. Frag nicht.",
   [27] = "Frueher war hier mehr Raid. Und weniger Vollpfosten.",

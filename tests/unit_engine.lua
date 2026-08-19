@@ -109,15 +109,57 @@ local a3 = { id = "a3", class = "hunter", is_leeroy = false, alive = true,
              add_idx = nil, combat_time = 0, dmg_done = 0, heal_done = 0,
              deaths = 0, skill = 1 }
 run3.players[1], run3.players[2], run3.players[3] = a1, a2, a3
--- v2.6: bei N=5 braucht es ceil(5/10)+2 = 3 verschiedene Angreifer;
--- 3x3 Schaden bleibt unter der 5-%-Schwelle (30 von 600)
-engine.player_damage_hogger(run3, a1, 3, "autohit")
-T.ok(run3.hogger.eating ~= nil, "engine: 1 Angreifer unterbricht bei N=5 nicht")
-engine.player_damage_hogger(run3, a2, 3, "autohit")
-T.ok(run3.hogger.eating ~= nil, "engine: 2 Angreifer unterbrechen bei N=5 nicht (v2.6)")
-engine.player_damage_hogger(run3, a3, 3, "autohit")
-T.ok(run3.hogger.eating == nil, "engine: 3 verschiedene Angreifer unterbrechen bei N=5")
+-- Runde 12 (#140): Schaden unterbricht NICHT mehr — egal wie viele
+-- verschiedene Spieler treffen. Nur der Schurken-Tritt beendet den Kanal.
+engine.player_damage_hogger(run3, a1, 50, "autohit")
+engine.player_damage_hogger(run3, a2, 50, "autohit")
+engine.player_damage_hogger(run3, a3, 50, "autohit")
+T.ok(run3.hogger.eating ~= nil,
+  "engine: Schaden vieler Spieler unterbricht nicht mehr (#140)")
+engine.interrupt_eat(run3, 1)
+T.ok(run3.hogger.eating == nil, "engine: der Tritt beendet den Kanal")
 T.eq(run3.c.eat_interrupted, 1, "engine: Unterbrechung gezaehlt")
+
+-- Der koordinierte Agent tritt nur mit lebendem Schurken in Schlagweite,
+-- bereitem Cooldown und genug Energie (Runde 12, #140)
+do
+  local agents = require("sim.agents")
+  local kr = mini_run()
+  kr.hogger.eating = { phase = "channel", ends_at = kr.t + 8 }
+  local rogue = { id = "r1", class = "rogue", is_leeroy = false, alive = true,
+                  hp = 65, max_hp = 65, resource = 100, cp = 0, d = 40,
+                  state = "combat", dead_until = 0, gcd_ready = 0, cast = nil,
+                  last_cast_t = -1000, next_auto = 0, raptor_ready = 0,
+                  kick_ready = 0, threat = 0, bleed_until = 0,
+                  bleed_next = math.huge, shout_until = 0, seal_hits = 0,
+                  has_frost_armor = false, imp_alive = false, add_idx = nil,
+                  combat_time = 0, dmg_done = 0, heal_done = 0, deaths = 0,
+                  skill = 1 }
+  kr.players[1] = rogue
+  kr.agent = agents.make("koordiniert", kr)
+  kr.agent.tick(kr) -- Reaktionszeit laeuft erst an
+  T.ok(kr.hogger.eating ~= nil, "agent: vor der Reaktionszeit kein Tritt")
+  kr.t = kr.t + 1.5
+  kr.agent.tick(kr)
+  T.ok(kr.hogger.eating == nil, "agent: Schurke in Schlagweite tritt")
+  T.near(rogue.resource, 100 - model.p("rogue_kick_energy"),
+    "agent: der Tritt kostet Energie")
+  T.ok(rogue.kick_ready > kr.t, "agent: der Tritt geht auf Cooldown")
+
+  -- ohne bereiten Tritt frisst Hogger weiter
+  kr.hogger.eating = { phase = "channel", ends_at = kr.t + 8,
+                       react_at = kr.t }
+  kr.agent.tick(kr)
+  T.ok(kr.hogger.eating ~= nil, "agent: Tritt auf Cooldown -> Kanal laeuft")
+
+  -- toter Schurke tritt nicht
+  rogue.kick_ready = 0
+  rogue.alive = false
+  kr.hogger.eating = { phase = "channel", ends_at = kr.t + 8,
+                       react_at = kr.t }
+  kr.agent.tick(kr)
+  T.ok(kr.hogger.eating ~= nil, "agent: toter Schurke tritt nicht")
+end
 
 -- Kein-Kontakt-Abbruch (Runde 10, #124): dieselbe Regel wie im Spiel. Im
 -- 1D-Modell greift sie praktisch nur beim totalen Wipe — die Todesstrafe

@@ -63,16 +63,14 @@ local function stat_p(state, pid)
   return e
 end
 
--- Unterbrechung fuer die Statistik verbuchen (Hogger + beteiligte Spieler);
--- reine Zaehler, Reihenfolge der hitters-Menge ist ergebnisneutral
-local function note_interrupt(state, eating)
+-- Unterbrechung fuer die Statistik verbuchen (Hogger + der Schurke, dessen
+-- Tritt sie ausgeloest hat — seit Runde 12 gibt es keine Mit-Beteiligten)
+local function note_interrupt(state, pid)
   local s = state.stats
   if not s then return end
   s.hogger.interrupts = s.hogger.interrupts + 1
-  for pid in pairs(eating.hitters) do
-    local sp = stat_p(state, pid)
-    sp.interrupts = sp.interrupts + 1
-  end
+  local sp = stat_p(state, pid)
+  if sp then sp.interrupts = sp.interrupts + 1 end
 end
 
 -- Cast-Abbruch (Runde 10, #125): der Zauber ist weg UND die globale
@@ -256,22 +254,8 @@ local function player_damage_hogger(state, p, amount, kind, ev)
   local tf = p.is_leeroy and model.p("leeroy_threat_factor") or 1 -- GDD 10.3
   h.threat[p.id] = (h.threat[p.id] or 0) + model.threat_for(amount, false) * tf
   hogger_engage(h)
-  -- Fress-Unterbrechung (GDD 9.2): verschiedene Spieler ODER Schadensschwelle
-  if h.eating and h.eating.phase == "channel" then
-    local e = h.eating
-    if not e.hitters[p.id] then
-      e.hitters[p.id] = true
-      e.hitter_count = e.hitter_count + 1
-    end
-    e.dmg_accum = e.dmg_accum + amount
-    if e.hitter_count >= model.eat_interrupters(state.n_scale)
-       or e.dmg_accum >= model.eat_dmg_threshold(state.n_scale) then
-      h.eating = nil
-      h.eat_cd = model.p("eat_cd")
-      note_interrupt(state, e)
-      events.push(ev, state.tick, "eat_interrupt", "hogger", nil, e.hitter_count, nil)
-    end
-  end
+  -- Schaden unterbricht das Fressen NICHT mehr (Runde 12, #140): weder
+  -- verschiedene Spieler noch eine Schwelle — nur der Schurken-Tritt.
   events.push(ev, state.tick, "damage", p.id, "hogger", amount, crit, kind)
   if kind == "autohit" and p.class == "warrior" then
     p.resource = math.min(model.p("rage_max"), p.resource + model.p("rage_per_hit_dealt"))
@@ -428,6 +412,25 @@ local ABILITIES = {
           end
         end
       end },
+    -- Spott (Runde 12, #141): die EINZIGE Moeglichkeit, Aggro aktiv auf
+    -- sich zu ziehen — kurz, um sich zu opfern. Auf Hogger erzwingt er das
+    -- Ziel fuer warrior_taunt_duration; auf einem Mob/Add haengt er dessen
+    -- Aggro sofort an den Krieger. Kein Schaden, kein Krit (Vanilla).
+    { id = "taunt", cd_field = "taunt_cd", cd = "warrior_taunt_cd",
+      range = "warrior_taunt_range", target = "enemy",
+      effect = function(state, p, _, ev)
+        local enemy, etype = current_enemy(state, p)
+        if not enemy then return end
+        if etype == "hogger" then
+          state.hogger.taunt = { pid = p.id,
+            until_t = state.time + model.p("warrior_taunt_duration") }
+          events.push(ev, state.tick, "taunt", p.id, "hogger", nil, nil)
+        else
+          enemy.state = "combat"
+          enemy.target_pid = p.id
+          events.push(ev, state.tick, "taunt", p.id, enemy.id, nil, nil)
+        end
+      end },
   },
   paladin = {
     { id = "holylight", cost = "paladin_holylight_mana",
@@ -457,6 +460,25 @@ local ABILITIES = {
       end },
     { id = "stealth", target = "self",
       effect = function(state, p) set_stealth(state, p, not p.stealth) end },
+    -- Tritt (Runde 12, #140): der EINZIGE Fress-Unterbrecher im Spiel.
+    -- Off-GCD wie das Vanilla-Original; greift nur im Fresskanal (ready),
+    -- damit kein Cooldown ins Leere verpufft. Slot 4 hat kein Masken-Bit —
+    -- er kommt ueber die Wire-Msg KICK / S.kick (wie ENGAGE/HEAL_REQUEST).
+    { id = "kick", cost = "rogue_kick_energy", cd_field = "kick_cd",
+      cd = "rogue_kick_cd", range = "melee_range", target = "enemy",
+      no_gcd = true,
+      ready = function(state, p)
+        return p.target == world.HOGGER_ID and state.hogger.eating ~= nil
+               and state.hogger.eating.phase == "channel"
+      end,
+      effect = function(state, p, _, ev)
+        local h = state.hogger
+        if not (h.eating and h.eating.phase == "channel") then return end
+        h.eating = nil
+        h.eat_cd = model.p("eat_cd")
+        note_interrupt(state, p.id)
+        events.push(ev, state.tick, "eat_interrupt", "hogger", p.id, 1, nil)
+      end },
   },
   priest = {
     { id = "smite", cost = "priest_smite_mana", cast = "priest_smite_cast",
@@ -532,11 +554,15 @@ end
 -- ally_id: explizites Heilziel aus der Heil-Leiste (S.heal_request);
 -- nil = bisherige Aufloesung ueber p.target mit Selbst-Fallback.
 local function try_ability(state, p, slot, ev, ally_id)
-  if p.gcd > 0 or p.cast then return false end
   local spec = ABILITIES[p.class] and ABILITIES[p.class][slot]
   if not spec then return false end
-  if spec.cd_field and p[spec.cd_field] > 0 then return false end
+  -- Off-GCD-Faehigkeiten (Tritt, Runde 12 #140) ignorieren die globale
+  -- Abklingzeit in beide Richtungen: sie warten nicht auf sie und setzen
+  -- keine — sonst waere der Unterbrecher im Rotations-Takt gefangen.
+  if (p.gcd > 0 and not spec.no_gcd) or p.cast then return false end
+  if spec.cd_field and (p[spec.cd_field] or 0) > 0 then return false end
   if spec.requires_cp and p.cp < 1 then return false end
+  if spec.ready and not spec.ready(state, p) then return false end
   local cost = spec.cost and model.p(spec.cost) or 0
   if p.resource < cost then return false end
   if spec.target == "enemy" and spec.range
@@ -566,7 +592,7 @@ local function try_ability(state, p, slot, ev, ally_id)
   spend(state, p, cost)
   if spec.cd_field then p[spec.cd_field] = model.p(spec.cd) end
   spec.effect(state, p, ally, ev)
-  p.gcd = model.p("gcd")
+  if not spec.no_gcd then p.gcd = model.p("gcd") end
   return true
 end
 
@@ -698,6 +724,8 @@ local function player_tick(state, p, inp, ev)
 
   if p.gcd > 0 then p.gcd = p.gcd - DT end
   if p.raptor_cd > 0 then p.raptor_cd = p.raptor_cd - DT end
+  if (p.taunt_cd or 0) > 0 then p.taunt_cd = p.taunt_cd - DT end
+  if (p.kick_cd or 0) > 0 then p.kick_cd = p.kick_cd - DT end
 
   -- Cast abschliessen; Wegdrehen bricht ihn ab wie Bewegung (GDD 8.1,
   -- Issue #32) — das Ziel muss die ganze Zeit vor einem bleiben
@@ -944,18 +972,8 @@ local function npc_tick(state, npc, ev)
     if sp then sp.dmg = sp.dmg + dmg end
     h.threat[npc.id] = (h.threat[npc.id] or 0) + dmg
     hogger_engage(h)
-    -- Fress-Schwelle: Schaden zaehlt, der Wichtel ist aber kein
-    -- "verschiedener Spieler" (GDD 9.2)
-    if h.eating and h.eating.phase == "channel" then
-      local e = h.eating
-      e.dmg_accum = e.dmg_accum + dmg
-      if e.dmg_accum >= model.eat_dmg_threshold(state.n_scale) then
-        h.eating = nil
-        h.eat_cd = model.p("eat_cd")
-        note_interrupt(state, e)
-        events.push(ev, state.tick, "eat_interrupt", "hogger", nil, e.hitter_count, nil)
-      end
-    end
+    -- Wichtel-Schaden unterbricht das Fressen nicht (Runde 12, #140:
+    -- die Schadensschwelle ist gestrichen, nur der Tritt unterbricht)
     events.push(ev, state.tick, "damage", npc.id, "hogger", dmg, nil, "autohit")
   end
 end
@@ -1023,6 +1041,18 @@ function S.heal_request(state, pid, target_id, ev)
   return try_ability(state, p, slot, ev, target_id)
 end
 
+-- Schurken-Tritt (Runde 12, #140): der EINZIGE Fress-Unterbrecher. Kommt
+-- wie ENGAGE/HEAL_REQUEST als reliable Wire-Msg (Slot 4 hat kein Masken-
+-- Bit) oder direkt vom Host/Bot-Pfad. Alle Pruefungen (Schurke, Cooldown,
+-- Energie, Nahkampf-Reichweite, Frontbogen, Hogger frisst) erledigt
+-- derselbe try_ability-Pfad wie bei jedem Tastendruck.
+function S.kick(state, pid, ev)
+  local p = state.players[pid]
+  if not p or not p.alive then return false end
+  p.attack_on = true -- ein Tritt ist ein Angriff (Engage-Regel, Issue #86)
+  return try_ability(state, p, 4, ev)
+end
+
 -- Questannahme (GDD Kap. 5): ab jetzt darf sich der Spieler bewegen, und
 -- der Raid-Leeroy nimmt seinen Pfad auf (GDD 10.3)
 function S.accept_quest(state, pid, ev)
@@ -1040,6 +1070,19 @@ end
 -- Verstohlene ignoriert er (GDD 8.2); Wichtel sind gueltige Ziele
 local function pick_hogger_target(state)
   local h = state.hogger
+  -- Spott (Runde 12, #141): solange er wirkt, ist der Krieger DAS Ziel —
+  -- Verstohlenheit oder Tod des Spoetters heben den Zwang vorzeitig auf
+  if h.taunt then
+    if state.time < h.taunt.until_t then
+      local tp = state.players[h.taunt.pid]
+      if tp and tp.alive and not tp.stealth then
+        return tp, world.dist(tp.x, tp.y, h.x, h.y) <= model.p("melee_range")
+      end
+      h.taunt = nil
+    else
+      h.taunt = nil
+    end
+  end
   local melee_r = model.p("melee_range")
   local best_melee, bm_threat, best_any, ba_threat = nil, -1, nil, -1
   local function consider(e)
@@ -1085,9 +1128,10 @@ local function hogger_try_eat(state, ev)
   local radius = model.p("eat_corpse_radius")
   for i, c in ipairs(state.corpses) do
     if world.dist(c.x, c.y, h.x, h.y) <= radius then
+      -- hitters/dmg_accum sind seit Runde 12 (#140) weg: nur der Tritt
+      -- unterbricht, der Kanal braucht keine Buchhaltung mehr
       h.eating = { phase = "drag", t_left = model.p("eat_drag_duration"),
-                   corpse = i, hitters = {}, hitter_count = 0, dmg_accum = 0,
-                   heal_tick = 1 }
+                   corpse = i, heal_tick = 1 }
       events.push(ev, state.tick, "eat_start", "hogger", nil, nil, nil)
       events.push(ev, state.tick, "eat_drag", "hogger", nil, nil, nil)
       return true

@@ -149,6 +149,7 @@ function M.add_player(state, name, opts)
     threat = 0,
     cast = nil,              -- { slot, t_left, total, target }
     gcd = 0, next_auto = 0, raptor_cd = 0,
+    taunt_cd = 0, kick_cd = 0, -- Spott/Tritt (Runde 12, #140/#141)
     last_cast_t = -1000,
     bleed_t = 0, bleed_next = 0,
     shout_until = 0, seal_hits = 0,
@@ -202,9 +203,10 @@ local function reset_hogger(state)
     threat = {},            -- pid -> Bedrohung
     next_auto = 0, slice_cd = 0, charge_cd = model.p("hogger_charge_cd"),
     eat_cd = 0,
-    eating = nil,           -- { phase = "drag"|"channel", t_left, corpse,
-                            --   hitters = {}, hitter_count, dmg_accum }
+    eating = nil,           -- { phase = "drag"|"channel", t_left, corpse }
+                            -- (Unterbrechung nur per Tritt, Runde 12 #140)
     charge = nil,           -- { target, t_left } (Anlauf/Telegraph)
+    taunt = nil,            -- { pid, until_t } — Spott-Zwang (Runde 12, #141)
     slow_until = 0,
     engaged = false,        -- Try angefangen? (Runde 10, #124)
     no_contact_t = 0,       -- Kein-Kontakt-Uhr (Runde 9, #117)

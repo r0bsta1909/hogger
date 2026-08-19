@@ -24,6 +24,7 @@ local ABILITY_ICON = {
   smite = "ab_smite", heal = "ab_heal", holylight = "ab_holylight",
   seal = "ab_seal", fireball = "ab_fireball", frostarmor = "ab_frostarmor",
   bolt = "ab_bolt", imp = "ab_imp", wrath = "ab_wrath", touch = "ab_touch",
+  taunt = "ab_taunt", kick = "ab_kick", -- Spott/Tritt (Runde 12, #140/#141)
 }
 local ABILITIES = require("game.gamesim.step").ABILITIES
 local ICON_RADIUS = require("game.gamesim.step").ICON_RADIUS
@@ -945,11 +946,15 @@ function R:draw(view, ui)
     end
     if hg.state ~= "reset" then
       hp_bar(x, y + 20, 26, hg.hp / math.max(1, hg.max_hp), 0.85, 0.2, 0.15)
-      -- Unterbrechungszaehler: Pflicht-UI waehrend des Fressens (GDD 9.2)
+      -- Fresskanal: Pflicht-UI (GDD 9.2). Der alte Spieler-Zaehler ("2/4")
+      -- fiel mit Runde 12 (#140) — unterbrechen kann nur noch der
+      -- Schurken-Tritt, also sagt die Zeile genau das
       if hg.eat and hg.eat.phase == "channel" then
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print(string.format("%d/%d", hg.eat.hitters, hg.eat.needed),
-          x - 12, y - 34 * scale - 16)
+        local hint = "Schurke: TRITT!"
+        local font = love.graphics.getFont()
+        love.graphics.print(hint, x - font:getWidth(hint) / 2,
+          y - 34 * scale - 16)
         hp_bar(x, y + 26, 26, hg.eat.progress, 0.9, 0.8, 0.2)
       end
     end
