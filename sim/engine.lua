@@ -652,8 +652,9 @@ function E.run_try(cfg)
     local class = run.agent.initial_class(run, i)
     run.players[i] = make_player(run, "p" .. i, class, false)
   end
-  -- Leeroy: zusaetzlicher Krieger, immer unkoordiniert, zaehlt nicht in N (GDD 17.2)
-  run.players[cfg.n + 1] = make_player(run, "leeroy", "warrior", true)
+  -- Leeroy: zusaetzlicher Paladin (Runde 12, #138), immer unkoordiniert,
+  -- zaehlt nicht in N (GDD 17.2)
+  run.players[cfg.n + 1] = make_player(run, "leeroy", "paladin", true)
 
   -- Streuungsmodell (GDD 17.2 Punkt 5b): Gruppenfaktor je Lauf x Skill je Agent
   local gmin, gmax = model.p("sim_group_factor_min"), model.p("sim_group_factor_max")

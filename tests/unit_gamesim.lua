@@ -253,13 +253,13 @@ do
     if e.ev == "leeroy_line" then lines_said = lines_said + 1 end
     if e.ev == "leeroy_stuck" then stuck = stuck + 1 end
   end
-  T.ok(leeroy_revived, "leeroy: belebt sich als Krieger wieder")
+  T.ok(leeroy_revived, "leeroy: belebt sich als Paladin wieder")
   T.ok(screamed, "leeroy: DER Schrei beim Anmarsch (Zeile 1)")
   T.eq(stuck, 0, "leeroy: kein leeroy_stuck (jedes Vorkommen = Bug-Report)")
   T.ok(lines_said >= 2, "leeroy: Announcer spricht (" .. lines_said .. " Zeilen)")
   local lp = st.players[st.leeroy_pid]
-  T.ok(lp.class == "warrior" or lp.class == nil,
-    "leeroy: immer Krieger (fluchbedingt)")
+  T.ok(lp.class == "paladin" or lp.class == nil,
+    "leeroy: immer Paladin (fluchbedingt, Runde 12 #138)")
   T.ok(lp.race == "mensch" or lp.race == nil, "leeroy: immer Mensch")
 end
 

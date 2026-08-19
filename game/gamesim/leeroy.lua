@@ -3,7 +3,8 @@
 -- liefert je Tick eine Bitmaske wie Tastatur oder Bot. Er weicht nichts aus —
 -- Leeroy ist tapfer, nicht klug. Sein Sterben als meist Erster ist emergent.
 -- Zustaende: WARTEN -> ANMARSCH (mit Schrei) -> KAMPF -> TOT/GEIST ->
--- WIEDERBELEBUNG (immer Mensch-Krieger) -> ANMARSCH ... bis der Fluch bricht.
+-- WIEDERBELEBUNG (immer Mensch-Paladin, Runde 12 #138: der echte Leeroy
+-- Jenkins war Paladin) -> ANMARSCH ... bis der Fluch bricht.
 
 local model = require("sim.model")
 local input = require("game.gamesim.input")
@@ -25,16 +26,6 @@ local function mask_towards(px, py, tx, ty, slack)
     mask = mask + (dy > 0 and input.DOWN or input.UP)
   end
   return mask
-end
-
-local function allies_near(state, p, radius)
-  local k = 0
-  for _, q in ipairs(state.players) do
-    if q.alive and q ~= p and world.dist(p.x, p.y, q.x, q.y) <= radius then
-      k = k + 1
-    end
-  end
-  return k
 end
 
 -- Try-Start-Bedingung (GDD 10.3): Leeroy nimmt seinen Pfad erst auf, wenn
@@ -89,8 +80,8 @@ function L.decide(state, ev)
   local mask = 0
 
   if p.ghost then
-    -- Geisterlauf zum Krieger-Icon (immer Krieger, fluchbedingt; GDD 10.3)
-    local ix, iy = world.class_icon_pos(1)
+    -- Geisterlauf zum Paladin-Icon (immer Paladin, fluchbedingt; GDD 10.3)
+    local ix, iy = world.class_icon_pos(2)
     if world.dist(p.x, p.y, ix, iy) > 20 then
       mask = mask_towards(p.x, p.y, ix, iy, 8)
     end
@@ -132,13 +123,15 @@ function L.decide(state, ev)
       if d > model.p("melee_range") * 0.9 then
         mask = mask_towards(p.x, p.y, h.x, h.y, 6)
       else
-        -- Krieger-Kit (GDD 10.3): Heroischer Stoss bei Wut, Schlachtruf
-        -- bei >= 3 Verbuendeten im Umkreis — sein einziger Gruppenbeitrag
-        if state.tick % 90 == 30 and allies_near(state, p, model.p("warrior_shout_radius")) >= 3
-           and p.resource >= model.p("warrior_shout_rage") then
-          mask = mask + input.AB2
-        elseif state.tick % 30 == 0 then
+        -- Paladin-Kit (GDD 10.3, Runde 12 #138): Siegel der Rechtschaffenheit
+        -- halten, Heiliges Licht auf sich selbst unter halben HP — mehr Plan
+        -- hat er nicht. Slot 1 = Heiliges Licht (Selbst-Fallback ueber sein
+        -- Hogger-Ziel), Slot 2 = Siegel.
+        if state.tick % 90 == 30 and p.hp < 0.5 * p.max_hp
+           and p.resource >= model.p("paladin_holylight_mana") then
           mask = mask + input.AB1
+        elseif state.tick % 30 == 0 and (p.seal_hits or 0) == 0 then
+          mask = mask + input.AB2
         end
       end
     end

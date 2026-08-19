@@ -4,8 +4,8 @@
 -- "koordiniert": zusaetzlich Fress-Fokus (80 % je Kanal), Charge-Ausweichen
 --   60 %, Konvergenz ab Minute 3 zur Zielkomposition.
 -- "turtle": Heil-Maximierer als Anti-Stall-Beweis (GDD 17.2 Punkt 4).
--- Leeroy wird von der Engine als zusaetzlicher Krieger gefuehrt und spielt
--- immer unkoordiniert (Engine markiert ihn mit is_leeroy).
+-- Leeroy wird von der Engine als zusaetzlicher Paladin gefuehrt (Runde 12,
+-- #138) und spielt immer unkoordiniert (Engine markiert ihn mit is_leeroy).
 
 local model = require("sim.model")
 

@@ -20,8 +20,8 @@ local BODY = {
   "Da bist du ja. Nein, steh nicht auf. Du liegst nicht, du bist nur tot. "
     .. "Das legt sich.",
   "Ich bin Leeroy Jenkins. Genauer: das, was von ihm uebrig ist, waehrend er "
-    .. "da vorne schon wieder losrennt. Siehst du ihn? Der Krieger, der gleich "
-    .. "in den Gnoll chargt. Das bin auch ich. Ich sehe mir dabei zu. Seit "
+    .. "da vorne schon wieder losrennt. Siehst du ihn? Der Paladin, der gleich "
+    .. "in den Gnoll rennt. Das bin auch ich. Ich sehe mir dabei zu. Seit "
     .. "Try %d. Ungefaehr. Ich habe aufgehoert zu zaehlen.",
   "Kurzfassung: Hexenmeister, Fluch, dieser Gnoll da hinten. Hogger. Solange "
     .. "der lebt, kommt hier keiner raus. Du uebrigens auch nicht.",
@@ -73,13 +73,13 @@ local NAME_HINT = "2-12 Buchstaben"
 Q.TITLE, Q.GIVER, Q.BODY, Q.GOALS = TITLE, GIVER, BODY, GOALS
 Q.NAME_TAKEN, Q.NAME_PROMPT = NAME_TAKEN, NAME_PROMPT
 
--- Charge des Echos (Issues #61/#73): kurzes Ausholen an der Standposition,
--- dann schneller Anflug bis auf den eigenen Pfeil in der Bildschirmmitte.
--- Rein lokal — in der Welt bewegt sich das Echo nie.
+-- Anflug des Echos (Issues #61/#73; Runde 12 #138: KEINE Charge mehr —
+-- Leeroy ist Paladin, und ein Paladin chargt nicht): das Echo gleitet ohne
+-- Ausholen und ohne Staubfahne bis auf den eigenen Pfeil in der
+-- Bildschirmmitte. Rein lokal — in der Welt bewegt sich das Echo nie.
 local APPROACH_T = 1.1
-local WINDUP = 0.32 -- Anteil der Zeit, in dem es nur ausholt
 
--- skip_approach: beim erneuten Anklicken chargt es nicht noch einmal
+-- skip_approach: beim erneuten Anklicken fliegt es nicht noch einmal an
 function Q.new(prefill, skip_approach)
   return setmetatable({
     state = skip_approach and "open" or "approach", -- approach | open | waiting | done
@@ -309,36 +309,16 @@ function Q:draw_approach(view, w, h, to_screen)
   if view and view.echo and to_screen then
     fx, fy = to_screen(view.echo.x, view.echo.y)
   end
-  local x, y, run
-  if k < WINDUP then
-    -- Ausholen: es steht noch, zittert nur kurz
-    local j = (k / WINDUP)
-    local shake = (1 - j) * 3
-    x = fx + math.sin(self.t * 40) * shake
-    y = fy + math.cos(self.t * 37) * shake * 0.6
-    run = 0
-  else
-    -- Ansturm: schnell los, am Ziel abbremsen
-    run = (k - WINDUP) / (1 - WINDUP)
-    local e = 1 - (1 - run) * (1 - run)
-    x, y = fx + (tx - fx) * e, fy + (ty - fy) * e
-  end
+  -- Gleiten mit Ease-out: geisterhaft, ohne Ausholen, ohne Staub (#138)
+  local run = k
+  local e = 1 - (1 - run) * (1 - run)
+  local x, y = fx + (tx - fx) * e, fy + (ty - fy) * e
   local scale = 1.6 + 1.5 * run
   love.graphics.setColor(0, 0, 0, 0.45 * k)
   love.graphics.rectangle("fill", 0, 0, w, h)
-  -- Staubfahne hinter dem Ansturm
-  if run > 0 then
-    for i = 1, 6 do
-      local t2 = math.max(0, run - i * 0.05)
-      local e2 = 1 - (1 - t2) * (1 - t2)
-      love.graphics.setColor(0.75, 0.85, 1.0, 0.10 * (1 - i / 7))
-      love.graphics.circle("fill", fx + (tx - fx) * e2, fy + (ty - fy) * e2,
-        16 * scale * (1 - i / 9))
-    end
-  end
   love.graphics.setColor(0.75, 0.85, 1.0, 0.25)
   love.graphics.circle("fill", x, y, 22 * scale)
-  assets.draw("icon_warrior", x, y, scale, 0.55 + 0.4 * k)
+  assets.draw("icon_paladin", x, y, scale, 0.55 + 0.4 * k)
   local font = love.graphics.getFont()
   love.graphics.setColor(0.72, 0.86, 0.55, k)
   love.graphics.print(GIVER, x - font:getWidth(GIVER) / 2, y + 26 * scale)
@@ -370,7 +350,7 @@ function Q:draw(view, w, h, to_screen)
   -- Titelleiste: Portrait des Echos, Name, Schliessen-Kreuz
   love.graphics.setColor(0.16, 0.13, 0.09, 1)
   love.graphics.rectangle("fill", px, py, pw, 40, 4, 4)
-  assets.draw("icon_warrior", px + 24, py + 20, 32 / assets.size("icon_warrior"), 0.7)
+  assets.draw("icon_paladin", px + 24, py + 20, 32 / assets.size("icon_paladin"), 0.7)
   love.graphics.setColor(0.72, 0.86, 0.55, 1) -- freundlicher NPC: gruen
   love.graphics.print(GIVER, px + 48, py + 12)
   if self.mode == "lore" then

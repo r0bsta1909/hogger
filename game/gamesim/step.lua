@@ -158,11 +158,11 @@ local function finale_gather(state, ev)
   end
   local lp = state.leeroy_pid and state.players[state.leeroy_pid]
   if lp then
-    local race_idx = revive_as(state, lp, "warrior", "mensch")
+    local race_idx = revive_as(state, lp, "paladin", "mensch")
     lp.quest = 2
     lp.x, lp.y = map.clamp(cx + 46, cy - 62)
     state.merge_from = { x = lp.x, y = lp.y }
-    events.push(ev, state.tick, "revive", lp.id, "warrior", race_idx, nil)
+    events.push(ev, state.tick, "revive", lp.id, "paladin", race_idx, nil)
   end
 end
 
@@ -651,7 +651,7 @@ local function player_tick(state, p, inp, ev)
           events.push(ev, state.tick, "class_change", p.id, class, nil, nil)
         end
         -- Rasse je Wiederbelebung regelkonform ausgewuerfelt (GDD 5), kosmetisch;
-        -- Leeroy ist fluchbedingt immer Mensch-Krieger (GDD 10.3)
+        -- Leeroy ist fluchbedingt immer Mensch-Paladin (GDD 10.3, Runde 12)
         local race = p.is_leeroy and "mensch"
                      or model.roll_race(class, state.rng:next())
         local race_idx = revive_as(state, p, class, race)
