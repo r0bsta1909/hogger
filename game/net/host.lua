@@ -415,6 +415,13 @@ function H:update(dt, local_input)
           local kev = {}
           if step.kick(self.state, pid, kev) then self:_after_step(kev) end
         end
+        -- Bot-Heilung (Runde 12, #143): derselbe Pfad wie die Heil-Leiste
+        if dec.heal then
+          local hev = {}
+          if step.heal_request(self.state, pid, dec.heal, hev) then
+            self:_after_step(hev)
+          end
+        end
         -- Debug-Bots druecken ihren Knopf selbst (GDD Kap. 11); die Sim
         -- laesst die Freigabe ohnehin erst nach Ablauf des Timers zu
         step.release_spirit(self.state, pid)

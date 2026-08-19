@@ -280,6 +280,51 @@ do
   T.ok(not jumped, "bot: springt nie (Runde 12, #142)")
 end
 
+-- Runde 12 (#143): Bot-Heiler heilen wirklich -------------------------------
+do
+  local st = world.new(31)
+  for i = 1, 3 do world.add_player(st, "h" .. i, { quest_done = true }) end
+  world.begin_try(st, {})
+  st.hogger.state = "reset" -- Hogger eingefroren: hier geht es nur ums Heilen
+  local p1, p2, p3 = st.players[1], st.players[2], st.players[3]
+  for _, q in ipairs(st.players) do
+    q.alive, q.ghost = true, false
+    q.class, q.race = "priest", "mensch"
+    q.max_hp, q.hp = model.hp_for_class("priest"), model.hp_for_class("priest")
+    q.resource = model.p("mana_max")
+    q.x, q.y = st.hogger.x + model.p("cast_range") - 20, st.hogger.y
+  end
+  -- Rollen deterministisch aus der pid: 2/3 heilen, jeder dritte nicht
+  T.ok(bot.healer_duty(p1) and bot.healer_duty(p2),
+    "botheiler: zwei Drittel im Heil-Dienst")
+  T.ok(not bot.healer_duty(p3), "botheiler: jeder Dritte bleibt Schadensbot")
+  T.ok(not bot.healer_duty({ id = 1, class = "mage" }),
+    "botheiler: Nicht-Heilerklasse nie im Dienst")
+
+  -- Zielwahl: der Verletzte unter 80 %, der Gesunde nie
+  p2.hp = p2.max_hp * 0.5
+  local t1 = bot.heal_target(st, p1)
+  T.ok(t1 ~= nil and t1.id == 2, "botheiler: Ziel ist der Verletzte")
+  st.tick = 15 * 4 + 1 -- Fenster von pid 1 (tick % 15 == 1)
+  T.eq(bot.decide(st, 1).heal, 2, "botheiler: decide traegt das Heilziel")
+  st.tick = 15 * 4 + 3 -- Fenster von pid 3
+  T.eq(bot.decide(st, 3).heal, nil,
+    "botheiler: der Schadensbot heilt nicht")
+  -- ausser Reichweite faellt das Ziel weg
+  p2.x = p1.x + model.p("heal_range") + 50
+  T.eq(bot.heal_target(st, p1), nil, "botheiler: ausser Heil-Reichweite")
+  p2.x = p1.x
+  p2.hp = p2.max_hp
+  T.eq(bot.heal_target(st, p1), nil, "botheiler: niemand verletzt, kein Ziel")
+
+  -- Integration: die Heilung kommt wirklich an (bot.run treibt alles)
+  p2.hp = p2.max_hp * 0.5
+  local before = p2.hp
+  bot.run(st, 60 * 5)
+  T.ok(p2.hp > before, "botheiler: die Heilung kommt an ("
+    .. string.format("%.0f -> %.0f", before, p2.hp) .. ")")
+end
+
 -- Bot-Volllauf: Invarianten ueber 90 Simulationssekunden --------------------
 local state2 = world.new(7)
 for i = 1, 5 do world.add_player(state2, "bot" .. i, { quest_done = true }) end
