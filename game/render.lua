@@ -197,6 +197,60 @@ function R.sorted_pids(players)
   return pids
 end
 
+-- Karten-Klickziel (Runde 13, #154) — love-frei, EINE Wahrheit fuer
+-- main.lua und die Stufe-1-Tests. Linksklick: naechstes Zentrum im festen
+-- 24-px-Radius, Spieler vor NPC vor Hogger (wie seit Runde 7 — Heiler
+-- brauchen ihre Klickziele). Rechtsklick ist der ANGRIFFSKLICK und
+-- bevorzugt Feinde: Hogger gewinnt jeden Rechtsklick innerhalb seines
+-- Icon-Radius (Manifest-Groesse 48 x scale — sein 121-px-Icon ist breiter
+-- als der ganze Nahkampfkreis, mit dem 24-px-Test lag fast immer ein
+-- Spielerzentrum naeher am Cursor), Mobs innerhalb der ueblichen 24 px;
+-- erst wenn kein Feind trifft, faellt er auf die Linksklick-Wahl zurueck.
+-- Ein toter oder resetteter Hogger ist nie Ziel (war vorher klickbar).
+-- Rueckgabe: ziel_id oder nil, ist_feind.
+function R.pick_target(view, mx, my, to_screen, scale, right_click)
+  local function dist_to(wx, wy)
+    local x, y = to_screen(wx, wy)
+    return math.sqrt((x - mx) ^ 2 + (y - my) ^ 2)
+  end
+  local hg = view.hogger
+  local hogger_ok = hg and (hg.hp or 0) > 0 and hg.state ~= "reset"
+  if right_click then
+    if hogger_ok and dist_to(hg.x, hg.y) <= 48 * scale then
+      return world.HOGGER_ID, true
+    end
+    local best, best_d = nil, 24
+    for nid, npc in pairs(view.npcs or {}) do
+      if npc.kind ~= "imp" then
+        local d = dist_to(npc.x, npc.y)
+        if d < best_d then best, best_d = nid, d end
+      end
+    end
+    if best then return best, true end
+  end
+  local best, best_d, best_enemy = nil, 24, false
+  -- pid-sortiert statt pairs(): der Gleichstands-Fall (exakt gleiche
+  -- Distanz) ist damit auf jedem Rechner derselbe (Runde 7)
+  for _, pid in ipairs(R.sorted_pids(view.players)) do
+    if pid ~= view.me then
+      local p = view.players[pid]
+      local d = dist_to(p.x, p.y)
+      if d < best_d then best, best_d, best_enemy = pid, d, false end
+    end
+  end
+  for nid, npc in pairs(view.npcs or {}) do
+    if npc.kind ~= "imp" then
+      local d = dist_to(npc.x, npc.y)
+      if d < best_d then best, best_d, best_enemy = nid, d, true end
+    end
+  end
+  if hogger_ok then
+    local d = dist_to(hg.x, hg.y)
+    if d < best_d then best, best_d, best_enemy = world.HOGGER_ID, d, true end
+  end
+  return best, best_enemy
+end
+
 -- Raid-Overview (Runde 6, Issue #95): love-freie Zeilenaufbereitung —
 -- wer ist dabei, welche Klasse, lebend/Geist/tot. Sortierung: Lebende,
 -- dann Geister, dann Tote; innerhalb alphabetisch.
@@ -851,8 +905,8 @@ function R:draw(view, ui)
   end
 
   -- Hoggers Icon UNTER den Spielern (Runde 7): das 113-px-Icon verdeckte
-  -- sonst den Nahkampf-Klumpen; Balken, Fresszaehler und Charge-Telegraph
-  -- bleiben weiter oben gezeichnet (GDD 4.1)
+  -- sonst den Nahkampf-Klumpen; Balken, Fresskanal-Text, Charge-Telegraph
+  -- und seit Runde 13 (#154) der Boss-Ring bleiben weiter oben (GDD 4.1)
   local hg = view.hogger
   if hg.state ~= "reset" then
     local x, y = to_screen(hg.x, hg.y)
@@ -897,6 +951,25 @@ function R:draw(view, ui)
         end
       end
     end
+  end
+
+  -- Boss-Ring (Runde 13, #154): Hoggers Icon liegt seit Runde 7 UNTER den
+  -- Spielern — der goldene Umriss liegt OBEN und haelt Position und
+  -- Ausdehnung im Klumpen immer lesbar, ohne einen Nahkaempfer zu
+  -- verdecken. Sein Radius (Manifest 48 x scale) ist zugleich die
+  -- Rechtsklick-Flaeche (R.pick_target). Im Fresskanal pulsiert er im
+  -- Takt des "Schurke: TRITT!"-Texts; nach dem Fluchbruch bleibt er
+  -- gedimmt als Mitte des Schlusskreises liegen.
+  if hg.state ~= "reset" then
+    local x, y = to_screen(hg.x, hg.y)
+    local a = (hg.hp or 0) > 0 and 0.9 or 0.35
+    if hg.eat and hg.eat.phase == "channel" then
+      a = 0.55 + 0.4 * math.sin(love.timer.getTime() * 6)
+    end
+    love.graphics.setColor(0.78, 0.63, 0.28, a)
+    love.graphics.setLineWidth(3)
+    love.graphics.circle("line", x, y, 48 * scale)
+    love.graphics.setLineWidth(1)
   end
 
   -- Fluss-Linie am Suedrand (GDD 7.1)
