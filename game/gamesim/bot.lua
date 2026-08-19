@@ -78,8 +78,9 @@ function M.decide(state, pid)
     if cls == "warlock" and state.tick % 600 == 30 then
       mask = mask + input.AB2 -- Wichtel nachbeschwoeren (wirkt nur ohne Wichtel)
     end
-    -- WoW-Spieler huepfen permanent (GDD 4.1)
-    if state.tick % 90 == 45 then mask = mask + input.JUMP end
+    -- Bots springen NICHT (Runde 12, #142): Springen bricht seit dieser
+    -- Runde Casts ab, und die Dauerhopserei stand den Caster-Bots im Weg.
+    -- Huepfen bleibt den Menschen ueberlassen.
   end
   -- Blickrichtung immer aufs Ziel: seit der Frontbogen-Regel (GDD 8.1)
   -- trifft nur, wer sein Ziel ansieht

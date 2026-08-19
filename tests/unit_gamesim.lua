@@ -263,6 +263,23 @@ do
   T.ok(lp.race == "mensch" or lp.race == nil, "leeroy: immer Mensch")
 end
 
+-- Runde 12 (#142): Bots springen nie — Huepfen gehoert den Menschen ---------
+do
+  local st = world.new(21)
+  world.add_player(st, "b", { quest_done = true })
+  world.begin_try(st, {})
+  local p = st.players[1]
+  p.alive, p.ghost, p.class = true, false, "warrior"
+  p.max_hp, p.hp = model.hp_for_class("warrior"), model.hp_for_class("warrior")
+  p.x, p.y = st.hogger.x + 30, st.hogger.y -- im Nahkampf, wo frueher gehopst wurde
+  local jumped = false
+  for _ = 1, 60 * 5 do
+    st.tick = st.tick + 1
+    if input.has(bot.decide(st, 1).mask, input.JUMP) then jumped = true end
+  end
+  T.ok(not jumped, "bot: springt nie (Runde 12, #142)")
+end
+
 -- Bot-Volllauf: Invarianten ueber 90 Simulationssekunden --------------------
 local state2 = world.new(7)
 for i = 1, 5 do world.add_player(state2, "bot" .. i, { quest_done = true }) end
@@ -289,7 +306,15 @@ for _, p in ipairs(state2.players) do
       "step: Bedrohung Toter geloescht (" .. p.id .. ")")
   end
 end
-T.ok(state2.players[1].jumps > 0, "step: Sprungzaehler zaehlt (GDD 4.1)")
+-- Sprungzaehler direkt per Eingabe: die Bots springen seit Runde 12 (#142)
+-- nicht mehr, der Zaehler muss trotzdem zaehlen
+do
+  local p1 = state2.players[1]
+  if not (p1.alive or p1.ghost) then p1.ghost = true end
+  local before = p1.jumps
+  step.step(state2, { [1] = { mask = input.JUMP, facing = 0 } })
+  T.ok(p1.jumps > before, "step: Sprungzaehler zaehlt (GDD 4.1)")
+end
 
 -- Faehigkeits-Spezifikationen und Klassenkits duerfen nie auseinanderlaufen:
 -- die UI liest den Namen ueber denselben Slot-Index aus model.classes
@@ -1029,6 +1054,19 @@ do
   step.step(st2, { [1] = { mask = input.LEFT, facing = face } })
   T.eq(q2.cast, nil, "cast: Bewegung bricht ab")
   T.eq(q2.gcd, 0, "cast: nach dem Bewegungsabbruch ist die GCD weg")
+
+  -- Springen (Runde 12, #142): der Absprung bricht wie Bewegung ab —
+  -- die Autoattack bleibt an und ihr Takt bleibt unberuehrt
+  local st2b, q2b = caster_world()
+  step.step(st2b, { [1] = { mask = input.AB1, facing = face } })
+  q2b.attack_on = true
+  local auto_before = q2b.next_auto
+  step.step(st2b, { [1] = { mask = input.JUMP, facing = face } })
+  T.eq(q2b.cast, nil, "cast: Springen bricht ab")
+  T.eq(q2b.gcd, 0, "cast: nach dem Sprungabbruch ist die GCD weg")
+  T.ok(q2b.attack_on, "cast: Springen laesst die Autoattack an")
+  T.near(q2b.next_auto, auto_before - model.TICK_DT,
+    "cast: Springen ruehrt den Autoattack-Takt nicht an")
 
   -- Hoggers Charge
   local st3, q3 = caster_world()
