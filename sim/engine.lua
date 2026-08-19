@@ -69,7 +69,7 @@ local function make_player(run, id, class, is_leeroy)
     resource = 0, cp = 0,
     d = HUGE, state = "dead", dead_until = 0,
     gcd_ready = 0, cast = nil, last_cast_t = -1000,
-    next_auto = 0, raptor_ready = 0, kick_ready = 0,
+    next_auto = 0, raptor_ready = 0, kick_ready = 0, loh_used = false,
     threat = 0,
     bleed_until = 0, bleed_next = HUGE,
     shout_until = 0, seal_hits = 0, has_frost_armor = false,
@@ -116,6 +116,7 @@ local function spawn_player(run, p, at_range)
   p.has_frost_armor = (p.class == "mage")
   p.imp_alive = false
   p.want_melee = false -- Stab-Phase (#86) endet mit dem Tod
+  p.loh_used = false -- Handauflegung: einmal PRO LEBEN (Runde 13, #155)
   p.add_idx = nil
   -- Adds fangen fruehe Ankommende ab (1v1), solange welche leben
   for ai = 1, #run.adds do
@@ -246,6 +247,16 @@ local INSTANT = {
     p.last_cast_t = run.t
     return true
   end,
+  -- Handauflegung (Runde 13, #155): heilt das Ziel VOLL, kostet ALLES
+  -- Mana, einmal pro Leben — dieselben Regeln wie in step.lua
+  lay_on_hands = function(run, p, target)
+    if model.p("paladin_loh_enabled") < 1 or p.loh_used then return false end
+    local t = target or p
+    E.heal_player(run, p, t, t.max_hp, "heal")
+    p.resource = 0
+    p.loh_used = true
+    return true
+  end,
   raptor_strike = function(run, p)
     if run.t < p.raptor_ready then return false end
     p.raptor_ready = run.t + model.p("hunter_raptor_cd")
@@ -302,7 +313,7 @@ function E.cast_ability(run, p, id, target)
   if run.t < p.gcd_ready or p.cast then return false end
   local inst = INSTANT[id]
   if inst then
-    if inst(run, p) then
+    if inst(run, p, target) then
       p.gcd_ready = run.t + model.p("gcd")
       return true
     end

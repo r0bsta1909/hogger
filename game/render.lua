@@ -25,8 +25,10 @@ local ABILITY_ICON = {
   seal = "ab_seal", fireball = "ab_fireball", frostarmor = "ab_frostarmor",
   bolt = "ab_bolt", imp = "ab_imp", wrath = "ab_wrath", touch = "ab_touch",
   taunt = "ab_taunt", kick = "ab_kick", -- Spott/Tritt (Runde 12, #140/#141)
+  loh = "ab_loh", -- Handauflegung (Runde 13, #155)
 }
 local ABILITIES = require("game.gamesim.step").ABILITIES
+local ABILITIES_ENABLED = require("game.gamesim.step").ability_enabled
 local ICON_RADIUS = require("game.gamesim.step").ICON_RADIUS
 -- Heilerklassen, abgeleitet aus den Faehigkeiten (Runde 7, eine Wahrheit)
 local ALLY_SLOT = require("game.gamesim.step").ALLY_SLOT
@@ -1433,12 +1435,15 @@ function R:draw(view, ui)
   if me and me.class and me.alive then
     local specs = ABILITIES[me.class] or {}
     local defs = model.classes[me.class].abilities or {}
-    -- Klassen-Slots 1..3. Den frueheren Nahkampf-Button gibt es nicht mehr
+    -- Klassen-Slots 1..4. Den frueheren Nahkampf-Button gibt es nicht mehr
     -- (Runde 12, #145): Rechtsklick aufs Ziel genuegt, die Hinweiszeile
-    -- unterm Ring sagt es
+    -- unterm Ring sagt es. Per F10 abgeschaltete Faehigkeiten (Runde 13)
+    -- verschwinden aus der Leiste — die Tastennummer bleibt am Slot.
     local slots = {}
     for i, spec in ipairs(specs) do
-      slots[#slots + 1] = { spec = spec, def = defs[i], slot = i }
+      if ABILITIES_ENABLED(spec) then
+        slots[#slots + 1] = { spec = spec, def = defs[i], slot = i }
+      end
     end
     local n = #slots
     local BR = 23                       -- Buttonradius

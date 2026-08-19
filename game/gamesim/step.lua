@@ -106,6 +106,7 @@ local function revive_as(state, p, class, race)
   p.alive = true
   p.ghost = false
   p.revive = nil
+  p.loh_used = false -- Handauflegung: einmal PRO LEBEN (Runde 13, #155)
   break_cast(p) -- frisch erwacht heisst auch: keine Rest-GCD (#125)
   p.attack_on = false -- der naechste Anlauf beginnt friedlich (Issue #86)
   p.last_cast_t = -1000
@@ -438,6 +439,17 @@ local ABILITIES = {
       effect = heal_fx("paladin_holylight_heal") },
     { id = "seal", cost = "paladin_seal_mana", target = "self",
       effect = function(_, p) p.seal_hits = model.p("paladin_seal_hits") end },
+    -- Handauflegung (Runde 13, #155): heilt ein Ziel VOLL — die eine
+    -- dramatische Rettung. Anti-OP per Regel statt Zahl: kostet ALLES
+    -- Mana und geht nur einmal pro Leben (Reset in revive_as).
+    { id = "loh", target = "ally", enabled = "paladin_loh_enabled",
+      ready = function(_, p) return not p.loh_used end,
+      effect = function(state, p, target, ev)
+        local t = target or p
+        heal_player(state, p, t, t.max_hp, ev) -- Deckel kappt, Krit egal
+        p.resource = 0
+        p.loh_used = true
+      end },
   },
   hunter = {
     { id = "raptor", cd_field = "raptor_cd", cd = "hunter_raptor_cd",
@@ -517,14 +529,24 @@ S.ABILITIES = ABILITIES -- fuer Renderer (Buttons) und Bots
 
 -- Heilerklassen aus den Faehigkeiten ABGELEITET (eine Wahrheit, Runde 7):
 -- Klasse -> Slot ihres Verbuendeten-Zaubers. Ergibt paladin=1, priest=2,
--- druid=2. announcer.lua fuehrt ein eigenes HEALERS-Set (Require-Zyklus
--- step->announcer verhindert die Ableitung dort); Konsistenz sichert ein
--- Unit-Test.
+-- druid=2. Seit Runde 13 zaehlt der ERSTE ally-Slot (der Paladin hat mit
+-- der Handauflegung einen zweiten — die Heil-Leiste soll weiter Heiliges
+-- Licht wirken, nicht das Einmal-pro-Leben-Ass verbrennen). announcer.lua
+-- fuehrt ein eigenes HEALERS-Set (Require-Zyklus step->announcer
+-- verhindert die Ableitung dort); Konsistenz sichert ein Unit-Test.
 S.ALLY_SLOT = {}
 for class, specs in pairs(ABILITIES) do
   for slot, spec in ipairs(specs) do
-    if spec.target == "ally" then S.ALLY_SLOT[class] = slot end
+    if spec.target == "ally" and not S.ALLY_SLOT[class] then
+      S.ALLY_SLOT[class] = slot
+    end
   end
+end
+
+-- Schalter aus dem F10-Panel (Runde 13): Faehigkeiten mit enabled-Param
+-- lassen sich einzeln abschalten — Button verschwindet, Host verwirft
+function S.ability_enabled(spec)
+  return not spec.enabled or model.p(spec.enabled) >= 1
 end
 
 local function is_mana_class(p)
@@ -556,6 +578,7 @@ end
 local function try_ability(state, p, slot, ev, ally_id)
   local spec = ABILITIES[p.class] and ABILITIES[p.class][slot]
   if not spec then return false end
+  if not S.ability_enabled(spec) then return false end -- F10-Schalter (R13)
   -- Off-GCD-Faehigkeiten (Tritt, Runde 12 #140) ignorieren die globale
   -- Abklingzeit in beide Richtungen: sie warten nicht auf sie und setzen
   -- keine — sonst waere der Unterbrecher im Rotations-Takt gefangen.

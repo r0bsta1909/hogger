@@ -1445,6 +1445,58 @@ do
   T.eq(rogue.kick_cd, 0, "tritt: der Fehlversuch kostet keinen Cooldown")
 end
 
+-- Runde 13 (#155): Handauflegung — voll heilen, alles Mana, einmal/Leben --
+do
+  local st = world.new(41)
+  world.add_player(st, "pala", { quest_done = true })
+  world.add_player(st, "opfer", { quest_done = true })
+  world.begin_try(st, {})
+  local pala, opfer = st.players[1], st.players[2]
+  pala.alive, pala.ghost, pala.class, pala.race = true, false, "paladin", "mensch"
+  pala.max_hp, pala.hp = model.hp_for_class("paladin"), model.hp_for_class("paladin")
+  pala.resource = 80
+  opfer.alive, opfer.ghost, opfer.class = true, false, "warrior"
+  opfer.max_hp, opfer.hp = model.hp_for_class("warrior"), 5
+  -- weit weg von Hogger (kein Aggro), Opfer in Heil-Reichweite
+  pala.x, pala.y = st.hogger.x + 500, st.hogger.y
+  opfer.x, opfer.y = pala.x + 10, pala.y
+  pala.target = opfer.id
+  T.eq(step.ALLY_SLOT.paladin, 1,
+    "loh: Heil-Leiste bleibt beim Heiligen Licht (erster ally-Slot)")
+
+  step.step(st, { [1] = { mask = input.AB3, facing = 0 } })
+  T.eq(opfer.hp, opfer.max_hp, "loh: das Opfer ist VOLL geheilt")
+  T.eq(pala.resource, 0, "loh: kostet alles Mana")
+  T.ok(pala.loh_used, "loh: verbraucht")
+
+  -- zweiter Versuch prallt ab, auch mit vollem Mana und ohne GCD
+  pala.resource = 100
+  pala.gcd = 0
+  opfer.hp = 5
+  step.step(st, { [1] = { mask = 0, facing = 0 } })
+  step.step(st, { [1] = { mask = input.AB3, facing = 0 } })
+  T.eq(opfer.hp, 5, "loh: nur einmal pro Leben")
+
+  -- Wiederbelebung setzt den Verbrauch zurueck (revive_as)
+  T.ok(step.admin_teleport(st, 1), "loh: Teleport belebt wieder")
+  T.ok(not st.players[1].loh_used, "loh: Wiederbelebung setzt zurueck")
+
+  -- F10-Schalter: aus -> derselbe Druck wird verworfen
+  model.params.paladin_loh_enabled.wert = 0
+  pala.class = "paladin" -- der Teleport rotiert die Klasse
+  pala.resource = 100
+  pala.gcd = 0
+  pala.target = opfer.id
+  pala.x, pala.y = opfer.x + 10, opfer.y
+  opfer.hp = 5
+  step.step(st, { [1] = { mask = 0, facing = 0 } })
+  step.step(st, { [1] = { mask = input.AB3, facing = 0 } })
+  T.eq(opfer.hp, 5, "loh: per F10 abgeschaltet -> verworfen")
+  T.ok(not step.ability_enabled(step.ABILITIES.paladin[3]),
+    "loh: ability_enabled meldet den Schalter")
+  model.params.paladin_loh_enabled.wert = 1
+end
+
 -- Runde 12 (#141): Krieger-Spott zwingt Hoggers Ziel -----------------------
 do
   local st, h = reset_world({ n = 2 })

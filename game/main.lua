@@ -929,9 +929,11 @@ function love.keypressed(key)
     -- Sonderfaellen (eine Wahrheit); tot loest nichts aus (Issue #29)
     local slot = tonumber(key)
     local me = app.view and app.view.players[app.view.me]
-    local specs = me and me.alive and me.class
-      and require("game.gamesim.step").ABILITIES[me.class]
+    local step_mod = require("game.gamesim.step")
+    local specs = me and me.alive and me.class and step_mod.ABILITIES[me.class]
     local spec = specs and specs[slot]
+    -- per F10 abgeschaltet (Runde 13): Taste tut nichts, wie der Button
+    if spec and not step_mod.ability_enabled(spec) then spec = nil end
     if spec then
       -- Fehlerzeile im Original-Ton (Issue #56): der Host verwirft den
       -- Versuch stumm, also sagt der Client hier, warum nichts passiert

@@ -47,6 +47,12 @@ local function act_class(run, p, heal_others)
     end
     E.cast_ability(run, p, "heroic_strike")
   elseif class == "paladin" then
+    -- Handauflegung (Runde 13, #155): das Einmal-pro-Leben-Ass fuer den,
+    -- der gleich stirbt — nur der koordinierte Heiler-Paladin zieht es
+    if heal_others and not p.loh_used then
+      local dying = lowest_ally(run, 0.3, false, p)
+      if dying and E.cast_ability(run, p, "lay_on_hands", dying) then return end
+    end
     local target = heal_others and lowest_ally(run, 0.7, false, p)
                    or (hp_pct < 0.5 and p or nil)
     if target and E.cast_ability(run, p, "holy_light", target) then return end
