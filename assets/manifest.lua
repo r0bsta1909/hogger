@@ -69,6 +69,7 @@ return {
   ab_loh        = { form = "quadrat", groesse = 40, farbe = { 1.00, 0.92, 0.60 }, kuerzel = "HA", datei = "ab_loh.png" },
   ab_pws        = { form = "quadrat", groesse = 40, farbe = { 0.85, 0.85, 0.95 }, kuerzel = "MS", datei = "ab_pws.png" },
   ab_feign      = { form = "quadrat", groesse = 40, farbe = { 0.55, 0.55, 0.50 }, kuerzel = "TS", datei = "ab_feign.png" },
+  ab_roots      = { form = "quadrat", groesse = 40, farbe = { 0.40, 0.70, 0.30 }, kuerzel = "GW", datei = "ab_roots.png" },
   ab_sinister   = { form = "quadrat", groesse = 40, farbe = { 0.85, 0.80, 0.35 }, kuerzel = "FS", datei = "ab_sinister.png" },
   ab_evis       = { form = "quadrat", groesse = 40, farbe = { 0.80, 0.30, 0.30 }, kuerzel = "AW", datei = "ab_evis.png" },
   ab_stealth    = { form = "quadrat", groesse = 40, farbe = { 0.45, 0.45, 0.60 }, kuerzel = "VS", datei = "ab_stealth.png" },

@@ -28,6 +28,7 @@ local ABILITY_ICON = {
   loh = "ab_loh", -- Handauflegung (Runde 13, #155)
   pws = "ab_pws", -- Machtwort: Schild (Runde 13, #156)
   feign = "ab_feign", -- Totstellen (Runde 13, #157)
+  roots = "ab_roots", -- Gnarlwurzeln (Runde 13, #158)
 }
 local ABILITIES = require("game.gamesim.step").ABILITIES
 local ABILITIES_ENABLED = require("game.gamesim.step").ability_enabled
@@ -1024,6 +1025,13 @@ function R:draw(view, ui)
   if view.npcs then
     for _, npc in pairs(view.npcs) do
       local x, y = to_screen(npc.x, npc.y)
+      if npc.rooted then
+        -- Gnarlwurzeln (Runde 13, #158): gruener Wurzelgriff um den Mob
+        love.graphics.setColor(0.35, 0.75, 0.25, 0.8)
+        love.graphics.setLineWidth(2)
+        love.graphics.circle("line", x, y, 14 * scale)
+        love.graphics.setLineWidth(1)
+      end
       assets.draw("icon_" .. npc.kind, x, y, scale * 1.8)
       if npc.kind ~= "imp" then
         local maxhp = npc.kind == "add" and model.p("add_hp")

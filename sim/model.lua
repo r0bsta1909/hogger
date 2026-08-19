@@ -188,6 +188,12 @@ M.params = {
   druid_touch_cast       = p(3.0, 0.5, 6.0, 0.1, "8.2"),
   druid_touch_heal       = p(30, 5, 80, 1, "8.2"),
   druid_touch_mana       = p(35, 5, 100, 5, "8.2"),
+  -- Gnarlwurzeln (Runde 13, #158): Mob-/Add-Kontrolle. Hogger ist immun
+  -- (Boss, klassisch), Schaden bricht die Wurzeln.
+  druid_roots_enabled    = p(1, 0, 1, 1, "8.2"),
+  druid_roots_duration   = p(5, 1, 15, 1, "8.2"),
+  druid_roots_cd         = p(15, 5, 60, 1, "8.2"),
+  druid_roots_mana       = p(10, 0, 50, 5, "8.2"),
 
   -- Loop / Todesstrafe (GDD 6, 7.1, 9.3)
   -- Rob-Entscheid Runde 6 (#96): der Respawn-Timer ist FEST — er skaliert
@@ -356,6 +362,8 @@ M.classes = {
     abilities = {
       { id = "wrath", name_de = "Zorn", dmg = "druid_wrath_dmg", cast = "druid_wrath_cast", cost = "druid_wrath_mana" },
       { id = "healing_touch", name_de = "Heilende Beruehrung", heal = "druid_touch_heal", cast = "druid_touch_cast", cost = "druid_touch_mana" },
+      { id = "entangling_roots", name_de = "Gnarlwurzeln", duration = "druid_roots_duration",
+        cd = "druid_roots_cd", cost = "druid_roots_mana", enabled = "druid_roots_enabled" },
     },
   },
 }

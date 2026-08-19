@@ -367,6 +367,7 @@ local function player_damage_npc(state, p, npc, amount, kind, ev)
     amount = amount * (1 + model.p("warrior_shout_bonus"))
   end
   npc.hp = npc.hp - amount
+  npc.rooted_until = 0 -- Schaden bricht die Gnarlwurzeln (Runde 13, #158)
   p.dmg_done = p.dmg_done + amount
   local sp = stat_p(state, p.id)
   if sp then sp.dmg = sp.dmg + amount end
@@ -579,6 +580,23 @@ local ABILITIES = {
       range = "cast_range", target = "enemy", effect = dmg_fx("druid_wrath_dmg") },
     { id = "touch", cost = "druid_touch_mana", cast = "druid_touch_cast",
       target = "ally", effect = heal_fx("druid_touch_heal") },
+    -- Gnarlwurzeln (Runde 13, #158): wurzelt das NPC-Ziel fest — die
+    -- Anmarsch-Sicherung gegen Woelfe und Welpen. Hogger ist immun
+    -- (Boss, klassisch; ready-Gate verbrennt keinen Cooldown), Schaden
+    -- bricht die Wurzeln.
+    { id = "roots", cost = "druid_roots_mana", cd_field = "roots_cd",
+      cd = "druid_roots_cd", range = "cast_range", target = "enemy",
+      enabled = "druid_roots_enabled",
+      ready = function(state, p)
+        local _, etype = current_enemy(state, p)
+        return etype == "npc"
+      end,
+      effect = function(state, p, _, ev)
+        local enemy, etype = current_enemy(state, p)
+        if etype ~= "npc" then return end
+        enemy.rooted_until = state.time + model.p("druid_roots_duration")
+        events.push(ev, state.tick, "root", p.id, enemy.id, nil, nil)
+      end },
   },
 }
 S.ABILITIES = ABILITIES -- fuer Renderer (Buttons) und Bots
@@ -815,6 +833,7 @@ local function player_tick(state, p, inp, ev)
   if (p.taunt_cd or 0) > 0 then p.taunt_cd = p.taunt_cd - DT end
   if (p.kick_cd or 0) > 0 then p.kick_cd = p.kick_cd - DT end
   if (p.feign_cd or 0) > 0 then p.feign_cd = p.feign_cd - DT end
+  if (p.roots_cd or 0) > 0 then p.roots_cd = p.roots_cd - DT end
 
   -- Cast abschliessen; Wegdrehen bricht ihn ab wie Bewegung (GDD 8.1,
   -- Issue #32) — das Ziel muss die ganze Zeit vor einem bleiben
@@ -906,7 +925,11 @@ end
 local function mob_tick(state, npc, ev)
   local typ = npc.kind
   local speed = model.p("move_speed_alive")
+  -- Gnarlwurzeln (Runde 13, #158): gewurzelt bewegt sich nichts — auch
+  -- kein Leash und keine Flucht; zuschlagen darf er, wenn wer danebensteht
+  local rooted = state.time < (npc.rooted_until or 0)
   local function move_towards(tx, ty, spd)
+    if rooted then return end
     local d = world.dist(npc.x, npc.y, tx, ty)
     if d < 2 then return end
     local step_len = math.min((spd or speed) * DT, d)
@@ -938,7 +961,7 @@ local function mob_tick(state, npc, ev)
   end
   if npc.state == "flee" then
     local from = state.players[npc.target_pid]
-    if from then
+    if from and not rooted then
       local dx, dy = npc.x - from.x, npc.y - from.y
       local d = math.max(1, math.sqrt(dx * dx + dy * dy))
       npc.x = npc.x + dx / d * speed * DT
@@ -1023,6 +1046,7 @@ local function add_tick(state, npc, ev)
   end
   local d = world.dist(npc.x, npc.y, target.x, target.y)
   if d > model.p("melee_range") then
+    if state.time < (npc.rooted_until or 0) then return end -- Wurzeln #158
     local step_len = math.min(model.p("move_speed_alive") * DT, d)
     npc.x = npc.x + (target.x - npc.x) / d * step_len
     npc.y = npc.y + (target.y - npc.y) / d * step_len
@@ -1193,6 +1217,7 @@ end
 
 local function hogger_damage_npc(state, npc, amount, ev)
   npc.hp = npc.hp - amount
+  npc.rooted_until = 0 -- Schaden bricht die Gnarlwurzeln (Runde 13, #158)
   events.push(ev, state.tick, "damage", "hogger", npc.id, amount, nil, "autohit")
   if npc.hp <= 0 then
     events.push(ev, state.tick, "add_death", npc.id, nil, nil, nil)
