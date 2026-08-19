@@ -9,6 +9,30 @@ local map = require("game.data.map")
 
 local M = {}
 
+-- Heiler-Rolle (Runde 12, #143): Befund bestaetigt — Bots heilten nur sich
+-- selbst. Jetzt entscheiden sich 2/3 der Heilerklassen-Bots (deterministisch
+-- aus der pid, kein RNG-Kanal), aktiv Verbuendete mit <= 80 % HP in
+-- Heil-Reichweite zu heilen; 1/3 bleibt reiner Schadensbot.
+local HEALER = { paladin = true, priest = true, druid = true }
+function M.healer_duty(p)
+  return (HEALER[p.class or ""] or false) and p.id % 3 ~= 0
+end
+
+-- Bestes Heilziel: niedrigster HP-Anteil unter den lebenden Spielern mit
+-- <= 80 % HP in Heil-Reichweite (sich selbst eingeschlossen); ipairs haelt
+-- die Wahl deterministisch
+function M.heal_target(state, p)
+  local best, best_frac
+  for _, q in ipairs(state.players) do
+    if q.alive and (q.max_hp or 0) > 0 and q.hp <= 0.8 * q.max_hp
+       and world.dist(p.x, p.y, q.x, q.y) <= model.p("heal_range") then
+      local frac = q.hp / q.max_hp
+      if best == nil or frac < best_frac then best, best_frac = q, frac end
+    end
+  end
+  return best
+end
+
 local function move_mask_towards(px, py, tx, ty, slack)
   local mask = 0
   local dx, dy = tx - px, ty - py
@@ -51,26 +75,50 @@ function M.decide(state, pid)
   if CASTER[p.class] and (p.resource or 0) >= 20 then
     range = model.p("cast_range")
   end
+  -- Heiler-Rolle (#143): Priester/Druide halten Zauber-Reichweite zum Boss
+  -- auch ohne Mana (nie in den Cleave); der Paladin heilt aus dem Nahkampf —
+  -- im Klumpen steht er ohnehin mitten in seinen Zielen (heal_range 250)
+  local duty = M.healer_duty(p)
+  if duty and (p.class == "priest" or p.class == "druid") then
+    range = model.p("cast_range")
+  end
 
   local d = world.dist(p.x, p.y, h.x, h.y)
   local mask = 0
   local kick = false
+  local heal_pid = nil
   if d > range * 0.9 then
     mask = move_mask_towards(p.x, p.y, h.x, h.y, 8)
   else
     local low_hp = p.hp < 0.5 * p.max_hp
     local cls = p.class
-    -- Flanken: Bits nur in einzelnen Ticks setzen
+    local needy = duty and M.heal_target(state, p) or nil
+    -- Heiler-Rolle (#143): Heilwunsch nur im Stand (Bewegung braeche den
+    -- Cast sofort wieder ab). Der Wurf geht ueber S.heal_request — derselbe
+    -- Pfad wie die Heil-Leiste; GCD, Mana und Reichweite prueft der Host.
+    -- Leicht entzerrt (alle 15 Ticks je Bot), damit 40 Bots nicht im
+    -- Gleichtakt anfragen.
+    if needy and state.tick % 15 == p.id % 15 then
+      heal_pid = needy.id
+    end
+    -- Flanken: Bits nur in einzelnen Ticks setzen. Heiler im Dienst
+    -- druecken KEINEN Schadens-Cast, solange jemand Heilung braucht.
     if cls == "warrior" or cls == "hunter" or cls == "mage"
-       or cls == "warlock" or cls == "druid" or cls == "rogue" then
+       or cls == "warlock" or cls == "rogue" then
+      if state.tick % 30 == 0 then mask = mask + input.AB1 end
+    end
+    if cls == "druid" and not needy then
       if state.tick % 30 == 0 then mask = mask + input.AB1 end
     end
     if cls == "priest" then
-      if low_hp and state.tick % 30 == 15 then mask = mask + input.AB2
+      if duty then
+        if not needy and state.tick % 30 == 0 then mask = mask + input.AB1 end
+      elseif low_hp and state.tick % 30 == 15 then mask = mask + input.AB2
       elseif state.tick % 30 == 0 then mask = mask + input.AB1 end
     end
     if cls == "paladin" then
-      if low_hp and state.tick % 30 == 15 then mask = mask + input.AB1
+      if not duty and low_hp and state.tick % 30 == 15 then
+        mask = mask + input.AB1
       elseif state.tick % 30 == 0 then mask = mask + input.AB2 end
     end
     if cls == "rogue" and (p.cp or 0) >= 5 and state.tick % 30 == 15 then
@@ -90,10 +138,11 @@ function M.decide(state, pid)
     -- Huepfen bleibt den Menschen ueberlassen.
   end
   -- Blickrichtung immer aufs Ziel: seit der Frontbogen-Regel (GDD 8.1)
-  -- trifft nur, wer sein Ziel ansieht. kick liegt NEBEN der Maske: Slot 4
-  -- hat kein Bit, der Traeger (Host/Testrunner) ruft step.kick auf.
+  -- trifft nur, wer sein Ziel ansieht. kick und heal liegen NEBEN der
+  -- Maske: sie haben kein Bit, der Traeger (Host/Testrunner) ruft
+  -- step.kick bzw. step.heal_request auf.
   return { mask = mask, facing = input.facing_towards(p.x, p.y, h.x, h.y),
-           kick = kick }
+           kick = kick, heal = heal_pid }
 end
 
 -- Bequemer Runner fuer Tests: laeuft n Ticks mit Bots, sammelt Events
@@ -104,8 +153,9 @@ function M.run(state, ticks, evsink)
     for _, p in ipairs(state.players) do
       local dec = M.decide(state, p.id)
       inputs[p.id] = dec
-      -- Tritt wie der Host: vor dem Tick, in Spieler-Reihenfolge (#140)
+      -- Tritt/Heilung wie der Host: vor dem Tick, in Spieler-Reihenfolge
       if dec.kick then step.kick(state, p.id, evsink or {}) end
+      if dec.heal then step.heal_request(state, p.id, dec.heal, evsink or {}) end
     end
     local evs = step.step(state, inputs)
     if evsink then
