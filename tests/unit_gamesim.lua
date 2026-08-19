@@ -1327,8 +1327,7 @@ end
 do -- Fressen pausiert die Uhr seit Runde 10 NICHT mehr (sonst dehnten
   -- Fresskanaele die Frist unvorhersehbar), die kurze Charge schon.
   local st, h = reset_world({ n = 1 })
-  h.eating = { phase = "channel", t_left = 999, corpse = 1,
-               hitters = {}, hitter_count = 0, dmg_accum = 0 }
+  h.eating = { phase = "channel", t_left = 999, corpse = 1, heal_tick = 1 }
   tick_pinned(st, 5)
   T.ok(st.hogger.no_contact_t > 4, "reset: Fressen haelt die Uhr nicht an")
 
@@ -1338,6 +1337,97 @@ do -- Fressen pausiert die Uhr seit Runde 10 NICHT mehr (sonst dehnten
   tick_n(st2, 40)
   T.eq(st2.hogger.no_contact_t, 0, "reset: die Charge pausiert die Uhr")
   T.eq(st2.try_nr, try2, "reset: kein Abbruch waehrend der Charge")
+end
+
+-- Runde 12 (#140): der Schurken-Tritt ist die EINZIGE Fress-Unterbrechung --
+do
+  local st, h = reset_world({ n = 3 })
+  local rogue = st.players[1]
+  rogue.class = "rogue"
+  rogue.max_hp, rogue.hp = model.hp_for_class("rogue"), model.hp_for_class("rogue")
+  rogue.resource = 100
+  rogue.target = world.HOGGER_ID
+
+  -- Schaden vieler verschiedener Spieler unterbricht NICHT mehr
+  h.hp = h.max_hp * 0.5
+  st.corpses[1] = { x = h.x, y = h.y, owner = 3 }
+  h.eating = { phase = "channel", t_left = 999, corpse = 1, heal_tick = 1 }
+  local saw_interrupt = false
+  for _ = 1, 60 do
+    st.hogger.x, st.hogger.y = map.hill.x, map.hill.y
+    for _, q in ipairs(st.players) do
+      q.x, q.y = h.x + 20, h.y
+      q.attack_on = true
+      q.facing = input.facing_towards(q.x, q.y, h.x, h.y)
+    end
+    for _, e in ipairs(step.step(st, {})) do
+      if e.ev == "eat_interrupt" then saw_interrupt = true end
+    end
+  end
+  T.ok(h.eating ~= nil and not saw_interrupt,
+    "tritt: Schaden dreier Spieler unterbricht nicht mehr (#140)")
+
+  -- Nicht-Schurke tritt nicht, Schurke ausser Reichweite auch nicht
+  T.eq(step.kick(st, 2, {}), false, "tritt: Krieger hat keinen Tritt")
+  rogue.x, rogue.y = h.x + 300, h.y
+  rogue.facing = input.facing_towards(rogue.x, rogue.y, h.x, h.y)
+  T.eq(step.kick(st, rogue.id, {}), false, "tritt: ausser Reichweite prallt ab")
+
+  -- In Schlagweite sitzt er: Kanal endet, Cooldowns/Energie/Statistik stimmen
+  rogue.x, rogue.y = h.x + 20, h.y
+  rogue.facing = input.facing_towards(rogue.x, rogue.y, h.x, h.y)
+  local evs = {}
+  T.eq(step.kick(st, rogue.id, evs), true, "tritt: Schurke unterbricht")
+  T.eq(h.eating, nil, "tritt: der Kanal ist beendet")
+  T.near(h.eat_cd, model.p("eat_cd"), "tritt: Fressen geht auf Cooldown")
+  T.near(rogue.kick_cd, model.p("rogue_kick_cd"), "tritt: Tritt geht auf Cooldown")
+  T.near(rogue.resource, 100 - model.p("rogue_kick_energy"),
+    "tritt: kostet Energie")
+  T.eq(rogue.gcd, 0, "tritt: off-GCD wie im Original")
+  local found = nil
+  for _, e in ipairs(evs) do
+    if e.ev == "eat_interrupt" then found = e end
+  end
+  T.ok(found ~= nil and found.dst == rogue.id,
+    "tritt: eat_interrupt nennt den Schurken")
+  T.ok(st.stats.players[rogue.id]
+       and st.stats.players[rogue.id].interrupts == 1,
+    "tritt: Statistik zaehlt den Unterbrecher")
+
+  -- Ohne Fresskanal verpufft nichts: kein Tritt, kein Cooldown-Verlust
+  rogue.kick_cd = 0
+  T.eq(step.kick(st, rogue.id, {}), false, "tritt: ohne Fressen verworfen")
+  T.eq(rogue.kick_cd, 0, "tritt: der Fehlversuch kostet keinen Cooldown")
+end
+
+-- Runde 12 (#141): Krieger-Spott zwingt Hoggers Ziel -----------------------
+do
+  local st, h = reset_world({ n = 2 })
+  local war, tank = st.players[1], st.players[2]
+  war.target = world.HOGGER_ID
+  war.resource = 0 -- Spott kostet keine Wut
+  -- der andere haengt mit hoher Bedrohung im Nahkampf
+  tank.x, tank.y = h.x + 20, h.y
+  h.threat[tank.id] = 500
+  h.threat[war.id] = 1
+  -- der Krieger steht ausserhalb des Nahkampfs, aber in Spott-Reichweite
+  war.x, war.y = h.x + model.p("warrior_taunt_range") - 10, h.y
+  war.facing = input.facing_towards(war.x, war.y, h.x, h.y)
+  step.step(st, { [war.id] = { mask = input.AB3, facing = war.facing } })
+  T.ok(h.taunt ~= nil and h.taunt.pid == war.id, "spott: Zwang sitzt")
+  T.near(war.taunt_cd, model.p("warrior_taunt_cd"), "spott: geht auf Cooldown")
+  local d0 = world.dist(h.x, h.y, war.x, war.y)
+  for _ = 1, 30 do
+    war.x, war.y = h.x + 200, h.y -- der Krieger weicht zurueck: Hogger folgt
+    step.step(st, {})
+  end
+  T.ok(world.dist(h.x, h.y, war.x, war.y) < 200,
+    "spott: Hogger verfolgt den Spoetter statt der hoechsten Bedrohung")
+  -- nach Ablauf der Zwangsdauer faellt der Spott
+  for _ = 1, math.ceil(model.p("warrior_taunt_duration") / model.TICK_DT) do
+    step.step(st, {})
+  end
+  T.eq(h.taunt, nil, "spott: der Zwang laeuft ab")
 end
 
 do -- Leeroy in Schlagweite ist Kontakt (er kaempft ja), aus der Ferne nicht

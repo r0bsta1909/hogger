@@ -69,7 +69,7 @@ local function make_player(run, id, class, is_leeroy)
     resource = 0, cp = 0,
     d = HUGE, state = "dead", dead_until = 0,
     gcd_ready = 0, cast = nil, last_cast_t = -1000,
-    next_auto = 0, raptor_ready = 0,
+    next_auto = 0, raptor_ready = 0, kick_ready = 0,
     threat = 0,
     bleed_until = 0, bleed_next = HUGE,
     shout_until = 0, seal_hits = 0, has_frost_armor = false,
@@ -156,19 +156,8 @@ function E.player_damage_hogger(run, p, amount, kind)
   local tf = p.is_leeroy and model.p("leeroy_threat_factor") or 1
   p.threat = p.threat + model.threat_for(amount, false) * tf
   run.c.dmg_to_hogger = run.c.dmg_to_hogger + amount
-  -- Fress-Unterbrechung: verschiedene Spieler ODER Schadensschwelle (GDD 9.2)
-  if h.eating and h.eating.phase == "channel" then
-    local e = h.eating
-    if not e.hitters[p.id] then
-      e.hitters[p.id] = true
-      e.hitter_count = e.hitter_count + 1
-    end
-    e.dmg_accum = e.dmg_accum + amount
-    if e.hitter_count >= model.eat_interrupters(run.cfg.n)
-       or e.dmg_accum >= model.eat_dmg_threshold(run.cfg.n) then
-      E.interrupt_eat(run, e.hitter_count)
-    end
-  end
+  -- Schaden unterbricht das Fressen NICHT mehr (Runde 12, #140): nur der
+  -- Schurken-Tritt — den modelliert der koordinierte Agent (agents.lua)
   log_ev(run, run.t, "damage", p.id, "hogger", amount, crit)
   -- Wut fuer ausgeteilte Autohits
   if model.classes[p.class].resource == "rage" and kind == "autohit" then
@@ -347,8 +336,9 @@ local function hogger_try_eat(run)
   for i = 1, #run.corpses do
     if run.corpses[i].d <= radius then
       table.remove(run.corpses, i)
-      h.eating = { phase = "drag", ends_at = run.t + model.p("eat_drag_duration"),
-                   hitters = {}, hitter_count = 0, dmg_accum = 0 }
+      -- hitters/dmg_accum sind weg (Runde 12, #140): nur der Tritt
+      -- unterbricht, der Kanal braucht keine Buchhaltung
+      h.eating = { phase = "drag", ends_at = run.t + model.p("eat_drag_duration") }
       run.c.eat_channels = run.c.eat_channels + 1
       log_ev(run, run.t, "eat_start", "hogger", nil, nil, nil)
       return true

@@ -134,6 +134,11 @@ function C:send_heal(pid)
   self:_send(wire.heal_request(pid), CH_RELIABLE, "reliable")
 end
 
+-- Schurken-Tritt (Runde 12, #140): Taste 4 / Button — Host validiert
+function C:send_kick()
+  self:_send(wire.kick(), CH_RELIABLE, "reliable")
+end
+
 function C:send_rename(name)
   if self.connected then self.rename_result = nil end
   self:_send(wire.rename(name), CH_RELIABLE, "reliable")

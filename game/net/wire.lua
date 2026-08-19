@@ -17,6 +17,7 @@ W.MSG = {
   RENAME = 10, RENAME_RESULT = 11, STATS = 12,
   QUEST_ACCEPT = 14, RELEASE_SPIRIT = 15, ENGAGE = 16,
   HEAL_REQUEST = 17,
+  KICK = 18, -- Schurken-Tritt (Runde 12, #140): der einzige Unterbrecher
 }
 
 -- Ereignistypen fuers Netz (Kosmetik-Feed; das JSONL-Log bleibt Host-Sache)
@@ -25,7 +26,7 @@ W.EV = {
   eat_start = 5, eat_drag = 6, eat_tick = 7, eat_interrupt = 8,
   eat_complete = 9, crit_kill = 10, try_start = 11, try_end = 12,
   revive = 13, loot_pickup = 14, mob_kill = 15, mob_death_by = 16, ding = 17,
-  leeroy_line = 18,
+  leeroy_line = 18, taunt = 19,
 }
 W.EV_NAMES = {}
 for name, id in pairs(W.EV) do W.EV_NAMES[id] = name end
@@ -189,6 +190,12 @@ function W.engage()
   return header(W.MSG.ENGAGE)
 end
 
+-- Schurken-Tritt (Runde 12, #140): Client -> Host, kein Payload — der Host
+-- validiert autoritativ ueber denselben try_ability-Pfad (step.S.kick)
+function W.kick()
+  return header(W.MSG.KICK)
+end
+
 -- Klick-Heilung aus der Heil-Leiste (Runde 7, #103): Ziel-Spieler-ID,
 -- reliable. Der Host validiert autoritativ (Heilerklasse, Ziel lebt,
 -- heal_range, GCD/Ressource) und startet den Cast mit explizitem Ziel —
@@ -305,11 +312,12 @@ function W.snapshot_body(state)
     state.n_scale)
   -- Hogger
   local hstate = ({ idle = 0, combat = 1, eating = 2, reset = 3 })[h.state] or 0
+  -- eathit/eatneed sind seit Runde 12 (#140) tote Bytes (der Zaehler fiel
+  -- mit der Spieleranzahl-Unterbrechung); sie bleiben als 0 im Format, kein
+  -- PROTO-Bump (bewusste Politik seit Runde 8)
   local eatphase, eathit, eatneed, eatprog = 0, 0, 0, 0
   if h.eating then
     eatphase = h.eating.phase == "drag" and 1 or 2
-    eathit = h.eating.hitter_count
-    eatneed = model.eat_interrupters(math.max(1, state.n_scale))
     local total = (eatphase == 1) and model.p("eat_drag_duration")
                                     or model.p("eat_channel_duration")
     eatprog = q8(1 - h.eating.t_left / total)

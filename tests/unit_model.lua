@@ -7,24 +7,26 @@ local T = _G.T
 
 -- GDD 9.3: Skalierungstabelle als harte Testfaelle -------------------------
 local table93 = {
-  --  N, HP,    Fressheilung, Unterbrecher, Cleave, Adds, Respawn (GDD 9.3)
+  --  N, HP,    Fressheilung, Cleave, Adds, Respawn (GDD 9.3)
   -- HP = 3xN^2 + 560xN - 1600 (quad-Term seit Runde 6, #96);
-  -- Unterbrecher = max(3; ceil(N/6)+1); Cleave = ceil(N/6);
-  -- Respawn FEST 10 s (Rob-Entscheid Runde 6, #96)
-  { 5,   1275,  153,   3, 1, 0, 10 },
-  { 10,  4300,  516,   3, 2, 1, 10 },
-  { 20, 10800,  1296,  5, 4, 2, 10 },
-  { 40, 25600,  3072,  8, 7, 5, 10 },
+  -- Cleave = ceil(N/6); Respawn FEST 10 s (Rob-Entscheid Runde 6, #96).
+  -- Die Unterbrecher-Spalte fiel mit Runde 12 (#140): unterbrechen kann
+  -- nur noch der Schurken-Tritt, keine Formel mehr.
+  { 5,   1275,  153,   1, 0, 10 },
+  { 10,  4300,  516,   2, 1, 10 },
+  { 20, 10800,  1296,  4, 2, 10 },
+  { 40, 25600,  3072,  7, 5, 10 },
 }
 for _, row in ipairs(table93) do
   local n = row[1]
   T.eq(M.hogger_hp(n), row[2], "9.3 Hogger-HP N=" .. n)
   T.near(M.eat_heal_per_channel(n), row[3], "9.3 Fress-Heilung N=" .. n)
-  T.eq(M.eat_interrupters(n), row[4], "9.3 Unterbrecher N=" .. n)
-  T.eq(M.cleave_targets(n), row[5], "9.3 Cleave-Ziele N=" .. n)
-  T.eq(M.adds(n), row[6], "9.3 Adds N=" .. n)
-  T.near(M.respawn_timer(n), row[7], "9.3 Respawn N=" .. n)
+  T.eq(M.cleave_targets(n), row[4], "9.3 Cleave-Ziele N=" .. n)
+  T.eq(M.adds(n), row[5], "9.3 Adds N=" .. n)
+  T.near(M.respawn_timer(n), row[6], "9.3 Respawn N=" .. n)
 end
+T.eq(M.eat_interrupters, nil,
+  "9.3 Unterbrecher-Formel gestrichen (Runde 12, #140: nur der Tritt)")
 
 -- GDD 9.3: HP-Untergrenze 120 x N unterhalb der Design-Spanne --------------
 T.eq(M.hogger_hp(1), 120, "9.3 HP-Untergrenze N=1 (Solo-Wartelobby)")
@@ -35,9 +37,19 @@ T.eq(M.hogger_hp(4), 688, "9.3 Formel greift ab N=4 (quad-Term, Runde 6)")
 T.eq(M.mob_slots(5), 5, "7.2 Mob-Slots N=5")
 T.eq(M.mob_slots(40), 12, "7.2 Mob-Slots N=40")
 
--- GDD 9.2: Fress-Schadensschwelle 5 % Max-HP (v2.6) ------------------------
-T.near(M.eat_dmg_threshold(10), 215, "9.2 Fress-Schadensschwelle N=10")
-T.near(M.eat_dmg_threshold(40), 1280, "9.2 Fress-Schadensschwelle N=40")
+-- GDD 9.2: die Schadensschwelle ist gestrichen (Runde 12, #140) ------------
+T.eq(M.eat_dmg_threshold, nil, "9.2 Schadensschwelle weg — nur der Tritt")
+T.eq(M.params.eat_dmg_threshold_pct, nil, "9.2 Schwellen-Parameter entfernt")
+T.eq(M.params.eat_interrupt_divisor, nil, "9.3 Unterbrecher-Divisor entfernt")
+T.eq(M.params.eat_interrupt_offset, nil, "9.3 Unterbrecher-Offset entfernt")
+
+-- GDD 8.2: Tritt und Spott (Runde 12, #140/#141) ---------------------------
+T.eq(M.p("rogue_kick_cd"), 10, "8.2 Tritt-Cooldown (Rob-Vorgabe)")
+T.eq(M.p("rogue_kick_energy"), 25, "8.2 Tritt-Energiekosten (Vanilla)")
+T.eq(M.p("warrior_taunt_cd"), 10, "8.2 Spott-Cooldown (Vanilla)")
+T.eq(M.p("warrior_taunt_duration"), 3, "8.2 Spott-Zwangsdauer (Vanilla)")
+T.ok(M.p("warrior_taunt_range") >= M.p("melee_range"),
+  "8.2 Spott reicht mindestens in den Nahkampf")
 
 -- GDD 13.2: Krit-Ausschluesse ----------------------------------------------
 T.ok(M.can_crit("autohit"), "13.2 Autohit kann kritten")
@@ -112,10 +124,10 @@ end
 -- Playtest-Frage "Jaeger hat nur RS?" wird hier maschinell beantwortet:
 -- sein Autoschuss IST Faehigkeit 1 und laeuft automatisch, GDD 8.1)
 local expected_kits = {
-  warrior = { "Heroischer Stoss", "Schlachtruf" },
+  warrior = { "Heroischer Stoss", "Schlachtruf", "Spott" },
   paladin = { "Heiliges Licht", "Siegel der Rechtschaffenheit" },
   hunter  = { "Raptorstoss" },
-  rogue   = { "Finsterer Stoss", "Ausweiden", "Verstohlenheit" },
+  rogue   = { "Finsterer Stoss", "Ausweiden", "Verstohlenheit", "Tritt" },
   priest  = { "Goettliche Pein", "Geringes Heilen" },
   mage    = { "Feuerball", "Frostruestung" },
   warlock = { "Schattenblitz", "Wichtel beschwoeren" },

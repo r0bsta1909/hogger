@@ -59,6 +59,8 @@ return {
   -- Faehigkeiten-Buttons (Ring unten, 40 px, GDD 4.2)
   ab_heroic     = { form = "quadrat", groesse = 40, farbe = { 0.80, 0.35, 0.25 }, kuerzel = "HS", datei = "ab_heroic.png" },
   ab_shout      = { form = "quadrat", groesse = 40, farbe = { 0.90, 0.60, 0.25 }, kuerzel = "SR", datei = "ab_shout.png" },
+  ab_taunt      = { form = "quadrat", groesse = 40, farbe = { 0.78, 0.61, 0.43 }, kuerzel = "SP", datei = "ab_taunt.png" },
+  ab_kick       = { form = "quadrat", groesse = 40, farbe = { 1.00, 0.96, 0.41 }, kuerzel = "TR", datei = "ab_kick.png" },
   ab_raptor     = { form = "quadrat", groesse = 40, farbe = { 0.45, 0.70, 0.30 }, kuerzel = "RS", datei = "ab_raptor.png" },
   ab_smite      = { form = "quadrat", groesse = 40, farbe = { 0.95, 0.90, 0.60 }, kuerzel = "GP", datei = "ab_smite.png" },
   ab_heal       = { form = "quadrat", groesse = 40, farbe = { 0.55, 0.85, 0.55 }, kuerzel = "GH", datei = "ab_heal.png" },
