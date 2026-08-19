@@ -719,19 +719,22 @@ local function player_tick(state, p, inp, ev)
   if input.pressed(mask, p.prev_mask, input.AB2) then p.attack_on = true try_ability(state, p, 2, ev) end
   if input.pressed(mask, p.prev_mask, input.AB3) then p.attack_on = true try_ability(state, p, 3, ev) end
 
-  -- Autoattacks (GDD 8.1, Runde 5 / Issue #86): der Jaeger-Autoschuss ist
-  -- die einzige kostenlose Fernkampf-Autoattack und laeuft automatisch;
-  -- der Nahkampf-Autohit aller anderen muss angeschaltet sein
-  -- (Rechtsklick, Taste 4 oder Faehigkeitsdruck). Nicht aus Verstohlenheit.
+  -- Autoattacks (GDD 8.1, Runde 5 #86 / Runde 12 #145): JEDE Autoattack
+  -- muss angeschaltet sein — Rechtsklick aufs Ziel oder irgendein
+  -- Faehigkeitsdruck, auch der Jaeger-Autoschuss laeuft nicht mehr von
+  -- allein. Der Jaeger wechselt automatisch die Waffe: in Nahkampf-
+  -- Reichweite drischt er (zu nah zum Schiessen), weiter draussen schiesst
+  -- er. Nicht aus Verstohlenheit.
   p.next_auto = p.next_auto - DT
-  if p.next_auto <= 0 and not p.cast and not p.stealth then
+  if p.next_auto <= 0 and not p.cast and not p.stealth and p.attack_on then
     local attack = model.classes[p.class].attack
     if attack == "shot"
-       and enemy_in_reach(state, p, model.p("autoshot_range")) then
-      p.next_auto = model.p("autohit_interval")
-      player_damage_enemy(state, p, model.p("autoshot_dmg"), "autohit", ev)
-    elseif attack == "melee" and p.attack_on
-           and enemy_in_reach(state, p, model.p("melee_range")) then
+       and not enemy_in_reach(state, p, model.p("melee_range")) then
+      if enemy_in_reach(state, p, model.p("autoshot_range")) then
+        p.next_auto = model.p("autohit_interval")
+        player_damage_enemy(state, p, model.p("autoshot_dmg"), "autohit", ev)
+      end
+    elseif enemy_in_reach(state, p, model.p("melee_range")) then
       local dmg = model.p("autohit_melee_dmg")
       if p.seal_hits > 0 then -- Siegel der Rechtschaffenheit (GDD 8.2)
         dmg = dmg + model.p("paladin_seal_bonus_dmg")
@@ -992,9 +995,10 @@ function S.release_spirit(state, pid)
   return true
 end
 
--- Nahkampf anschalten (Issue #86): Rechtsklick auf Hogger/Mob, Taste 4
--- oder der Nahkampf-Knopf. Der Autohit laeuft dann von selbst weiter,
--- bis Tod, Wiederbelebung oder Verstohlenheit ihn abschalten.
+-- Angriff anschalten (Issue #86, seit Runde 12 #145 ohne Button und ohne
+-- Taste 4): Rechtsklick auf Hogger/Mob. Die Autoattack laeuft dann von
+-- selbst weiter (der Jaeger wechselt Schuss/Nahkampf nach Distanz), bis
+-- Tod, Wiederbelebung oder Verstohlenheit sie abschalten.
 function S.engage(state, pid)
   local p = state.players[pid]
   if not p or not p.alive then return false end

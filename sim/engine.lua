@@ -587,7 +587,16 @@ local function player_tick(run, p, dt)
     if not p.alive then return end
   end
 
-  -- Autohit / Autoschuss / Zauberstab (Agent darf unterdruecken, z. B. Turtle)
+  -- Autohit / Autoschuss (Agent darf unterdruecken, z. B. Turtle). Die
+  -- Sim-Agenten schalten ihre Autoattack per Definition an (im Spiel seit
+  -- Runde 12, #145: Rechtsklick — auch fuer den Autoschuss). Der Jaeger
+  -- schiesst hier BEWUSST weiter aus jeder Distanz, obwohl das Spiel in
+  -- Nahkampf-Reichweite auf den 2-Schaden-Autohit wechselt: der Schuss aus
+  -- der Nahzone ist der Proxy fuer "tritt in 0,3 s heraus und schiesst
+  -- weiter" (140 px/s gegen 20 px Weg). Beide 1D-Alternativen wurden
+  -- gemessen und verworfen (17.9): dauerhaft steckenbleiben halbiert die
+  -- Jaeger-DPS (F1 N=40 auf 59 %), echtes Heraustreten zerruettet die
+  -- Relokations-Geometrie (F1 auf 94-100 %, F2 auf 39 %).
   if not p.cast and run.t >= p.next_auto
      and not (run.agent.no_auto and run.agent.no_auto(run, p)) then
     local attack = model.classes[p.class].attack
