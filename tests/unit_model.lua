@@ -8,14 +8,15 @@ local T = _G.T
 -- GDD 9.3: Skalierungstabelle als harte Testfaelle -------------------------
 local table93 = {
   --  N, HP,    Fressheilung, Cleave, Adds, Respawn (GDD 9.3)
-  -- HP = 3xN^2 + 560xN - 1600 (quad-Term seit Runde 6, #96);
-  -- Cleave = ceil(N/6); Respawn FEST 10 s (Rob-Entscheid Runde 6, #96).
-  -- Die Unterbrecher-Spalte fiel mit Runde 12 (#140): unterbrechen kann
-  -- nur noch der Schurken-Tritt, keine Formel mehr.
-  { 5,   1275,  153,   1, 0, 10 },
-  { 10,  4300,  516,   2, 1, 10 },
-  { 20, 10800,  1296,  4, 2, 10 },
-  { 40, 25600,  3072,  7, 5, 10 },
+  -- HP = 3xN^2 + 620xN - 1600 (quad-Term seit Runde 6, #96; slope
+  -- 560 -> 620 in Runde 13 als Ausgleich fuer die fuenf neuen
+  -- Klassen-Faehigkeiten); Cleave = ceil(N/6); Respawn FEST 10 s
+  -- (Rob-Entscheid Runde 6, #96). Die Unterbrecher-Spalte fiel mit
+  -- Runde 12 (#140): unterbrechen kann nur noch der Schurken-Tritt.
+  { 5,   1575,  189,   1, 0, 10 },
+  { 10,  4900,  588,   2, 1, 10 },
+  { 20, 12000,  1440,  4, 2, 10 },
+  { 40, 28000,  3360,  7, 5, 10 },
 }
 for _, row in ipairs(table93) do
   local n = row[1]
@@ -31,7 +32,7 @@ T.eq(M.eat_interrupters, nil,
 -- GDD 9.3: HP-Untergrenze 120 x N unterhalb der Design-Spanne --------------
 T.eq(M.hogger_hp(1), 120, "9.3 HP-Untergrenze N=1 (Solo-Wartelobby)")
 T.eq(M.hogger_hp(2), 240, "9.3 HP-Untergrenze N=2")
-T.eq(M.hogger_hp(4), 688, "9.3 Formel greift ab N=4 (quad-Term, Runde 6)")
+T.eq(M.hogger_hp(4), 928, "9.3 Formel greift ab N=4 (slope 620, Runde 13)")
 
 -- GDD 7.2: Mob-Slots -------------------------------------------------------
 T.eq(M.mob_slots(5), 5, "7.2 Mob-Slots N=5")

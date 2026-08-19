@@ -26,7 +26,11 @@ M.params = {
   -- #96): der Sockel bildet den Kleingruppen-Overhead ab, der quad-Term
   -- ersetzt die gestrichene N-Skalierung der Todesstrafe
   hogger_hp_quad         = p(3.0, 0, 20, 0.5, "9.3"),
-  hogger_hp_slope        = p(560, 100, 800, 10, "9.3"),
+  -- slope 560 -> 620 in Runde 13 (#155-#159): die fuenf neuen Klassen-
+  -- Faehigkeiten (Handauflegung, Schild, Totstellen, Wurzeln, Blutpakt)
+  -- hoben koordinierte Siege auf 98/95/87 % — der Aufschlag holt F1
+  -- zurueck ins Band (Grid + Endsweep in GDD 17.9)
+  hogger_hp_slope        = p(620, 100, 800, 10, "9.3"),
   -- Historie: Offset 950 -> 850 in Runde 5 (#86, Zauberstab-Aus); Runde 6
   -- (#96) fixer Respawn -> quad-Term neu, slope/offset nachkalibriert.
   -- F1-F6-Belege: Sweeps in GDD 17.9.
