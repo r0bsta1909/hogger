@@ -474,9 +474,12 @@ end
 -- laeuft zusaetzlich als Einblendung — Rob will beides.
 R.BUBBLE_WRAP = 260 -- Textbreite; darunter wird der laengste Satz vierzeilig
 R.BUBBLE_PAD = 10
-function R:bubble(text, dur)
+-- anchor: nil = Echo (Monolog der Endsequenz), "leeroy" = der rennende
+-- Raid-Leeroy (DER Schrei, Runde 12 #144 — er schreit, nicht das Echo)
+function R:bubble(text, dur, anchor)
   self.bubble_text = text
   self.bubble_t = dur or 3
+  self.bubble_anchor = anchor
 end
 
 function R:add_shake(amount)
@@ -1500,11 +1503,19 @@ function R:draw(view, ui)
       L.ox - font:getWidth(self.banner_text) / 2 * 2, by, 0, 2, 2)
   end
 
-  -- Sprechblase am Icon des Echos (Endsequenz, GDD 11 / #132): der Monolog
-  -- gehoert zur verschmolzenen Figur, also haengt er an ihr und nicht am
-  -- Bildschirmrand. Sie steht dabei still, ein Zipfel genuegt.
-  if (self.bubble_t or 0) > 0 and self.bubble_text and view.echo then
-    local bx, by = to_screen(view.echo.x, view.echo.y)
+  -- Sprechblase am Icon des Echos (Endsequenz, GDD 11 / #132) ODER am
+  -- rennenden Raid-Leeroy (DER Schrei, Runde 12 #144): der Monolog gehoert
+  -- zur verschmolzenen Figur, der Schrei der Figur, die gerade losrennt.
+  local anchor_x, anchor_y
+  if self.bubble_anchor == "leeroy" then
+    for _, p in pairs(view.players) do
+      if p.is_leeroy then anchor_x, anchor_y = p.x, p.y break end
+    end
+  elseif view.echo then
+    anchor_x, anchor_y = view.echo.x, view.echo.y
+  end
+  if (self.bubble_t or 0) > 0 and self.bubble_text and anchor_x then
+    local bx, by = to_screen(anchor_x, anchor_y)
     local font = love.graphics.getFont()
     local wrap = R.BUBBLE_WRAP
     local _, lines = font:getWrap(self.bubble_text, wrap)

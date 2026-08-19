@@ -80,6 +80,14 @@ function L.decide(state, ev)
   local mask = 0
 
   if p.ghost then
+    -- Vor der allerersten Freigabe (erste angenommene Quest, GDD 10.3) steht
+    -- er als sichtbarer Geist auf dem Friedhof neben dem Echo (Runde 12,
+    -- #139): kein stilles Vorab-Erwachen und kein erster Tod, bevor
+    -- ueberhaupt jemand losgelaufen ist — sonst ist der Kein-Kontakt-Abbruch
+    -- des ersten Trys durch, bevor ihn je ein Spieler gesehen hat.
+    if not L.may_march(state) then
+      return { mask = 0, facing = p.facing }
+    end
     -- Geisterlauf zum Paladin-Icon (immer Paladin, fluchbedingt; GDD 10.3)
     local ix, iy = world.class_icon_pos(2)
     if world.dist(p.x, p.y, ix, iy) > 20 then
