@@ -282,11 +282,23 @@ local function player_damage_hogger(state, p, amount, kind, ev)
   end
 end
 
+-- Effektive Maximal-HP (Runde 13, #159): der Blutpakt des Wichtels hebt
+-- den Deckel um warlock_pact_hp_pct, solange der Spieler in der Aura
+-- steht (p.pact pflegt pact_tick je Tick). EINE Wahrheit fuer Heil-Deckel
+-- und Handauflegung; der Client rechnet dieselbe Formel aus dem
+-- Snapshot-Flag und den synchronen Params.
+function S.effective_max_hp(p)
+  if p.pact then
+    return p.max_hp * (1 + model.p("warlock_pact_hp_pct"))
+  end
+  return p.max_hp
+end
+
 local function heal_player(state, src, dst, amount, ev)
   if not dst.alive then return end
   local crit = crit_roll(state, "player", "heal")
   if crit then amount = amount * model.p("crit_mult_player") end
-  local effective = math.min(amount, dst.max_hp - dst.hp)
+  local effective = math.min(amount, S.effective_max_hp(dst) - dst.hp)
   dst.hp = dst.hp + effective
   src.heal_done = src.heal_done + effective
   src.last_heal_t = state.time -- fuer den Heal-Aggro-Kommentar (GDD 10.4)
@@ -466,7 +478,9 @@ local ABILITIES = {
       ready = function(_, p) return not p.loh_used end,
       effect = function(state, p, target, ev)
         local t = target or p
-        heal_player(state, p, t, t.max_hp, ev) -- Deckel kappt, Krit egal
+        -- volle effektive Max-HP (inkl. Blutpakt-Deckel, #159); der
+        -- Heil-Deckel kappt, ein Krit aendert nichts
+        heal_player(state, p, t, S.effective_max_hp(t), ev)
         p.resource = 0
         p.loh_used = true
       end },
@@ -1101,6 +1115,38 @@ local function each_npc(state, fn)
   end
 end
 
+-- Blutpakt (Runde 13, #159): jeder lebende Wichtel traegt eine Aura mit
+-- warlock_pact_radius — wer drinsteht, bekommt warlock_pact_hp_pct mehr
+-- Maximal-HP (effective_max_hp). Kein Gratis-Heil: beim Betreten steigt
+-- nur der Deckel; beim Verlassen (oder Abschalten per F10) klemmt er die
+-- ueberschuessigen HP wieder auf das Basis-Maximum.
+local function pact_tick(state)
+  local enabled = model.p("warlock_pact_enabled") >= 1
+  local imps = {}
+  if enabled then
+    for id = world.NPC_ID_BASE, 250 do
+      local npc = state.npcs[id]
+      if npc and npc.kind == "imp" then imps[#imps + 1] = npc end
+    end
+  end
+  local r = model.p("warlock_pact_radius")
+  for _, p in ipairs(state.players) do
+    local inside = false
+    if p.alive and enabled then
+      for _, imp in ipairs(imps) do
+        if world.dist(p.x, p.y, imp.x, imp.y) <= r then
+          inside = true
+          break
+        end
+      end
+    end
+    if p.pact and not inside and p.alive then
+      p.hp = math.min(p.hp, p.max_hp)
+    end
+    p.pact = inside
+  end
+end
+
 -- ---------------------------------------------------------------------------
 -- Das Echo von Leeroy Jenkins (GDD 10.1): Questgeber am Friedhof.
 -- Es greift nie in den Kampf ein — es steht da, gibt die Quest und sieht zu,
@@ -1673,6 +1719,8 @@ function S.step(state, inputs)
   if state.leeroy_pid then
     inputs[state.leeroy_pid] = require("game.gamesim.leeroy").decide(state, ev)
   end
+
+  pact_tick(state) -- Blutpakt-Aura pflegen (Runde 13, #159)
 
   for _, p in ipairs(state.players) do
     player_tick(state, p, inputs[p.id], ev)

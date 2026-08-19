@@ -55,6 +55,16 @@ local AUTO_DE = {
 }
 local RES_DE = { mana = "Mana", rage = "Wut", energy = "Energie" }
 
+-- Effektive Maximal-HP eines Snapshot-Spielers (Runde 13, #159): der
+-- Blutpakt hebt den Deckel um warlock_pact_hp_pct — der Client rechnet
+-- dieselbe Formel wie step.effective_max_hp aus dem flags3-Bit und den
+-- synchronen Params (WELCOME/PARAM_SET), eine Wahrheit, kein Extra-Byte.
+local function client_max_hp(p)
+  local base = p.class and model.hp_for_class(p.class) or 0
+  if p.pact then base = base * (1 + model.p("warlock_pact_hp_pct")) end
+  return base
+end
+
 -- Buffs und Debuffs mit Tooltip (GDD 4.3/8.2/9.2, Issue #65). Die Zahlen
 -- kommen aus model.lua, damit Anzeige und Wirkung nie auseinanderlaufen.
 local AURA = {
@@ -91,6 +101,12 @@ local AURA = {
       return { string.format("Absorbiert die naechsten %d Schaden",
                  model.p("priest_pws_absorb")),
                string.format("Haelt %d s", model.p("priest_pws_duration")) }
+    end },
+  pact = { kuerzel = "BP", name = "Blutpakt", debuff = false,
+    text = function()
+      return { string.format("+%d %% Maximal-HP, solange du im",
+                 model.p("warlock_pact_hp_pct") * 100),
+               "Umkreis eines lebenden Wichtels stehst" }
     end },
   weak_soul = { kuerzel = "SS", name = "Schwache Seele", debuff = true,
     text = function()
@@ -280,7 +296,7 @@ function R.raid_rows(view)
     if p.alive then
       status = "lebend"
       alive_n = alive_n + 1
-      local maxhp = p.class and model.hp_for_class(p.class) or 0
+      local maxhp = client_max_hp(p)
       detail = maxhp > 0
         and math.floor((p.hp or 0) / maxhp * 100 + 0.5) or nil
     elseif p.ghost then
@@ -380,7 +396,7 @@ function R.heal_rows(view, heal_range, max_rows)
   local me = view.players[view.me]
   if not (me and me.alive) then return rows, 0 end
   local function pct(p)
-    local maxhp = p.class and model.hp_for_class(p.class) or 0
+    local maxhp = client_max_hp(p)
     return maxhp > 0 and math.floor((p.hp or 0) / maxhp * 100 + 0.5) or 0
   end
   rows[1] = { pid = view.me, name = names[view.me] or ("#" .. tostring(view.me)),
@@ -685,6 +701,7 @@ local function aura_list(p)
   if p.frost_armor then auras[#auras + 1] = { AURA.frost } end
   if p.stealth then auras[#auras + 1] = { AURA.stealth } end
   if p.shielded then auras[#auras + 1] = { AURA.pws } end
+  if p.pact then auras[#auras + 1] = { AURA.pact } end
   if p.weak_soul and not p.shielded then
     auras[#auras + 1] = { AURA.weak_soul } -- erst sichtbar, wenn der Schild weg ist
   end
@@ -977,8 +994,7 @@ function R:draw(view, ui)
             love.graphics.circle("fill", x, y, 8 * scale * 1.8)
           end
           if p.alive and p.class then
-            local maxhp = model.hp_for_class(p.class)
-            hp_bar(x, y + 14, 16, p.hp / maxhp, 0.2, 0.8, 0.2)
+            hp_bar(x, y + 14, 16, p.hp / client_max_hp(p), 0.2, 0.8, 0.2)
           end
         end
       end
@@ -1025,6 +1041,12 @@ function R:draw(view, ui)
   if view.npcs then
     for _, npc in pairs(view.npcs) do
       local x, y = to_screen(npc.x, npc.y)
+      if npc.kind == "imp" and model.p("warlock_pact_enabled") >= 1 then
+        -- Blutpakt-Aura (Runde 13, #159): dezenter Schein um den Wichtel
+        love.graphics.setColor(0.75, 0.35, 0.85, 0.06)
+        love.graphics.circle("fill", x, y,
+          model.p("warlock_pact_radius") * scale)
+      end
       if npc.rooted then
         -- Gnarlwurzeln (Runde 13, #158): gruener Wurzelgriff um den Mob
         love.graphics.setColor(0.35, 0.75, 0.25, 0.8)
@@ -1294,7 +1316,7 @@ function R:draw(view, ui)
       ring_col = me.class and CLASS_COL[me.class] or nil,
       sub = cls and cls.name_de or (me.alive and "?" or "Geist"),
       level = 1, hp = me.hp or 0,
-      maxhp = me.class and model.hp_for_class(me.class) or 0,
+      maxhp = client_max_hp(me),
       res_frac = cls and (me.resource or 0) / 100 or nil,
       res_col = cls and RES_COL[cls.resource],
       res_txt = cls and RES_DE[cls.resource],
@@ -1336,7 +1358,7 @@ function R:draw(view, ui)
                 icon = q.class and CLASS_ICON[q.class] or nil,
                 ring_col = q.class and CLASS_COL[q.class] or nil,
                 sub = qc and qc.name_de or "Geist",
-                hp = q.hp, maxhp = q.class and model.hp_for_class(q.class) or 1,
+                hp = q.hp, maxhp = math.max(1, client_max_hp(q)),
                 res_frac = qc and (q.resource or 0) / 100 or nil,
                 res_col = qc and RES_COL[qc.resource],
                 res_txt = qc and RES_DE[qc.resource],
