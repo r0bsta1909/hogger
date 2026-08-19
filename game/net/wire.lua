@@ -394,13 +394,23 @@ function W.snapshot_body(state)
     end
     local shout_rest = math.max(0, math.min(255,
       math.floor((p.shout_until or 0) - state.time + 0.5)))
-    parts[#parts + 1] = pack("<BBBBBBI2I2I2BBBBBI2I2I2",
+    -- flags3 (Runde 13): Schild/Handauflegung/Totstellen/Blutpakt —
+    -- Snapshot-Erweiterung ohne PROTO-Bump ist bewusste Politik (Runde 8)
+    local flags3 = 0
+    if (p.shield_hp or 0) > 0 and state.time < (p.shield_until or 0) then
+      flags3 = flags3 + 1
+    end
+    if p.loh_used then flags3 = flags3 + 2 end
+    if state.time < (p.feign_until or 0) then flags3 = flags3 + 4 end
+    if p.pact then flags3 = flags3 + 8 end
+    if state.time < (p.weak_soul_until or 0) then flags3 = flags3 + 16 end
+    parts[#parts + 1] = pack("<BBBBBBI2I2I2BBBBBI2I2I2B",
       p.id, flags, CLASS_IDX[p.class] or 0, race_idx, flags2, p.cp or 0,
       q16(p.x), q16(p.y), math.max(0, math.floor(p.hp + 0.5)),
       q8((p.resource or 0) / 100), p.facing or 0,
       p.target or 255, prog, shout_rest,
       math.min(65535, p.xp or 0), math.min(65535, p.kupfer or 0),
-      math.min(65535, p.plunder or 0))
+      math.min(65535, p.plunder or 0), flags3)
   end
   -- NPCs (Wichtel; ab M3-2 Mobs/Adds)
   local npc_ids = {}
@@ -473,9 +483,9 @@ function W.read_snapshot(data, off)
   pcount, off = love.data.unpack("<B", data, off)
   s.players = {}
   for _ = 1, pcount do
-    local pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, pshout, pxp, pku, ppl
-    pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, pshout, pxp, pku, ppl, off =
-      love.data.unpack("<BBBBBBI2I2I2BBBBBI2I2I2", data, off)
+    local pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, pshout, pxp, pku, ppl, flags3
+    pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, pshout, pxp, pku, ppl, flags3, off =
+      love.data.unpack("<BBBBBBI2I2I2BBBBBI2I2I2B", data, off)
     s.players[pid] = {
       id = pid,
       alive = flags % 2 >= 1,
@@ -493,6 +503,12 @@ function W.read_snapshot(data, off)
       frost_armor = flags2 % 16 >= 8,
       cast_slot = math.floor(flags2 / 16) % 4, -- 0 = kein Cast
       quest = math.floor(flags2 / 64) % 4,
+      -- flags3 (Runde 13): neue Klassen-Faehigkeiten
+      shielded = flags3 % 2 >= 1,        -- Machtwort: Schild (#156)
+      loh_used = flags3 % 4 >= 2,        -- Handauflegung verbraucht (#155)
+      feigning = flags3 % 8 >= 4,        -- Totstellen (#157)
+      pact = flags3 % 16 >= 8,           -- Blutpakt-Aura (#159)
+      weak_soul = flags3 % 32 >= 16,     -- Schwache Seele (#156)
       cp = cp,
       x = px, y = py, hp = php, resource = pres / 255 * 100,
       facing = pfacing, target = ptarget, progress = pprog / 255,

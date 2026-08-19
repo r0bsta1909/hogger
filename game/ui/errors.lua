@@ -18,6 +18,7 @@ E.NOT_READY = "Das ist noch nicht bereit."
 E.NO_CP = "Keine Combopunkte."
 E.NOT_EATING = "Hogger frisst gerade nicht."
 E.ONCE_PER_LIFE = "Das geht nur einmal pro Leben."
+E.WEAK_SOUL = "Schwache Seele."
 
 -- me: eigener Spieler aus der Sicht; spec: Faehigkeits-Spezifikation;
 -- ctx: { x, y, facing, cooldown, hogger = {x,y,hp,state}, npcs = {},
@@ -42,11 +43,19 @@ function E.check(me, spec, ctx)
     local a = ctx.ally_target
     if not a and ctx.players then
       local t = ctx.players[me.target]
-      if t then a = { x = t.x, y = t.y, alive = t.alive, is_self = false } end
+      if t then a = { x = t.x, y = t.y, alive = t.alive, is_self = false,
+                      weak_soul = t.weak_soul } end
     end
     if a and a.alive and not a.is_self
        and world.dist(ctx.x, ctx.y, a.x, a.y) > model.p("heal_range") then
       return E.TOO_FAR
+    end
+    -- Machtwort: Schild (Runde 13, #156): Schwache Seele blockt das Ziel;
+    -- ohne Spieler-Ziel gilt die eigene Seele (Selbst-Fallback)
+    if spec.id == "pws" then
+      local soul = a and a.alive and a.weak_soul
+      if a == nil or not a.alive then soul = me.weak_soul end
+      if soul then return E.WEAK_SOUL end
     end
     return nil
   end

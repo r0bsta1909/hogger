@@ -156,6 +156,14 @@ M.params = {
   priest_heal_cast       = p(2.0, 0.5, 4.0, 0.1, "8.2"),
   priest_heal_amount     = p(20, 5, 60, 1, "8.2"),
   priest_heal_mana       = p(25, 5, 100, 5, "8.2"),
+  -- Machtwort: Schild (Runde 13, #156): der einzige Schadens-VERHINDERER.
+  -- Absorb 20 liegt bewusst UNTER einem Hogger-Autohit (30); Schwache
+  -- Seele drosselt dasselbe Ziel.
+  priest_pws_enabled     = p(1, 0, 1, 1, "8.2"),
+  priest_pws_absorb      = p(20, 5, 60, 1, "8.2"),
+  priest_pws_duration    = p(10, 3, 30, 1, "8.2"),
+  priest_pws_weaksoul    = p(15, 5, 60, 1, "8.2"),
+  priest_pws_mana        = p(30, 5, 100, 5, "8.2"),
   mage_fireball_cast     = p(2.5, 0.5, 5.0, 0.1, "8.2"),
   mage_fireball_dmg      = p(11, 1, 30, 1, "8.2"),
   mage_fireball_mana     = p(30, 5, 100, 5, "8.2"),
@@ -315,6 +323,8 @@ M.classes = {
     abilities = {
       { id = "smite", name_de = "Goettliche Pein", dmg = "priest_smite_dmg", cast = "priest_smite_cast", cost = "priest_smite_mana" },
       { id = "lesser_heal", name_de = "Geringes Heilen", heal = "priest_heal_amount", cast = "priest_heal_cast", cost = "priest_heal_mana" },
+      { id = "power_word_shield", name_de = "Machtwort: Schild", absorb = "priest_pws_absorb",
+        duration = "priest_pws_duration", cost = "priest_pws_mana", enabled = "priest_pws_enabled" },
     },
   },
   mage = {
