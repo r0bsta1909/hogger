@@ -36,7 +36,36 @@ function M.parse(line)
     val = tonumber(line:match('"val":(-?[%d%.eE+-]+)')),
     crit = line:match('"crit":(%a+)') == "true",
     art = line:match('"art":"([^"]*)"'),
+    -- Grund des Try-Endes (Runde 17, GDD 17.3). Aeltere Logs haben das Feld
+    -- nicht — dann bleibt es nil und wir raten hoechstens, sichtbar.
+    reason = line:match('"reason":"([^"]*)"'),
   }
+end
+
+-- Ausgang eines Trys in Klartext. Zweiter Rueckgabewert sagt, ob der Grund
+-- im Log STAND oder nur erschlossen wurde. Ein Bericht, der "Zeit abgelaufen"
+-- behauptet, wo er es nur vermutet, ist schlimmer als "unbekannt".
+M.REASON_DE = {
+  win        = "Sieg",
+  wipe       = "Abbruch: alle tot",
+  no_contact = "Abbruch: niemand am Boss",
+  timeout    = "Zeit abgelaufen",
+}
+
+function M.outcome(t, params)
+  if t.won then return "Sieg", false end
+  if t.reason then return M.REASON_DE[t.reason] or t.reason, false end
+  -- Altlog ohne Grund: der Reset trug seine Ursache schon immer mit sich
+  if t.reset then
+    return M.REASON_DE[t.reset] or ("Abbruch: " .. tostring(t.reset)), false
+  end
+  -- Kein Reset-Ereignis und kein Grund: dann war es das Zeitlimit — aber das
+  -- ist ein Schluss aus der Dauer, kein Protokolleintrag.
+  local limit = params and params.try_time_limit
+  if limit and t.dauer and t.dauer >= limit - 2 then
+    return "Zeit abgelaufen", true
+  end
+  return "Ende unbekannt (altes Log)", false
 end
 
 local function new_try(nr, n, tick)
@@ -122,6 +151,7 @@ function M.analyse(iter)
         cur.rest_hp = e.val
       elseif e.ev == "try_end" then
         cur.won = (e.val or 0) >= 1
+        cur.reason = e.reason
         cur.rest_hp = cur.rest_hp or tonumber(e.dst)
         cur.dauer = (e.t - cur.t0) * M.TICK
         trys[#trys + 1] = cur
@@ -180,7 +210,9 @@ function M.hints(r)
   if r.n_try >= 3 and quote > 0.90 then
     out[#out + 1] = "Die Siegquote liegt ueber dem Band: hogger_hp_slope hoch (mehr Boss-HP)."
   elseif r.n_try >= 3 and quote < 0.60 then
-    out[#out + 1] = "Die Siegquote liegt unter dem Band: hogger_hp_slope runter — vorher pruefen, ob die Trys an der Zeit oder am Wipe scheiterten."
+    -- Seit Runde 17 steht der Grund im Log; die Tabelle "Trys nach Ursache"
+    -- beantwortet die Frage, statt sie zu stellen.
+    out[#out + 1] = "Die Siegquote liegt unter dem Band: hogger_hp_slope runter — siehe zuerst 'Trys nach Ursache'."
   end
   if md and md > 13 * 60 then
     out[#out + 1] = "Die Siegtrys dauern zu lang: hogger_hp_slope runter."
@@ -246,13 +278,31 @@ function M.render(r, quelle, defaults)
       r.sum.dmg_hogger / r.total_time / r.raid_n)
   end
 
+  -- Trys nach Ursache (Runde 17): die Frage "an der Zeit oder am Wipe
+  -- gescheitert?" war bis dahin aus dem Log nicht zu beantworten.
+  do
+    local nach = {}
+    local order = {}
+    for _, t in ipairs(r.trys) do
+      local text, geraten = M.outcome(t, r.params)
+      local key = text .. (geraten and " (aus der Dauer geschlossen)" or "")
+      if not nach[key] then nach[key] = 0; order[#order + 1] = key end
+      nach[key] = nach[key] + 1
+    end
+    table.sort(order) -- deterministisch, nicht in pairs-Reihenfolge
+    w("\n## Trys nach Ursache\n")
+    w("| Ausgang | Anzahl |")
+    w("|---|---|")
+    for _, key in ipairs(order) do w("| %s | %d |", key, nach[key]) end
+  end
+
   w("\n## Try fuer Try\n")
   w("| Try | Dauer | Ausgang | Hogger-Rest | Tode | Fressen (unterbrochen) | Charges |")
   w("|---|---|---|---|---|---|---|")
   for _, t in ipairs(r.trys) do
+    local text, geraten = M.outcome(t, r.params)
     local ausgang = t.won and "**SIEG**"
-      or (t.reset == "no_contact" and "Abbruch: niemand am Boss"
-      or (t.reset == "wipe" and "Abbruch: alle tot" or "Wipe"))
+      or (text .. (geraten and " (aus der Dauer geschlossen)" or ""))
     local et = t.eat_interrupt + t.eat_complete
     w("| %s | %s | %s | %s | %d | %d (%s) | %d |",
       tostring(t.nr), mins(t.dauer), ausgang,

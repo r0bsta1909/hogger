@@ -32,14 +32,15 @@ local function row(rows, label)
   return nil
 end
 
-local board = statboard.build(state, false)
-T.ok(board.header:find("Wipe") ~= nil, "Wipe im Titel")
+local board = statboard.build(state, false, "wipe")
+T.ok(board.header:find("^Wipe") ~= nil, "Wipe im Titel")
 T.eq(#board.hogger, 8, "acht Hogger-Zeilen (GDD 11)")
 T.eq(row(board.hogger, "Gesamtschaden"), "999", "Hogger-Schaden gerundet")
 T.eq(row(board.hogger, "davon kritisch zerschmettert"), "1", "Krit-Kills")
 T.eq(row(board.hogger, "Geheilte HP"), "301", "Fress-Heilung gerundet")
 T.eq(row(board.hogger, "Rest-HP"), "4 %", "Rest-HP in Prozent")
-T.eq(board.big, "Er hatte noch 4 %.", "Wipe-Pointe gross (GDD 11)")
+T.ok(board.big:find("Der Raid lag") ~= nil, "Wipe-Pointe nennt den Grund")
+T.ok(board.big:find("Er hatte noch 4 %%%.") ~= nil, "Wipe-Pointe gross (GDD 11)")
 
 T.eq(row(board.raid, "Meister Schaden"), "Bert - 200", "Meister Schaden")
 T.eq(row(board.raid, "Am haeufigsten gestorben"), "Anna - 3x", "Tode")
@@ -49,6 +50,41 @@ T.eq(row(board.raid, "Reichster Spieler"), "Bert - 9 Kupfer", "Kupfer")
 T.eq(row(board.raid, "Erster Tod des Trys"), "Anna", "erster Tod ohne Anhang")
 T.eq(row(board.raid, "Von einem Wildschwein getoetet"), "Bert", "Wildschwein-Zeile")
 T.eq(row(board.raid, "Meiste Spruenge"), "Anna - 33", "Sprung-Zaehler (GDD 4.1)")
+
+-- ---------------------------------------------------------------------------
+-- Vier Ausgaenge, vier Namen (Runde 17).
+-- Vorher lautete die Kopfzeile `won and "SIEG" or (cause and "Abbruch" or
+-- "Wipe")`. Fuer zwei von drei Verlustfaellen war das falsch herum: ein
+-- abgelaufenes Zeitlimit (cause == nil) hiess "Wipe", ein echter Raid-Wipe
+-- hiess "Abbruch". Rob las "Wipe", waehrend sein Raid lebte und zuschlug.
+-- ---------------------------------------------------------------------------
+do
+  local faelle = {
+    { reason = "wipe",       won = false, kopf = "^Wipe",
+      pointe = "Der Raid lag" },
+    { reason = "no_contact", won = false, kopf = "^Abbruch",
+      pointe = "niemanden erreicht" },
+    { reason = "timeout",    won = false, kopf = "^Zeit abgelaufen",
+      pointe = "Die Zeit war um" },
+    { reason = "win",        won = true,  kopf = "^SIEG" },
+  }
+  for _, f in ipairs(faelle) do
+    local b = statboard.build(state, f.won, f.reason)
+    T.ok(b.header:find(f.kopf) ~= nil,
+      "Ausgang " .. f.reason .. ": Kopfzeile (" .. b.header .. ")")
+    if f.pointe then
+      T.ok(b.big and b.big:find(f.pointe) ~= nil,
+        "Ausgang " .. f.reason .. ": Pointe nennt den Grund")
+    end
+  end
+  -- Kein Ausgang darf mit dem Namen eines anderen beschriftet sein
+  local wipe = statboard.build(state, false, "wipe")
+  local zeit = statboard.build(state, false, "timeout")
+  T.ok(zeit.header:find("Wipe") == nil,
+    "ein abgelaufenes Zeitlimit heisst nicht Wipe")
+  T.ok(wipe.header:find("Abbruch") == nil,
+    "ein echter Wipe heisst nicht Abbruch")
+end
 
 local titles = table.concat(board.titles, "; ")
 T.ok(titles:find("Anna, der Gefressene") ~= nil, "Titel: der Gefressene")

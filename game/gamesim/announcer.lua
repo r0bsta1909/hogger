@@ -70,7 +70,19 @@ function A.process(state, ev)
             ann.trys_without_interrupt = 0
           end
         end
-        say(state, ev, pick(state, 21, 24)) -- Wipe-Ansage
+        -- Zeilenwahl nach Ursache (Runde 17). Vorher lief JEDER verlorene
+        -- Try ueber die Wipe-Zeilen — auch ein abgelaufenes Zeitlimit mit
+        -- lebendem, pruegelndem Raid.
+        -- DETERMINISMUS: jeder Zweig zieht GENAU EINEN Wert aus dem RNG.
+        -- Ein Zweig ohne pick() wuerde den Krit- und Loot-Strom des ganzen
+        -- Abends gegenueber heute verschieben.
+        local from, to = 21, 24 -- echter Wipe
+        if e.reason == "no_contact" then
+          from, to = 36, 37
+        elseif e.reason == "timeout" then
+          from, to = 38, 39
+        end
+        say(state, ev, pick(state, from, to))
       end
     elseif e.ev == "mob_death_by" and gate_open then
       gate_open = false

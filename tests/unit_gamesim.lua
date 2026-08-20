@@ -1244,10 +1244,55 @@ do -- Toter Raid: die Uhr laeuft weiter (Wipe-Ausnahme aus Runde 9 gestrichen).
   end
   T.eq(cause, "wipe", "reset: toter Raid bricht den Try nach der Frist ab")
   T.eq(st.try_nr, try0 + 1, "reset: der Wipe-Abbruch wertet den Try")
-  T.ok(board and board.header:find("^Abbruch"),
-    "reset: Tafel meldet einen Abbruch (" .. tostring(board and board.header) .. ")")
+  -- Bis Runde 17 stand hier "^Abbruch" — und das war falsch herum: die
+  -- Kopfzeile lautete `won and "SIEG" or (cause and "Abbruch" or "Wipe")`,
+  -- also hiess ein echter Raid-Wipe "Abbruch" und ein abgelaufenes Zeitlimit
+  -- "Wipe". Der Test hat die Verwechslung mit festgeschrieben.
+  T.ok(board and board.header:find("^Wipe"),
+    "reset: Tafel nennt den Wipe beim Namen (" .. tostring(board and board.header) .. ")")
   T.ok(board and board.big:find("Der Raid lag"),
     "reset: Tafel nennt den Wipe als Grund (" .. tostring(board and board.big) .. ")")
+end
+
+do -- Zeitlimit: eigener Grund am try_end und KEIN hogger_reset. Bis Runde 17
+  -- endete es voellig ereignislos und war im Log von einem Wipe nicht zu
+  -- unterscheiden — genau daran scheiterte die Auswertung von Robs Abend.
+  local st = reset_world({ n = 2 })
+  st.clock = model.p("try_time_limit") - model.TICK_DT / 2
+  local try0 = st.try_nr
+  local reason, saw_reset, board = nil, false, nil
+  for _ = 1, 5 do
+    local evs = step.step(st, {})
+    for _, e in ipairs(evs) do
+      if e.ev == "try_end" then reason, board = e.reason, e.board end
+      if e.ev == "hogger_reset" then saw_reset = true end
+    end
+    if reason then break end
+  end
+  T.eq(reason, "timeout", "Zeitlimit: der Grund haengt am try_end")
+  T.ok(not saw_reset, "Zeitlimit: kein hogger_reset — es war schlicht keiner")
+  T.eq(st.try_nr, try0 + 1, "Zeitlimit: der Try wird gewertet")
+  T.ok(board and board.header:find("^Zeit abgelaufen"),
+    "Zeitlimit: die Tafel nennt es beim Namen (" ..
+    tostring(board and board.header) .. ")")
+end
+
+do -- Der Ausgang darf den Zufallsstrom nicht verschieben. Jede Ursache waehlt
+  -- ihre Leeroy-Zeile mit GENAU EINEM Zug; ein Zweig ohne Zug wuerde Krit-
+  -- und Loot-Wuerfe des ganzen Abends gegenueber heute verschieben.
+  local announcer = require("game.gamesim.announcer")
+  local function nach(reason)
+    local st = reset_world({ n = 1 })
+    local ev = { { t = 0, ev = "try_end", src = "host", dst = "0", val = 0,
+                   reason = reason } }
+    announcer.process(st, ev)
+    return st.rng.state
+  end
+  local wipe = nach("wipe")
+  T.eq(nach("no_contact"), wipe,
+    "Ansage: Kein-Kontakt zieht so viele Zufallswerte wie ein Wipe")
+  T.eq(nach("timeout"), wipe,
+    "Ansage: das Zeitlimit zieht so viele Zufallswerte wie ein Wipe")
 end
 
 do -- Rueckkehr innerhalb der Frist rettet den Try: Hogger behaelt seine

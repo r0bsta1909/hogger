@@ -27,7 +27,19 @@ local function max_player_field(state, field)
   return best, best_v
 end
 
-function B.build(state, won)
+-- Kopfzeile je Ausgang. Bis Runde 16 stand hier
+--   won and "SIEG" or (cause and "Abbruch" or "Wipe")
+-- und das war fuer zwei von drei Verlustfaellen schlicht falsch herum: ein
+-- abgelaufenes Zeitlimit (cause == nil) hiess "Wipe", ein echter Raid-Wipe
+-- hiess "Abbruch". Rob las "Wipe", waehrend sein Raid lebte und zuschlug.
+local HEADER = {
+  win        = "SIEG",
+  wipe       = "Wipe",
+  no_contact = "Abbruch: kein Kontakt",
+  timeout    = "Zeit abgelaufen",
+}
+
+function B.build(state, won, reason)
   local s = state.stats
   local h = s.hogger
   local hogger = {}
@@ -45,7 +57,8 @@ function B.build(state, won)
   -- Rest-HP: beim Wipe gross inszeniert ("Er hatte noch 4 %.", GDD 11).
   -- Bei einem Abbruch (Runde 10, #124) steht der Grund davor — Rob soll nicht
   -- raten muessen, warum der Try auf einmal vorbei war.
-  local cause = state.hogger.reset_cause
+  -- Rueckfall auf reset_cause, solange ein Aufrufer den Grund nicht mitgibt
+  local cause = reason or state.hogger.reset_cause or (won and "win" or nil)
   local big = nil
   if won then
     hrow("Rest-HP", "0 (tot)")
@@ -64,6 +77,8 @@ function B.build(state, won)
     elseif cause == "wipe" then
       big = string.format("Der Raid lag %d s lang.\n%s",
         math.floor(model.p("hogger_no_contact_reset") + 0.5), rest)
+    elseif cause == "timeout" then
+      big = "Die Zeit war um.\n" .. rest
     else
       big = rest
     end
@@ -118,7 +133,7 @@ function B.build(state, won)
   end
 
   return {
-    header = (won and "SIEG" or (cause and "Abbruch" or "Wipe"))
+    header = (HEADER[cause] or (won and "SIEG" or "Try vorbei"))
              .. " - Try " .. tostring(state.try_nr),
     hogger = hogger, raid = raid,
     titles = titles, title_awards = title_awards, big = big,
