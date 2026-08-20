@@ -75,7 +75,7 @@ local function act_class(run, p, heal_others)
        and E.cast_ability(run, p, "feign_death") then return end
     if p.d <= model.p("melee_range") then E.cast_ability(run, p, "raptor_strike") end
   elseif class == "rogue" then
-    if p.cp >= 5 then
+    if p.cp >= model.CP_MAX then
       if E.cast_ability(run, p, "eviscerate") then return end
     end
     E.cast_ability(run, p, "sinister_strike")

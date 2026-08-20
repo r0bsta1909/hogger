@@ -555,7 +555,7 @@ local ABILITIES = {
       target = "enemy",
       effect = function(state, p, _, ev)
         player_damage_enemy(state, p, model.p("rogue_sinister_dmg"), "ability", ev)
-        p.cp = math.min(5, p.cp + 1)
+        p.cp = math.min(model.CP_MAX, p.cp + 1)
       end },
     { id = "evis", cost = "rogue_evis_energy", range = "melee_range",
       target = "enemy", requires_cp = true,

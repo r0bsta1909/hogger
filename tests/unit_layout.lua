@@ -30,8 +30,15 @@ do
   T.eq(L.frames.unit.y, 10, "layout: Einheitenfenster y (Bestand)")
   T.eq(L.frames.target.x, 1054, "layout: Zielfenster x = w-226 (Bestand)")
   T.eq(L.frames.target.y, 10, "layout: Zielfenster y (Bestand)")
-  T.eq(L.frames.cp.x, 232, "layout: CP-Anzeige x (Bestand)")
-  T.eq(L.frames.cp.y, 14, "layout: CP-Anzeige y (Bestand)")
+  -- Combopunkt-Leiste (Runde 14, #170): ueber der Tafel statt rechts
+  -- daneben auf dem Goldring. Undockt sitzt die Tafel bei y=10, die Leiste
+  -- wuerde also negativ werden — die Klemme haelt sie im Bild.
+  T.eq(L.frames.cp.x, 64, "layout: CP-Leiste x = unit.x + 52")
+  T.eq(L.frames.cp.y, 2, "layout: CP-Leiste y geklemmt (undockt)")
+  T.ok(L.frames.cp.y >= 0, "layout: CP-Leiste laeuft nie oben aus dem Bild")
+  T.ok(L.frames.cp.x + (render.CP_MAX - 1) * render.CP_PITCH + render.CP_R
+       < L.frames.unit.x + render.FRAME_W,
+    "layout: die Leiste bleibt ueber der Tafel, nicht daneben")
   T.eq(L.frames.buffs_self.x, 12, "layout: eigene Auren x unter der Tafel (M13)")
   T.eq(L.frames.buffs_self.y, 70, "layout: eigene Auren y = unit+60 (M13)")
   T.eq(L.frames.money.x, 14, "layout: Kupfer/Plunder x (Bestand)")
@@ -63,6 +70,13 @@ do
   T.eq(L.frames.buffs.x, 959, "layout dock: Buffs folgen dem Zielfenster")
   T.eq(L.frames.buffs.y, 163 + 86, "layout dock: Buffs y-Offset")
   T.eq(L.frames.money.x, 106 + 2, "layout dock: Kupferzeile folgt")
+  -- Combopunkt-Leiste im Standard-HUD: ueber der Tafel, mit Luft zum Rand
+  T.eq(L.frames.cp.x, 106 + 52, "layout dock: CP-Leiste folgt der Tafel")
+  T.eq(L.frames.cp.y, 163 - render.CP_STRIP_H, "layout dock: CP-Leiste sitzt darueber")
+  T.ok(L.frames.cp.y + render.CP_STRIP_H <= L.frames.unit.y,
+    "layout dock: die Leiste ueberlappt das Einheitenfenster nicht")
+  T.eq(render.CP_MAX, require("sim.model").CP_MAX,
+    "layout: die Anzeige kennt genauso viele Combopunkte wie die Simulation")
   -- Ring-Moeblierung ist von docked unabhaengig
   local U = render.layout(1280, 800, false)
   T.eq(L.radius, U.radius, "layout dock: radius unveraendert")

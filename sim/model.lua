@@ -10,6 +10,10 @@ local M = {}
 -- ---------------------------------------------------------------------------
 M.TICK_DT = 1 / 60   -- fixer Simulationsschritt des Spiels (GDD Kap. 14, Skill Par. 1)
 M.SIM_TICK_DT = 0.1  -- Tickweite der Headless-Balancing-Sim (GDD 17.2)
+-- Combopunkte des Schurken (GDD 8.2, Vanilla-Konstante, kein Stellhebel).
+-- Stand bis Runde 14 als 5 in vier Dateien; jetzt eine Wahrheit, an der
+-- auch die Anzeige haengt (#170).
+M.CP_MAX = 5
 
 -- ---------------------------------------------------------------------------
 -- M.params — ALLE Balancing-Werte als flache Tabelle {wert, min, max, schritt,

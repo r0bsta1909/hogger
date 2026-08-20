@@ -404,6 +404,14 @@ end
 -- Mob-Icon misst 21,6. Ein Test in unit_render_order haelt das fest.
 R.ROOT_RING_R = 22
 
+-- Combopunkte des Schurken (Runde 14, #170): fuenf Kreise in einer eigenen
+-- Leiste ueber dem Einheitenfenster. MAX kommt aus dem Modell, damit
+-- Anzeige und Wirkung nicht auseinanderlaufen.
+R.CP_MAX = 5
+R.CP_R = 5        -- Radius eines Punktes
+R.CP_PITCH = 15   -- Abstand der Mittelpunkte
+R.CP_STRIP_H = 18 -- Hoehe der Leiste (schiebt sie ueber die Tafel)
+
 R.HEALBAR = { x = 12, y = 142, w = 190, header_h = 18, row_h = 18,
               max_rows = 24 }
 
@@ -495,7 +503,12 @@ function R.layout(w, h, docked)
     frames = {
       unit = unit,
       target = target,
-      cp = { x = unit.x + 220, y = unit.y + 4 },
+      -- Combopunkt-Leiste ueber dem Einheitenfenster (Runde 14, #170).
+      -- Vorher stand hier "CP 2" als roter Text 6 px rechts neben der
+      -- Tafel — im angedockten HUD also mitten auf dem Goldring des Rings.
+      -- Die Klemme haelt die Leiste im Bild, wenn das HUD undockt in der
+      -- Ecke sitzt (dort ist unit.y = 10).
+      cp = { x = unit.x + 52, y = math.max(2, unit.y - R.CP_STRIP_H) },
       buffs_self = { x = unit.x, y = unit.y + 60 },
       money = { x = unit.x + 2, y = unit.y + 94 },
       hint = { x = unit.x + 2, y = unit.y + 112 },
@@ -1365,9 +1378,39 @@ function R:draw(view, ui)
       res_txt = cls and RES_DE[cls.resource],
       name_col = { 0.95, 0.92, 0.8 },
     })
-    if me.class == "rogue" and (me.cp or 0) > 0 then
-      love.graphics.setColor(0.95, 0.35, 0.35, 1)
-      love.graphics.print("CP " .. me.cp, L.frames.cp.x, L.frames.cp.y)
+    -- Combopunkt-Leiste (Runde 14, #170): eine eigene Zeile ueber der
+    -- Spielerinfo, fuenf Kreise — gesammelte gefuellt, offene als leerer
+    -- Ring. Vorher stand hier ein rotes "CP 2" auf dem Minimap-Goldring.
+    if me.class == "rogue" then
+      local cp = math.max(0, math.min(R.CP_MAX, me.cp or 0))
+      local cx, cy = L.frames.cp.x, L.frames.cp.y + R.CP_R + 2
+      for i = 1, R.CP_MAX do
+        local x = cx + (i - 1) * R.CP_PITCH
+        love.graphics.setColor(0.05, 0.05, 0.06, 0.75)
+        love.graphics.circle("fill", x, cy, R.CP_R + 1.5)
+        if i <= cp then
+          love.graphics.setColor(1.00, 0.96, 0.41, 1) -- Schurkengelb
+          love.graphics.circle("fill", x, cy, R.CP_R)
+          love.graphics.setColor(0.45, 0.38, 0.10, 1)
+          love.graphics.circle("line", x, cy, R.CP_R)
+        else
+          love.graphics.setColor(0.30, 0.29, 0.24, 1)
+          love.graphics.circle("line", x, cy, R.CP_R)
+        end
+      end
+      if ui.mouse then
+        local mx, my = ui.mouse[1], ui.mouse[2]
+        if mx >= cx - R.CP_R - 4
+           and mx <= cx + (R.CP_MAX - 1) * R.CP_PITCH + R.CP_R + 4
+           and my >= cy - R.CP_R - 4 and my <= cy + R.CP_R + 4 then
+          aura_tip = aura_tip or { lines = {
+            "Combopunkte " .. cp .. "/" .. R.CP_MAX,
+            "Finsterer Stoss sammelt, Ausweiden verbraucht alle",
+            string.format("%d Schaden je Punkt",
+              model.p("rogue_evis_dmg_per_cp")),
+          } }
+        end
+      end
     end
     love.graphics.setColor(0.6, 0.56, 0.45, 1)
     love.graphics.print(string.format("Kupfer %d   Plunder %d",
