@@ -36,7 +36,11 @@ do
   -- Try 1: Sieg nach 8 Minuten
   add(0, "try_start", "host", "1", 10)
   add(0, "param_change", "init", "seed", 4242)
-  add(0, "param_change", "host", "hogger_hp_slope", 620)
+  -- Der GDD-Stand wird aus dem Modell gelesen, nicht hingeschrieben: eine
+  -- feste 620 haette diesen Test bei der naechsten Eichung rot gemacht,
+  -- ohne dass am Leser etwas kaputt gewesen waere (Runde 17).
+  add(0, "param_change", "host", "hogger_hp_slope",
+      require("sim.model").defaults.hogger_hp_slope)
   add(0, "revive", "1", "rogue", 0)
   add(0, "revive", "2", "priest", 0)
   add(0, "revive", "3", "warrior", 0)
