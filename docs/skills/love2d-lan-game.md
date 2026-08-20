@@ -486,6 +486,11 @@ Sonderfall, der bei jeder weiteren Socket-Szene neu gebaut werden müsste.
   Maus-Hover-Position** mit abklappern (Tooltips sind eigene Zweige, die sonst nie laufen), und ihn in
   der CI auf Linux mit `xvfb` + Software-GL fahren — Windows-Runner haben kein OpenGL 2, macOS ist
   zehnmal so teuer.
+- **[gemessen] Ein fusioniertes Release speichert woanders als die Entwicklungsversion.** LÖVE legt den
+  Speicherordner eines gepackten Spiels direkt unter `%APPDATA%\<identity>` (bzw.
+  `~/Library/Application Support/<identity>`), die Entwicklungsversion dagegen unter
+  `.../LOVE/<identity>`. Wer dem Spieler den Log- oder Savepfad nennt, nennt sonst den falschen — und
+  bekommt die Datei nie. Am fertigen Build nachsehen, nicht am Entwicklungslauf.
 - **[gemessen] Ein Zustandszweig, den der Testaufbau nie erreicht, ist ungetestet — auch wenn er
   „abgedeckt" aussieht.** Der Bot-Spieler in den Screenshot-Läufen war fast immer Geist oder Leiche,
   also lief der Zweig „lebend mit Klasse" in keinem einzigen Bild. Bei Zustandsmaschinen die Zustände

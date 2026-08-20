@@ -97,8 +97,11 @@ Die Todesstrafe ist **absichtlich konstant** (Respawn-Timer + 14 s Laufweg) und 
 
 ## Was du mir nach einem Abend schickst
 
-1. **Das Host-Log** (nur vom Rechner, der gehostet hat):
-   `%APPDATA%\LOVE\hogger\logs\session-<datum>.jsonl`
+1. **Das Host-Log** (nur vom Rechner, der gehostet hat). **Achtung, zwei Orte:**
+   - Du spielst das **heruntergeladene Spiel** (`wow.exe`): `%APPDATA%\hogger\logs\session-<datum>.jsonl`
+   - Du startest es aus dem Repo (`love game`): `%APPDATA%\LOVE\hogger\logs\session-<datum>.jsonl`
+
+   Der Unterschied kommt von LÖVE selbst: ein fertig gepacktes Spiel legt seinen Ordner direkt unter `%APPDATA%`, die Entwicklungsversion unter `%APPDATA%\LOVE`. Auf dem Mac entsprechend `~/Library/Application Support/hogger/` bzw. `.../LOVE/hogger/`. Im Zweifel: das Debug-Overlay (F12) zeigt den Pfad an.
    Darin steht jeder Treffer, jede Heilung, jeder Fress-Kanal, jeder Tod mit Ursache und jedes Try-Ende. Ich rechne den Abend damit nach:
    ```
    lua tools/log_lesen.lua <pfad-zur-jsonl>
