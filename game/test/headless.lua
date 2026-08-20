@@ -11,6 +11,7 @@ local bot = require("game.gamesim.bot")
 local wire = require("game.net.wire")
 local hostmod = require("game.net.host")
 local clientmod = require("game.net.client")
+local budget = require("game.test.budget")
 
 local T = {}
 local checks, failures = 0, {}
@@ -37,6 +38,13 @@ local function snap_to_botstate(snap, pid)
 end
 
 function T.run()
+  -- Zuerst das Snapshot-Budget bei voller Raid-Groesse (Runde 16). Der Lauf
+  -- unten hat nur sechs bis acht Spieler und kann ueber N=40 nichts sagen;
+  -- K sind die dort gemessenen Kosten je Datensatz, mit denen die
+  -- Budget-Pruefung in der Schleife rechnet — statt mit einer Magic Number,
+  -- die still veraltet.
+  local K = budget.run(ok)
+
   print("== Stufe 4: Host + 4 Bot-Clients (Loopback) ==")
   model.params.try_time_limit.wert = 90 -- Try-Uebergang schnell erzwingen
 
@@ -263,9 +271,21 @@ function T.run()
       local npc_count, loot_count = 0, 0
       for id = 100, 250 do if st.npcs[id] then npc_count = npc_count + 1 end end
       for id = 1, 60 do if st.loot[id] then loot_count = loot_count + 1 end end
-      ok(#body <= 64 + 20 * #st.players + 4 * #st.corpses
-              + 8 * npc_count + 6 * loot_count + 32,
-        "Snapshot-Budget eingehalten (" .. #body .. " B)")
+      -- Die Formel kommt aus den gemessenen Kosten je Datensatz (budget.lua),
+      -- nicht aus geratenen Konstanten mit Sicherheitszuschlag. Sie muss
+      -- deshalb EXAKT aufgehen: jede Abweichung heisst, dass der Packer etwas
+      -- anderes tut als angenommen. Bis Runde 16 stand hier "20 * Spieler",
+      -- waehrend der Datensatz 25 B kostete — bei N=40 waere die alte Formel
+      -- schon mit dem damaligen Format verletzt gewesen, nur lief der Test
+      -- nie mit mehr als acht Spielern.
+      local erwartet = budget.budget(K, #st.players, #st.corpses,
+                                     npc_count, loot_count)
+      ok(#body == erwartet, string.format(
+        "Snapshot-Budget eingehalten (%d B erwartet, %d B gemessen)",
+        erwartet, #body))
+      ok(#body + budget.PAKETKOPF <= budget.MTU, string.format(
+        "Snapshot passt in ein ENet-Paket (%d von %d B)",
+        #body + budget.PAKETKOPF, budget.MTU))
       local _, snap = wire.read_snapshot(wire.snapshot(0, body), 4)
       for _, p in ipairs(st.players) do
         local sp = snap.players[p.id]
