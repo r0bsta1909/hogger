@@ -238,3 +238,34 @@ do
   T.eq(sehr_lang.wrap * sehr_lang.scale, lang.wrap * lang.scale,
     "banner: die Breite haengt nicht an der Textlaenge")
 end
+
+-- ---------------------------------------------------------------------------
+-- Die Uhr zaehlt RUNTER (GDD 4.2, Runde 17). Vorher zeigte sie die
+-- verstrichene Zeit — sie nannte die Frist also nie, und das Try-Ende kam
+-- fuer den Spieler aus dem Nichts. Rob stand neben einem lebenden Hogger,
+-- als die Uhr ablief, und hielt es fuer einen Reset.
+-- ---------------------------------------------------------------------------
+do
+  local model = require("sim.model")
+  local L = model.p("try_time_limit")
+
+  T.eq(render.clock_text(0, L), "16:00", "uhr: beim Start steht die volle Frist")
+  T.eq(render.clock_text(60, L), "15:00", "uhr: nach einer Minute eine weniger")
+  T.eq(render.clock_text(L - 1, L), "0:01", "uhr: die letzte Sekunde")
+  T.eq(render.clock_text(L, L), "0:00", "uhr: bei Ablauf steht null")
+  T.eq(render.clock_text(L + 50, L), "0:00",
+    "uhr: laeuft nicht ins Negative, falls der Tick spaeter ankommt")
+
+  -- Die eigentliche Zusage: sie zaehlt herunter, nicht herauf
+  local function rest(t)
+    local m, s = render.clock_text(t, L):match("(%d+):(%d+)")
+    return tonumber(m) * 60 + tonumber(s)
+  end
+  T.ok(rest(0) > rest(100) and rest(100) > rest(600),
+    "uhr: die Anzeige wird kleiner, nicht groesser")
+  T.eq(rest(0), L, "uhr: sie zeigt die Frist, nicht die verstrichene Zeit")
+
+  -- Sie haengt am Parameter, nicht an einer festen Zahl: wer im F10-Panel
+  -- dreht, sieht die neue Frist sofort
+  T.eq(render.clock_text(0, 600), "10:00", "uhr: folgt dem eingestellten Wert")
+end

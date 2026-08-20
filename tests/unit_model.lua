@@ -8,15 +8,16 @@ local T = _G.T
 -- GDD 9.3: Skalierungstabelle als harte Testfaelle -------------------------
 local table93 = {
   --  N, HP,    Fressheilung, Cleave, Adds, Respawn (GDD 9.3)
-  -- HP = 3xN^2 + 620xN - 1600 (quad-Term seit Runde 6, #96; slope
+  -- HP = 3xN^2 + 640xN - 1600 (quad-Term seit Runde 6, #96; slope
   -- 560 -> 620 in Runde 13 als Ausgleich fuer die fuenf neuen
-  -- Klassen-Faehigkeiten); Cleave = ceil(N/6); Respawn FEST 10 s
+  -- Klassen-Faehigkeiten, 620 -> 640 in Runde 17 als Ausgleich fuer die
+  -- auf 16 min verlaengerte Frist); Cleave = ceil(N/6); Respawn FEST 10 s
   -- (Rob-Entscheid Runde 6, #96). Die Unterbrecher-Spalte fiel mit
   -- Runde 12 (#140): unterbrechen kann nur noch der Schurken-Tritt.
-  { 5,   1575,  189,   1, 0, 10 },
-  { 10,  4900,  588,   2, 1, 10 },
-  { 20, 12000,  1440,  4, 2, 10 },
-  { 40, 28000,  3360,  7, 5, 10 },
+  { 5,   1675,  201,   1, 0, 10 },
+  { 10,  5100,  612,   2, 1, 10 },
+  { 20, 12400,  1488,  4, 2, 10 },
+  { 40, 28800,  3456,  7, 5, 10 },
 }
 for _, row in ipairs(table93) do
   local n = row[1]
@@ -32,7 +33,7 @@ T.eq(M.eat_interrupters, nil,
 -- GDD 9.3: HP-Untergrenze 120 x N unterhalb der Design-Spanne --------------
 T.eq(M.hogger_hp(1), 120, "9.3 HP-Untergrenze N=1 (Solo-Wartelobby)")
 T.eq(M.hogger_hp(2), 240, "9.3 HP-Untergrenze N=2")
-T.eq(M.hogger_hp(4), 928, "9.3 Formel greift ab N=4 (slope 620, Runde 13)")
+T.eq(M.hogger_hp(4), 1008, "9.3 Formel greift ab N=4 (slope 640, Runde 17)")
 
 -- GDD 7.2: Mob-Slots -------------------------------------------------------
 T.eq(M.mob_slots(5), 5, "7.2 Mob-Slots N=5")
@@ -182,7 +183,19 @@ for _, n in ipairs({ 5, 10, 20, 40 }) do
   T.ok(max_xp < M.p("xp_level2"),
     string.format("7.3 XP-Deckel pro Try < 400 (N=%d: %d)", n, max_xp))
 end
-T.ok(M.max_mob_kills_per_try(40) <= 120, "7.3 Richtwert ~100 Mob-Kills pro Try haelt")
+-- Der Richtwert stand bis Runde 17 als absolute Zahl (<= 120) da und war
+-- damit heimlich an die Trylaenge gekoppelt: mit 900 s ergab die Formel 96,
+-- mit 1200 s ergibt sie 132 — der Test waere gefallen, ohne dass sich an der
+-- Design-Absicht etwas geaendert haette. Ausgedrueckt wird sie deshalb als
+-- RATE: Ambient-Mobs bleiben eine Nebenbeschaeftigung, egal wie lang ein Try
+-- laeuft. (Dieselbe Lehre wie beim Snapshot-Budget in Runde 16: Konstanten in
+-- Testformeln aus der Wirklichkeit ableiten, nicht hinschreiben.)
+do
+  local minuten = M.p("try_time_limit") / 60
+  local rate = M.max_mob_kills_per_try(40) / minuten
+  T.ok(rate <= 7, string.format(
+    "7.3 Mob-Kills bleiben eine Nebenbeschaeftigung (%.1f je Minute)", rate))
+end
 
 -- GDD 6: Todesstrafe ist seit Runde 6 KONSTANT (Rob-Entscheid #96):
 -- fester Respawn-Timer 10 s + Laufweg 14 s = 24 s, egal wie viele spielen

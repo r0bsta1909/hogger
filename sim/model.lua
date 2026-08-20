@@ -45,7 +45,9 @@ M.params = {
   -- Faehigkeiten (Handauflegung, Schild, Totstellen, Wurzeln, Blutpakt)
   -- hoben koordinierte Siege auf 98/95/87 % — der Aufschlag holt F1
   -- zurueck ins Band (Grid + Endsweep in GDD 17.9)
-  hogger_hp_slope        = p(620, 100, 800, 10, "9.3"),
+  -- Runde 17: 620 -> 640, Ausgleich fuer die auf 16 min verlaengerte Frist
+  -- (mehr Zeit = mehr Siege; der Hebel fuer F1 ist laut GDD 13.3 die HP-Kurve)
+  hogger_hp_slope        = p(640, 100, 800, 10, "9.3"),
   -- Historie: Offset 950 -> 850 in Runde 5 (#86, Zauberstab-Aus); Runde 6
   -- (#96) fixer Respawn -> quad-Term neu, slope/offset nachkalibriert.
   -- F1-F6-Belege: Sweeps in GDD 17.9.
@@ -232,7 +234,17 @@ M.params = {
   respawn_factor         = p(0, 0, 1.0, 0.01, "9.3"),
   respawn_min            = p(10, 0, 30, 1, "9.3"),
   respawn_max            = p(30, 5, 60, 1, "9.3"),
-  try_time_limit         = p(900, 300, 1800, 60, "6"),
+  -- Runde 17 (Rob-Entscheid): 900 -> 960 s, und die Uhr zaehlt RUNTER
+  -- (GDD 4.2). Anlass: bei einem Abend mit ~46 Spielern liefen zwei Trys in
+  -- die Frist, waehrend der Raid bis zur letzten Sekunde zuschlug.
+  -- WARUM NICHT MEHR: das Zeitlimit ist nicht nur eine Notbremse, es ist die
+  -- eigentliche Schwierigkeit. Gemessen (Richtungstest, 100 Laeufe je Zelle):
+  -- 20 min bei unveraenderter HP-Kurve -> Siegquote 99/97/100/100 % gegen ein
+  -- Band von 60-90 %. Gegensteuern geht nur ueber Boss-HP, und dann waechst
+  -- die Trylaenge mit: 20 min brauchen slope 760 und ergeben 15-16,5 min
+  -- Median-Siegtry — F5 (6-13 min) waere gerissen. 16 min mit slope 640 ist
+  -- der weiteste Punkt, an dem alle sieben Kriterien halten.
+  try_time_limit         = p(960, 300, 1800, 60, "6"),
   -- Feldposition = Feinsteller der Todesstrafe (GDD 7.1); Laufweg-Anteil
   -- 14 s gesamt (M1-Sweep): Geisterlauf 8 s + Restanmarsch 6 s
   graveyard_to_field_dist= p(1680, 500, 6000, 50, "7.1"),

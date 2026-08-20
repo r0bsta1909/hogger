@@ -604,6 +604,15 @@ end
 
 -- Reine Arithmetik: welche Zeile liegt unter (mx, my)? nil = keine.
 -- hb: optionales Layout (Dock-Variante, M12); Default = R.HEALBAR.
+-- Uhrtext (GDD 4.2). Love-frei, damit die Rechnung testbar ist.
+-- Runde 17: RESTZEIT statt verstrichener Zeit. Eine hochzaehlende Uhr nennt
+-- die Frist nie — Robs Trys endeten bei 15:00, und auf dem Bildschirm stand
+-- nur, wie lange sie schon gedauert hatten.
+function R.clock_text(clock, limit)
+  local rest = math.max(0, (limit or 0) - (clock or 0))
+  return string.format("%d:%02d", math.floor(rest / 60), math.floor(rest % 60))
+end
+
 function R.healbar_row_at(n_rows, mx, my, hb)
   local HB = hb or R.HEALBAR
   if mx < HB.x or mx > HB.x + HB.w then return nil end
@@ -1477,11 +1486,11 @@ function R:draw(view, ui)
     love.graphics.print(zone, L.banner.cx - font:getWidth(zone) / 2, by + 6)
   end
 
-  -- Uhr-Plakette unten Mitte — die originale Minimap-Position (GDD 4.2)
+  -- Uhr-Plakette unten Mitte — die originale Minimap-Position (GDD 4.2).
+  -- Sie zaehlt seit Runde 17 RUNTER: eine hochzaehlende Uhr nennt die Frist
+  -- nie, und genau deshalb kam das Try-Ende aus dem Nichts.
   do
-    local mins = math.floor(view.clock / 60)
-    local secs = math.floor(view.clock % 60)
-    local txt = string.format("%d:%02d", mins, secs)
+    local txt = R.clock_text(view.clock, model.p("try_time_limit"))
     local try_txt = "Try " .. view.try_nr
     local font = love.graphics.getFont()
     local pw = math.max(L.clock.w, font:getWidth(try_txt) + 16)
