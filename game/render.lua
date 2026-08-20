@@ -314,6 +314,12 @@ function R.ability_tooltip(class, spec, def, slot)
   if spec.id == "loh" then
     lines[#lines + 1] = "Heilt voll, kostet alles Mana, einmal pro Leben"
   end
+  -- Seit Runde 15 (#192) steht die Aufforderung nicht mehr am Boss —
+  -- also muss der Tooltip sagen, wofuer der Tritt da ist
+  if spec.id == "kick" then
+    lines[#lines + 1] = "Unterbricht Hoggers Fressen"
+    lines[#lines + 1] = "Die einzige Unterbrechung im Spiel"
+  end
 
   if spec.cost then
     lines[#lines + 1] = string.format("%d %s", model.p(spec.cost),
@@ -527,12 +533,12 @@ end
 -- Mob-Icon misst 21,6. Ein Test in unit_render_order haelt das fest.
 R.ROOT_RING_R = 22
 
--- Winkel der Zoom-Moeblierung auf der Ringbahn (Runde 15, #189), gemessen
--- von 3 Uhr im Uhrzeigersinn: Plus bei ~4 Uhr, Minus darunter, dann die
--- Stufenpunkte. Der Abstand muss groesser sein als zwei Knopfradien.
+-- Winkel der beiden Zoom-Knoepfe auf der Ringbahn (Runde 15, #189),
+-- gemessen von 3 Uhr im Uhrzeigersinn: Plus bei ~4 Uhr, Minus darunter.
+-- Der Abstand muss groesser sein als zwei Knopfradien. Die frueheren
+-- Stufenpunkte sind mit #193 entfallen.
 R.ZOOM_A1 = math.rad(27)
 R.ZOOM_A2 = math.rad(35)
-R.ZOOM_A3 = math.rad(42)
 
 -- Welcher Zoom-Knopf liegt unter dem Cursor? "plus" | "minus" | nil.
 -- Eine Wahrheit fuer Zeichnen, Klicken und Test (Muster: ability_button_at).
@@ -654,8 +660,6 @@ function R.layout(w, h, docked)
                y = oy + math.sin(R.ZOOM_A1) * radius },
       minus = { x = ox + math.cos(R.ZOOM_A2) * radius,
                 y = oy + math.sin(R.ZOOM_A2) * radius },
-      dots = { x = ox + math.cos(R.ZOOM_A3) * radius,
-               y = oy + math.sin(R.ZOOM_A3) * radius },
     },
     frames = {
       unit = unit,
@@ -701,8 +705,12 @@ end
 -- Runde 14 (#173) benutzt — Lua loest lokale Funktionen lexikalisch auf.
 -- Plakette im Original-Minimap-Stil (M12, GDD 4.1/4.2): dunkle Fuellung,
 -- Goldrahmen, helle Innenlinie — fuer Zonenbanner und Uhr
-local function plaque(x, y, pw, ph)
-  love.graphics.setColor(0.07, 0.06, 0.05, 0.95)
+-- alpha: Standard 0,95 (Zonenbanner und Uhr duerfen den Ring durchscheinen
+-- lassen — sie SITZEN darauf). Die Heil-Leiste uebergibt 1,0: dort ist der
+-- durchscheinende Goldring ein Strich quer durch eine Leseflaeche
+-- (Runde 15, #194).
+local function plaque(x, y, pw, ph, alpha)
+  love.graphics.setColor(0.07, 0.06, 0.05, alpha or 0.95)
   love.graphics.rectangle("fill", x, y, pw, ph, 4, 4)
   love.graphics.setColor(0.78, 0.63, 0.28, 1)
   love.graphics.setLineWidth(2)
@@ -743,7 +751,7 @@ function R:draw_healbar(view, hb)
   -- ein Rechteck mit Alpha 0,85, durch das die helle Karte und der Goldring
   -- durchschlugen. Die Leiste ist Pflicht-UI fuer Heiler — sie muss auf
   -- jedem Untergrund stehen.
-  plaque(HB.x, HB.y, HB.w, ph)
+  plaque(HB.x, HB.y, HB.w, ph, 1)
   local font = love.graphics.getFont()
   local function schatten(text, tx, ty, r2, g2, b2)
     love.graphics.setColor(0, 0, 0, 0.85)
@@ -1234,9 +1242,8 @@ function R:draw(view, ui)
   -- Spielern — der goldene Umriss liegt OBEN und haelt Position und
   -- Ausdehnung im Klumpen immer lesbar, ohne einen Nahkaempfer zu
   -- verdecken. Sein Radius (Manifest 48 x scale) ist zugleich die
-  -- Rechtsklick-Flaeche (R.pick_target). Im Fresskanal pulsiert er im
-  -- Takt des "Schurke: TRITT!"-Texts; nach dem Fluchbruch bleibt er
-  -- gedimmt als Mitte des Schlusskreises liegen.
+  -- Rechtsklick-Flaeche (R.pick_target). Im Fresskanal pulsiert er; nach
+  -- dem Fluchbruch bleibt er gedimmt als Mitte des Schlusskreises liegen.
   if hg.state ~= "reset" then
     local x, y = to_screen(hg.x, hg.y)
     local a = (hg.hp or 0) > 0 and 0.9 or 0.35
@@ -1334,12 +1341,11 @@ function R:draw(view, ui)
       -- Fresskanal: Pflicht-UI (GDD 9.2). Der alte Spieler-Zaehler ("2/4")
       -- fiel mit Runde 12 (#140) — unterbrechen kann nur noch der
       -- Schurken-Tritt, also sagt die Zeile genau das
+      -- Der Fortschrittsbalken bleibt Pflicht-UI; die Aufforderung
+      -- "Schurke: TRITT!" ist seit Runde 15 (#192) weg. Das Echo ruft es
+      -- ohnehin aus, und die Transferleistung vom Ruf zum eigenen Tritt
+      -- darf beim Spieler bleiben — ein Kommandotext am Boss nimmt sie ihm.
       if hg.eat and hg.eat.phase == "channel" then
-        love.graphics.setColor(1, 1, 1, 1)
-        local hint = "Schurke: TRITT!"
-        local font = love.graphics.getFont()
-        love.graphics.print(hint, x - font:getWidth(hint) / 2,
-          y - 34 * scale - 16)
         hp_bar(x, y + 26, 26, hg.eat.progress, 0.9, 0.8, 0.2)
       end
     end
@@ -1788,17 +1794,9 @@ function R:draw(view, ui)
         if d <= Z.r + 2 then zoom_hover = true end
       end
     end
-    -- drei Stufen-Punkte auf derselben Bahn, unter dem Minus-Knopf
-    for s = 1, 3 do
-      local px = Z.dots.x + (s - 2) * 9
-      local py = Z.dots.y
-      if s <= self.zoom then
-        love.graphics.setColor(0.78, 0.63, 0.28, 1)
-      else
-        love.graphics.setColor(0.25, 0.22, 0.16, 1)
-      end
-      love.graphics.circle("fill", px, py, 2.5)
-    end
+    -- Die drei Stufen-Punkte sind seit Runde 15 (#193) weg (Rob-Entscheid):
+    -- die Zoomstufe sieht man an der Karte, ein Zustandsanzeiger dafuer ist
+    -- Moeblierung ohne Aufgabe. Der Hover-Tooltip nennt sie weiterhin.
     if zoom_hover and ui.mouse then
       draw_tooltip({ "Zoom", "Stufe " .. self.zoom .. " von 3",
         "Mausrad oder + / -" }, ui.mouse[1], ui.mouse[2], w, h)

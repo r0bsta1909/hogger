@@ -27,9 +27,7 @@ do
   end
   T.near(bahn(L.zoom.plus), 378, "layout: Plus sitzt auf der Ringbahn")
   T.near(bahn(L.zoom.minus), 378, "layout: Minus sitzt auf derselben Bahn")
-  T.near(bahn(L.zoom.dots), 378, "layout: die Stufenpunkte auch")
   T.ok(L.zoom.minus.y > L.zoom.plus.y, "layout: Minus liegt unter Plus")
-  T.ok(L.zoom.dots.y > L.zoom.minus.y, "layout: Punkte unter dem Minus")
   do -- Knoepfe duerfen sich nicht ueberlappen
     local dx = L.zoom.minus.x - L.zoom.plus.x
     local dy = L.zoom.minus.y - L.zoom.plus.y
