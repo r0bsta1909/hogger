@@ -1615,6 +1615,85 @@ do
   model.params.hunter_feign_enabled.wert = 1
 end
 
+-- Runde 14 (#168): Totstellen war loechrig — vier Wege zurueck zum Angriff
+do
+  local st = world.new(48)
+  world.add_player(st, "jg", { quest_done = true })
+  world.begin_try(st, {})
+  local jg = st.players[1]
+  jg.alive, jg.ghost, jg.class, jg.race = true, false, "hunter", "zwerg"
+  jg.max_hp, jg.hp = model.hp_for_class("hunter"), model.hp_for_class("hunter")
+  jg.resource = 100
+  jg.x, jg.y = st.hogger.x + 200, st.hogger.y
+  jg.facing = input.facing_towards(jg.x, jg.y, st.hogger.x, st.hogger.y)
+  st.hogger.threat[1] = 50
+  st.hogger.state = "combat"
+  st.hogger.engaged = true
+  step.step(st, { [1] = { mask = input.AB2, facing = jg.facing } })
+  T.ok((jg.feign_until or 0) > st.time, "feign-fix: er liegt")
+
+  -- (1) Ein zweiter Tastendruck darf den Angriff nicht wieder scharf machen
+  step.step(st, { [1] = { mask = 0, facing = jg.facing } })
+  step.step(st, { [1] = { mask = input.AB1, facing = jg.facing } })
+  T.ok(not jg.attack_on,
+    "feign-fix: Tastendruck waehrend des Liegens armiert den Angriff nicht")
+
+  -- (2) Auch der Rechtsklick-Angriffsklick nicht
+  T.eq(step.engage(st, 1), false, "feign-fix: engage prallt am Liegen ab")
+  T.ok(not jg.attack_on, "feign-fix: ... und laesst attack_on aus")
+
+  -- (3) Die Bedrohung bleibt ueber die volle Dauer geloescht: der
+  -- Leerlauf-Aggroblock setzte sie vorher schon im naechsten Tick zurueck.
+  -- Wichtig: waehrend der Schleife pruefen, nicht danach — mit dem alten
+  -- Verhalten hat Hogger den Liegenden aufgegriffen und binnen einer halben
+  -- Sekunde getoetet, und der Tod loescht die Bedrohung von selbst. Ein
+  -- Test, der nur hinterher schaut, waere gruen geblieben.
+  st.hogger.state = "idle"
+  jg.x, jg.y = st.hogger.x + 100, st.hogger.y -- innerhalb des Aggro-Radius
+  local kampf_gesehen, bedroht_gesehen = false, false
+  for _ = 1, 30 do
+    step.step(st, { [1] = { mask = 0, facing = jg.facing } })
+    if st.hogger.state == "combat" then kampf_gesehen = true end
+    if (st.hogger.threat[1] or 0) > 0 then bedroht_gesehen = true end
+  end
+  T.ok(not bedroht_gesehen,
+    "feign-fix: Hoggers Leerlauf-Aggro setzt dem Liegenden keine Bedrohung")
+  T.ok(not kampf_gesehen,
+    "feign-fix: ... und nimmt den Kampf nicht wieder auf")
+  T.ok(jg.alive, "feign-fix: der Liegende ueberlebt sein Totstellen")
+  T.ok((jg.feign_until or 0) > st.time, "feign-fix: ... und liegt noch")
+
+  -- (4) Der Schwungtimer laeuft im Liegen nicht ins Minus
+  jg.feign_until = st.time + 2
+  jg.next_auto = 1.0
+  local vorher = jg.next_auto
+  for _ = 1, 20 do step.step(st, { [1] = { mask = 0, facing = jg.facing } }) end
+  T.near(jg.next_auto, vorher, "feign-fix: Schwungtimer ist geparkt")
+end
+
+-- Auch Mobs greifen einen Liegenden nicht neu auf (Runde 14, #168)
+do
+  local st = world.new(49)
+  world.add_player(st, "jg", { quest_done = true })
+  world.begin_try(st, {})
+  local jg = st.players[1]
+  jg.alive, jg.ghost, jg.class, jg.race = true, false, "hunter", "zwerg"
+  jg.max_hp, jg.hp = model.hp_for_class("hunter"), model.hp_for_class("hunter")
+  jg.x, jg.y = 900, 900
+  jg.feign_until = st.time + 5
+  local wolf = world.add_npc(st, "wolf", jg.x + 20, jg.y, 10)
+  wolf.state, wolf.target_pid = "idle", nil
+  wolf.spawn_x, wolf.spawn_y = wolf.x, wolf.y
+  for _ = 1, 10 do step.step(st, { [1] = { mask = 0, facing = jg.facing } }) end
+  T.ok(wolf.target_pid == nil,
+    "feign-fix: der Wolf nimmt den Liegenden nicht ins Visier")
+
+  -- steht er wieder, ist er normale Beute
+  jg.feign_until = 0
+  for _ = 1, 10 do step.step(st, { [1] = { mask = 0, facing = jg.facing } }) end
+  T.eq(wolf.target_pid, 1, "feign-fix: aufgestanden greift der Wolf wieder an")
+end
+
 -- Runde 13 (#158): Gnarlwurzeln — Mob steht fest, Hogger ist immun ---------
 do
   local st = world.new(53)

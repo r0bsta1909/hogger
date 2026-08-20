@@ -27,9 +27,11 @@ W.EV = {
   eat_complete = 9, crit_kill = 10, try_start = 11, try_end = 12,
   revive = 13, loot_pickup = 14, mob_kill = 15, mob_death_by = 16, ding = 17,
   leeroy_line = 18, taunt = 19,
-  -- Runde 14 (#167): ohne diesen Eintrag verwirft der Host das root-Ereignis
-  -- in seiner Whitelist — der Druide sah nie, dass seine Wurzeln sassen
-  root = 20,
+  -- Runde 14: alle drei Ereignisse aus Runde 13 fehlten hier — die
+  -- Whitelist des Hosts baut sich aus dieser Tabelle, sie landeten also
+  -- nur im Log. Niemand sah je, dass Wurzeln sassen, dass sich jemand
+  -- totstellte oder dass ein Schild lag (#167, #168).
+  root = 20, feign = 21, shield = 22,
 }
 W.EV_NAMES = {}
 for name, id in pairs(W.EV) do W.EV_NAMES[id] = name end

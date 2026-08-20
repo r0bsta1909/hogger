@@ -352,6 +352,14 @@ local function process_cosmetics(view)
       local tx, ty = entity_pos(e.dst)
       app.floating:add("Verwurzelt!", tx, ty, { 0.45, 0.9, 0.35 }, 2)
       audio.play("snd_impact_frost")
+    elseif e.ev == "feign" then
+      -- Totstellen (Runde 14, #168): der Jaeger sieht jetzt, dass er liegt
+      local tx, ty = entity_pos(e.src)
+      app.floating:add("Totgestellt!", tx, ty, { 0.75, 0.75, 0.7 }, 2)
+    elseif e.ev == "shield" then
+      -- Machtwort: Schild (Runde 13, #156) — das Ereignis kam nie an
+      local tx, ty = entity_pos(e.src)
+      app.floating:add("Schild!", tx, ty, { 0.8, 0.85, 1 }, 2)
     elseif e.ev == "eat_complete" then
       app.render:announce("Hogger hat gefressen ...", 2.5)
     elseif e.ev == "try_end" then
