@@ -411,6 +411,38 @@ local function player_damage_enemy(state, p, amount, kind, ev)
   end
 end
 
+-- Im Kampf? (Runde 14, #169) — eine Wahrheit fuer die Verstohlenheits-Sperre
+-- und fuer das Kampfflag im Snapshot. Genau die Bedingung, die auch das
+-- Totstellen aufloest: Bedrohung bei Hogger oder ein NPC hat mich im Visier.
+function S.in_combat(state, p)
+  if not p or not p.alive then return false end
+  if (state.hogger.threat[p.id] or 0) > 0 then return true end
+  -- Die Menge der von NPCs anvisierten Spieler wird einmal je Tick gebaut
+  -- (S.step); ohne sie — etwa im Test — wird direkt gescannt.
+  local set = state.npc_targets
+  if set then return set[p.id] == true end
+  for id = world.NPC_ID_BASE, 250 do
+    local npc = state.npcs[id]
+    if npc and npc.target_pid == p.id then return true end
+  end
+  return false
+end
+
+local function refresh_npc_targets(state)
+  local set = state.npc_targets
+  if not set then set = {}; state.npc_targets = set end
+  for k in pairs(set) do set[k] = nil end
+  for id = world.NPC_ID_BASE, 250 do
+    local npc = state.npcs[id]
+    if npc and npc.target_pid then set[npc.target_pid] = true end
+  end
+  -- Kampfflag am Spieler festhalten: der Snapshot transportiert es nur
+  -- (wire.lua bleibt ohne Abhaengigkeit auf die Simulation).
+  for _, p in ipairs(state.players) do
+    p.in_combat = S.in_combat(state, p)
+  end
+end
+
 -- Wer fuer Gegner nicht existiert: verstohlen ODER liegend (Runde 14, #168).
 -- Vorher stand an jeder Aggro-Stelle nur `not p.stealth` — der Jaeger, der
 -- sich totstellte, wurde von Mobs und von Hoggers Leerlauf-Aggro sofort
@@ -532,7 +564,14 @@ local ABILITIES = {
           model.p("rogue_evis_dmg_per_cp") * p.cp, "ability", ev)
         p.cp = 0
       end },
-    { id = "stealth", target = "self",
+    -- Verstohlenheit (Runde 14, #169): nur AUSSERHALB des Kampfes, wie im
+    -- Original. Sie setzt keine Aggro zurueck — wer schon auf der Liste
+    -- steht, bleibt drauf; sie macht nur unsichtbar fuers Zielen. Das
+    -- Ausschalten geht dagegen jederzeit, auch mitten im Kampf.
+    { id = "stealth", target = "self", enabled = "rogue_stealth_enabled",
+      ready = function(state, p)
+        return p.stealth or not S.in_combat(state, p)
+      end,
       effect = function(state, p) set_stealth(state, p, not p.stealth) end },
     -- Tritt (Runde 12, #140): der EINZIGE Fress-Unterbrecher im Spiel.
     -- Off-GCD wie das Vanilla-Original; greift nur im Fresskanal (ready),
@@ -1750,6 +1789,7 @@ function S.step(state, inputs)
   end
 
   pact_tick(state) -- Blutpakt-Aura pflegen (Runde 13, #159)
+  refresh_npc_targets(state) -- wer steht im Kampf? (Runde 14, #169)
 
   for _, p in ipairs(state.players) do
     player_tick(state, p, inputs[p.id], ev)

@@ -186,6 +186,8 @@ return {
     "hoeher = der Finisher trifft haerter" },
   rogue_evis_energy = { "Energiekosten des Ausweidens.",
     "hoeher = seltener finishen" },
+  rogue_stealth_enabled = { "Schalter fuer die Verstohlenheit des Schurken.",
+    "hoeher = Faehigkeit ist an" },
   rogue_stealth_speed = { "Tempoanteil in der Verstohlenheit.",
     "hoeher = Schurken schleichen schneller" },
   rogue_kick_energy = { "Energiekosten des Tritts, der einzigen Fress-Unterbrechung.",
