@@ -67,11 +67,18 @@ end
 -- Blutpakt hebt den Deckel um warlock_pact_hp_pct — der Client rechnet
 -- dieselbe Formel wie step.effective_max_hp aus dem flags3-Bit und den
 -- synchronen Params (WELCOME/PARAM_SET), eine Wahrheit, kein Extra-Byte.
+-- Der Snapshot sendet nur hp, nie max_hp — der Client rechnet es aus Klasse
+-- und Blutpakt nach. Seit Runde 17 entscheidet dieselbe Zahl auch ueber die
+-- MITGLIEDSCHAFT in der Heil-Leiste (verwundet oder nicht), nicht mehr nur
+-- ueber eine Balkenfarbe: schaetzt der Client zu hoch, steht jemand dauerhaft
+-- als "verwundet" drin und verdraengt einen echten Sterbenden. Deshalb ist
+-- die Funktion exportiert und gegen step.effective_max_hp testgesichert.
 local function client_max_hp(p)
   local base = p.class and model.hp_for_class(p.class) or 0
   if p.pact then base = base * (1 + model.p("warlock_pact_hp_pct")) end
   return base
 end
+R.client_max_hp = client_max_hp
 
 -- Buffs und Debuffs mit Tooltip (GDD 4.3/8.2/9.2, Issue #65). Die Zahlen
 -- kommen aus model.lua, damit Anzeige und Wirkung nie auseinanderlaufen.
@@ -567,37 +574,94 @@ R.CP_STRIP_H = 18 -- Hoehe der Leiste (schiebt sie ueber die Tafel)
 R.HEALBAR = { x = 12, y = 142, w = 214, header_h = 18, row_h = 18,
               max_rows = 24 }
 
--- Zeilen: selbst IMMER zuerst, danach alphabetisch nach Namen — STABIL,
--- eine HP-Sortierung liesse die Zeilen unter dem Cursor springen (genau
--- der Fehler, den die Leiste behebt). Geister/Tote sind unheilbar: raus.
-function R.heal_rows(view, heal_range, max_rows)
+-- Schwelle, ab der eine Zeile als kritisch gilt (Anzeigewert, kein
+-- Balancing-Parameter — dieselbe Zahl faerbt seit Runde 14 den Balken rot).
+R.HEALBAR_LOW_PCT = 35
+
+-- "Auswahl nach Not, Anzeige in Ruhe" (Runde 17).
+--
+-- Kandidat ist, wer lebt, in Heil-Reichweite steht und VERWUNDET ist. Reicht
+-- der Platz nicht, ueberleben die am schwersten Verwundeten die AUSWAHL —
+-- ANGEZEIGT wird trotzdem stabil (selbst zuerst, dann alphabetisch), damit
+-- die Zeilen nicht unter dem Cursor tanzen. Eine echte HP-Sortierung war
+-- bewusst verworfen und bleibt es: bei vierzig Spielern faellt alle 1,8 s
+-- Schaden, die Liste ordnete sich staendig neu und man klickt daneben.
+--
+-- Der eigentliche Fehler bis Runde 17 war der Deckel: er schnitt ALPHABETISCH
+-- ab. Ein sterbender "Zoe" war unsichtbar, waehrend ein unverletzter "Anna"
+-- einen Platz belegte.
+--
+-- now/memo (optional): Gnadenfrist. Wer voll geheilt wurde, bleibt noch
+-- healbar_grace lang stehen — sonst klappt die Liste genau in dem Moment
+-- zusammen, in dem der Heiler den naechsten anklicken will. Ohne memo
+-- verhaelt sich die Funktion wie ohne Nachlauf.
+function R.heal_rows(view, heal_range, max_rows, now, memo)
   local rows, more_n = {}, 0
   local names = view.names or {}
   local me = view.players[view.me]
   if not (me and me.alive) then return rows, 0 end
+  -- Exakt die Rundung der Anzeige: sonst stuende jemand mit 99,6 % als
+  -- "verwundet" in einer Zeile, die "100 %" zeigt.
   local function pct(p)
     local maxhp = client_max_hp(p)
-    return maxhp > 0 and math.floor((p.hp or 0) / maxhp * 100 + 0.5) or 0
+    if maxhp <= 0 then return 0 end
+    local v = math.floor((p.hp or 0) / maxhp * 100 + 0.5)
+    return math.max(0, math.min(100, v))
   end
+  -- Selbst bleibt IMMER Zeile 1, auch unverletzt: der Anker der Liste, und
+  -- man muss sich selbst anklicken koennen.
   rows[1] = { pid = view.me, name = names[view.me] or ("#" .. tostring(view.me)),
               class = me.class, hp_pct = pct(me), is_self = true }
-  local others = {}
+
+  local grace = memo and model.p("healbar_grace") or 0
+  now = now or 0
+  local kandidaten = {}
   for pid, p in pairs(view.players) do
     if pid ~= view.me and p.alive
        and world.dist(view.me_x or 0, view.me_y or 0, p.x, p.y) <= heal_range then
-      others[#others + 1] = { pid = pid,
-                              name = names[pid] or ("#" .. tostring(pid)),
-                              class = p.class, hp_pct = pct(p), is_self = false }
+      local hp_pct = pct(p)
+      if hp_pct < 100 and memo then memo[pid] = now end
+      -- verwundet ODER noch im Nachlauf
+      local nachlauf = memo and memo[pid] and (now - memo[pid]) < grace
+      if hp_pct < 100 or nachlauf then
+        kandidaten[#kandidaten + 1] = {
+          pid = pid, name = names[pid] or ("#" .. tostring(pid)),
+          class = p.class, hp_pct = hp_pct, is_self = false,
+        }
+      end
     end
   end
-  table.sort(others, function(a, b)
-    local al, bl = a.name:lower(), b.name:lower()
-    if al ~= bl then return al < bl end
-    return a.pid < b.pid -- Namensgleichstand: pid entscheidet, stabil
+
+  -- AUSWAHL: die am schwersten Verwundeten zuerst. pid als Endanschlag —
+  -- LuaJITs table.sort ist instabil, ohne Totalordnung haenge das Ergebnis
+  -- an der pairs-Reihenfolge und waere zwischen zwei Laeufen verschieden.
+  table.sort(kandidaten, function(a, b)
+    if a.hp_pct ~= b.hp_pct then return a.hp_pct < b.hp_pct end
+    return a.pid < b.pid
   end)
   max_rows = max_rows or R.HEALBAR.max_rows
-  for _, r in ipairs(others) do
-    if #rows < max_rows then rows[#rows + 1] = r else more_n = more_n + 1 end
+  local platz = max_rows - 1 -- Zeile 1 gehoert einem selbst
+  local gewaehlt = {}
+  for i, r in ipairs(kandidaten) do
+    if i <= platz then gewaehlt[#gewaehlt + 1] = r else more_n = more_n + 1 end
+  end
+
+  -- ANZEIGE: stabil alphabetisch, derselbe Vergleicher wie bisher.
+  table.sort(gewaehlt, function(a, b)
+    local al, bl = a.name:lower(), b.name:lower()
+    if al ~= bl then return al < bl end
+    return a.pid < b.pid
+  end)
+  for _, r in ipairs(gewaehlt) do rows[#rows + 1] = r end
+
+  -- Merk-Tabelle aufraeumen: ueber einen Abend mit vierzig Spielern waechst
+  -- sie sonst still weiter. Sammeln, dann loeschen — nie waehrend pairs.
+  if memo then
+    local alt = {}
+    for pid, t in pairs(memo) do
+      if (now - t) >= grace then alt[#alt + 1] = pid end
+    end
+    for _, pid in ipairs(alt) do memo[pid] = nil end
   end
   return rows, more_n
 end
@@ -784,7 +848,9 @@ function R:heal_view(view, hb)
   end
   local HB = hb or R.HEALBAR
   -- max_rows aus dem Layout (M13-Klemme gegen die Fensterhoehe)
-  local rows, more_n = R.heal_rows(view, model.p("heal_range"), HB.max_rows)
+  self.heal_memo = self.heal_memo or {}
+  local rows, more_n = R.heal_rows(view, model.p("heal_range"), HB.max_rows,
+    self.ui_t or 0, self.heal_memo)
   if #rows == 0 then
     self.heal_cache = nil
     return nil
@@ -826,9 +892,18 @@ function R:draw_healbar(view, hb)
     -- Balkenlaenge liest man im Klumpen schneller als zwei Ziffern.
     local frac = math.max(0, math.min(1, (r.hp_pct or 0) / 100))
     local bx, bw2 = HB.x + 24, HB.w - 24 - 8
-    local low = (r.hp_pct or 0) <= 35
+    local low = (r.hp_pct or 0) <= R.HEALBAR_LOW_PCT
     ui_bar(bx, y + 1, bw2, HB.row_h - 4, frac,
       low and { 0.72, 0.16, 0.14 } or { 0.15, 0.62, 0.18 })
+    -- Kritisch-Markierung (Runde 17): pulsender Rahmen um die Zeile. Nur
+    -- Deckkraft, KEINE Koordinate — die Zeile darf sich nicht bewegen, sonst
+    -- ist genau das Problem zurueck, das die stabile Reihenfolge loest.
+    if low then
+      local puls = 0.45 + 0.35 * math.sin((self.ui_t or 0) * 6)
+      love.graphics.setColor(1, 0.35, 0.3, puls)
+      love.graphics.setLineWidth(1)
+      love.graphics.rectangle("line", HB.x + 3, y - 1, HB.w - 6, HB.row_h, 2)
+    end
     -- Name in Fast-Weiss statt in Klassenfarbe: auf einem gruenen Balken
     -- verschwindet ein gruener Druidenname (gemessen am Screenshot der
     -- Runde 14). Die Klasse traegt das Icon links, wie in Raidframes.
@@ -839,7 +914,10 @@ function R:draw_healbar(view, hb)
       low and 1 or 0.92, low and 0.85 or 0.95, low and 0.85 or 0.9)
   end
   if more_n > 0 then
-    schatten("+" .. more_n .. " weitere in Reichweite",
+    -- "verwundet", nicht "in Reichweite": in der Liste stehen seit Runde 17
+    -- nur noch Verwundete, und der Ueberhang sind die, fuer die kein Platz
+    -- war — nicht die, die zu weit weg stehen.
+    schatten("+" .. more_n .. " weitere verwundet",
       HB.x + 24, HB.y + HB.header_h + #rows * HB.row_h + 1, 0.6, 0.56, 0.45)
   end
 end

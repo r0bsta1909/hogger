@@ -11,7 +11,7 @@ local function mkview()
   return {
     me = 5, me_x = 1000, me_y = 1000,
     names = { [1] = "Anna", [2] = "Bert", [3] = "Zora", [4] = "Karl",
-              [5] = "Heiler", [6] = "Otto" },
+              [5] = "Heiler", [6] = "Otto", [7] = "Uwe" },
     players = {
       [5] = { alive = true, class = "priest", hp = 50, x = 1000, y = 1000 },
       -- 249 px: drin
@@ -22,9 +22,15 @@ local function mkview()
       [3] = { alive = false, ghost = true, class = "mage", x = 1010, y = 1000 },
       -- Toter in Reichweite: raus
       [4] = { alive = false, ghost = false, class = "rogue", x = 1020, y = 1000 },
-      -- Leeroy in Reichweite: normal drin
-      [6] = { alive = true, class = "warrior", is_leeroy = true, hp = 80,
+      -- Leeroy in Reichweite und verwundet: normal drin
+      -- (bis Runde 17 stand er hier auf vollen 80 HP — seit die Liste nur
+      -- noch Verwundete zeigt, waere er damit gar nicht mehr erschienen und
+      -- der Test haette die falsche Sache geprueft)
+      [6] = { alive = true, class = "warrior", is_leeroy = true, hp = 60,
               x = 1000, y = 1100 },
+      -- Unverletzt in Reichweite: seit Runde 17 NICHT in der Liste — er
+      -- braucht keine Heilung und belegt sonst den Platz eines Sterbenden
+      [7] = { alive = true, class = "warrior", hp = 80, x = 1030, y = 1000 },
     },
   }
 end
@@ -43,7 +49,12 @@ do
     T.ok(r.name ~= "Bert", "healbar: 251 px ist ausser Reichweite (" .. r.name .. ")")
     T.ok(r.name ~= "Zora", "healbar: Geist nie in der Liste (" .. r.name .. ")")
     T.ok(r.name ~= "Karl", "healbar: Toter nie in der Liste (" .. r.name .. ")")
+    T.ok(r.is_self or r.name ~= "Uwe",
+      "healbar: ein Unverletzter belegt keinen Platz (" .. r.name .. ")")
   end
+  -- Man selbst steht drin, auch unverletzt: Anker der Liste, und man muss
+  -- sich selbst anklicken koennen
+  T.eq(rows[1].hp_pct, 100, "healbar: selbst erscheint auch mit vollen HP")
 end
 
 -- Stabile Sortierung: HP-Aenderungen duerfen die Reihenfolge nicht kippen
@@ -66,17 +77,47 @@ do
   T.eq(#rows, 0, "healbar: toter Heiler sieht keine Liste")
 end
 
--- Ueberhang: max_rows deckelt, der Rest wird gezaehlt
+-- Ueberhang: max_rows deckelt, der Rest wird gezaehlt.
+--
+-- Der Test stand bis Runde 17 mit 29 UNVERLETZTEN Verbuendeten da und hat
+-- damit nie den Ueberhang gemessen, sondern nur den Deckel. Die eigentliche
+-- Zusage ist eine andere: bei Platzmangel ueberleben die am schwersten
+-- Verwundeten die Auswahl — angezeigt wird trotzdem alphabetisch. Vorher
+-- schnitt der Deckel nach dem ALPHABET ab, ein sterbender "Zoe" war also
+-- unsichtbar, waehrend ein unverletzter "Anna" seinen Platz belegte.
 do
   local v = { me = 1, me_x = 0, me_y = 0, names = {}, players = {
     [1] = { alive = true, class = "priest", hp = 50, x = 0, y = 0 } } }
+  -- pid 2..30: je hoeher die pid, desto GESUENDER (pid 2 = 4 HP von 80,
+  -- pid 30 = 60 HP von 80). Die Namen laufen genau andersherum, damit
+  -- Auswahl und Anzeige sich nicht zufaellig decken.
   for pid = 2, 30 do
-    v.players[pid] = { alive = true, class = "warrior", hp = 80,
+    v.players[pid] = { alive = true, class = "warrior", hp = 2 * pid,
                        x = 10 + pid, y = 0 }
+    v.names[pid] = string.format("spieler%02d", 32 - pid)
   end
   local rows, more_n = render.heal_rows(v, RANGE, 24)
   T.eq(#rows, 24, "healbar: Deckel bei max_rows Zeilen")
-  T.eq(more_n, 6, "healbar: Ueberhang gezaehlt (30 - 24)")
+  T.eq(more_n, 6, "healbar: Ueberhang gezaehlt (29 Verwundete, 23 Plaetze)")
+  T.ok(rows[1].is_self, "healbar: selbst behaelt Zeile 1")
+
+  -- Gezeigt werden die 23 Schwaechsten, also die pids 2..24
+  local gezeigt = {}
+  for i = 2, #rows do gezeigt[rows[i].pid] = true end
+  for pid = 2, 24 do
+    T.ok(gezeigt[pid], "healbar: Schwerverletzter pid " .. pid .. " ist sichtbar")
+  end
+  for pid = 25, 30 do
+    T.ok(not gezeigt[pid],
+      "healbar: der Gesuendere pid " .. pid .. " weicht ihm")
+  end
+
+  -- ... und sie stehen trotzdem alphabetisch, nicht nach HP
+  local sortiert = true
+  for i = 3, #rows do
+    if rows[i - 1].name:lower() > rows[i].name:lower() then sortiert = false end
+  end
+  T.ok(sortiert, "healbar: angezeigt wird alphabetisch, nicht nach HP")
 end
 
 -- Ohne Roster-Namen faellt die pid ein
@@ -158,6 +199,112 @@ do
   -- Leere Liste: kein Treffer, keine Flaeche
   local _, leer = render.healbar_hit({}, 0, mitte_x, zeile2_y, HB)
   T.ok(not leer, "healbar: ohne Zeilen gibt es keine Klickflaeche")
+end
+
+-- ---------------------------------------------------------------------------
+-- Gnadenfrist (Runde 17): wer voll geheilt wurde, bleibt kurz stehen. Ohne
+-- das klappt die Liste genau in dem Moment zusammen, in dem der Heiler den
+-- naechsten anklicken will — die Zeilen darunter ruecken auf, und der Klick
+-- landet auf dem Falschen.
+-- ---------------------------------------------------------------------------
+do
+  local GRACE = model.p("healbar_grace")
+  local function view_mit(hp)
+    return { me = 1, me_x = 0, me_y = 0, names = { [1] = "Heiler", [2] = "Anna" },
+             players = {
+               [1] = { alive = true, class = "priest", hp = 50, x = 0, y = 0 },
+               [2] = { alive = true, class = "warrior", hp = hp, x = 10, y = 0 },
+             } }
+  end
+  local memo = {}
+  local rows = render.heal_rows(view_mit(40), RANGE, 24, 0, memo)
+  T.eq(#rows, 2, "gnadenfrist: der Verwundete steht drin")
+
+  -- voll geheilt, kurz danach: bleibt stehen
+  rows = render.heal_rows(view_mit(80), RANGE, 24, GRACE - 0.1, memo)
+  T.eq(#rows, 2, "gnadenfrist: direkt nach der Heilung bleibt die Zeile")
+
+  -- nach Ablauf: raus
+  rows = render.heal_rows(view_mit(80), RANGE, 24, GRACE + 0.1, memo)
+  T.eq(#rows, 1, "gnadenfrist: nach Ablauf verschwindet er")
+  T.eq(next(memo), nil, "gnadenfrist: die Merk-Tabelle raeumt sich auf")
+
+  -- Wer NIE verwundet war, kommt auch nicht ueber die Gnadenfrist herein
+  local memo2 = {}
+  local nur_gesund = render.heal_rows(view_mit(80), RANGE, 24, 0, memo2)
+  T.eq(#nur_gesund, 1, "gnadenfrist: ein nie Verwundeter erscheint nicht")
+  T.eq(next(memo2), nil, "gnadenfrist: ... und wird nicht gemerkt")
+
+  -- Ohne Merk-Tabelle verhaelt sich alles wie ohne Nachlauf
+  local ohne = render.heal_rows(view_mit(80), RANGE, 24)
+  T.eq(#ohne, 1, "gnadenfrist: ohne Merk-Tabelle kein Nachlauf")
+end
+
+-- ---------------------------------------------------------------------------
+-- Determinismus: die AUSWAHL darf nicht an der Einfuegereihenfolge haengen.
+-- LuaJITs table.sort ist instabil; ohne pid als Endanschlag haengt das
+-- Ergebnis an der pairs-Reihenfolge und ist zwischen zwei Laeufen anders.
+-- ---------------------------------------------------------------------------
+do
+  local function bau(reihenfolge)
+    local v = { me = 1, me_x = 0, me_y = 0, names = {}, players = {
+      [1] = { alive = true, class = "priest", hp = 50, x = 0, y = 0 } } }
+    for _, pid in ipairs(reihenfolge) do
+      -- ALLE gleich schwer verletzt: nur der pid-Endanschlag kann noch
+      -- entscheiden, wer den letzten Platz bekommt
+      v.players[pid] = { alive = true, class = "warrior", hp = 40, x = 10, y = 0 }
+      v.names[pid] = "gleich"
+    end
+    local rows = render.heal_rows(v, RANGE, 5)
+    local pids = {}
+    for i = 2, #rows do pids[#pids + 1] = rows[i].pid end
+    return table.concat(pids, ",")
+  end
+  local vorwaerts = bau({ 2, 3, 4, 5, 6, 7, 8 })
+  local rueckwaerts = bau({ 8, 7, 6, 5, 4, 3, 2 })
+  T.eq(rueckwaerts, vorwaerts,
+    "auswahl: umgekehrte Einfuegereihenfolge liefert dieselben Zeilen")
+  T.eq(vorwaerts, "2,3,4,5",
+    "auswahl: bei Gleichstand entscheidet die pid, nicht der Zufall")
+end
+
+-- ---------------------------------------------------------------------------
+-- Der Ueberhang zaehlt nur Verwundete: "+X weitere verwundet" darf nicht
+-- Kerngesunde mitzaehlen, sonst sucht der Heiler jemanden, den es nicht gibt.
+-- ---------------------------------------------------------------------------
+do
+  local v = { me = 1, me_x = 0, me_y = 0, names = {}, players = {
+    [1] = { alive = true, class = "priest", hp = 50, x = 0, y = 0 } } }
+  for pid = 2, 20 do -- 5 verwundet, 14 kerngesund
+    v.players[pid] = { alive = true, class = "warrior",
+                       hp = (pid <= 6) and 20 or 80, x = 10, y = 0 }
+  end
+  local rows, more_n = render.heal_rows(v, RANGE, 4)
+  T.eq(#rows, 4, "ueberhang: drei Verwundete plus man selbst passen")
+  T.eq(more_n, 2, "ueberhang: nur die restlichen VERWUNDETEN werden gezaehlt")
+end
+
+-- Die Kritisch-Schwelle hat einen Namen und ist dieselbe wie die Balkenfarbe
+T.eq(render.HEALBAR_LOW_PCT, 35, "healbar: Kritisch-Schwelle als Konstante")
+
+-- ---------------------------------------------------------------------------
+-- Host und Client muessen sich ueber die Maximal-HP einig sein. Bis Runde 17
+-- kostete eine Abweichung nur eine falsche Balkenfarbe — jetzt entscheidet
+-- dieselbe Zahl, WER ueberhaupt in der Liste steht.
+-- ---------------------------------------------------------------------------
+do
+  local step_mod = require("game.gamesim.step")
+  for _, class in ipairs({ "warrior", "paladin", "hunter", "rogue",
+                           "priest", "mage", "warlock", "druid" }) do
+    for _, pact in ipairs({ false, true }) do
+      local host = step_mod.effective_max_hp(
+        { max_hp = model.hp_for_class(class), pact = pact })
+      local client = render.client_max_hp({ class = class, pact = pact })
+      T.near(client, host, string.format(
+        "max-hp: Client und Host einig (%s, Blutpakt %s)",
+        class, tostring(pact)))
+    end
+  end
 end
 
 -- ---------------------------------------------------------------------------

@@ -308,6 +308,10 @@ M.params = {
   -- Spitzenbedrohung. Abschaltbar, weil er im 40-Mann-Zerg auch Unruhe
   -- stiften kann — das entscheidet der Playtest.
   ui_threat_meter        = p(1, 0, 1, 1, "4.2"),
+  -- Runde 17: Nachlauf der Heil-Leiste. Wer voll geheilt wurde, bleibt so
+  -- lange stehen — sonst klappt die Liste unter dem Cursor zusammen, genau
+  -- in dem Moment, in dem der Heiler den naechsten anklicken will.
+  healbar_grace          = p(3, 0, 10, 0.5, "4.3"),
 }
 
 -- GDD-Stand jedes Parameters, eingefroren beim Laden: das F10-Panel mutiert

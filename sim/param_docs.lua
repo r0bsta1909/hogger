@@ -188,6 +188,8 @@ return {
     "hoeher = seltener finishen" },
   ui_threat_meter = { "Schalter fuer den Bedrohungsbogen am Kartenrand.",
     "hoeher = Anzeige ist an" },
+  healbar_grace = { "Nachlauf, den ein Vollgeheilter in der Heil-Leiste bleibt.",
+    "hoeher = die Liste beruhigt sich langsamer" },
   rogue_stealth_enabled = { "Schalter fuer die Verstohlenheit des Schurken.",
     "hoeher = Faehigkeit ist an" },
   rogue_stealth_speed = { "Tempoanteil in der Verstohlenheit.",
