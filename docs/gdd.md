@@ -88,6 +88,7 @@ Am Ring der Minimap sitzen ausschließlich funktionale Elemente im Add-on-Button
 - **Zoom + / −** am Ring (klassische Minimap-Position), zusätzlich Mausrad; seit M12 als plastische Goldknöpfe im Original-Stil, die Stufe zeigen drei kleine Punkte unter dem −-Knopf plus ein Hover-Tooltip (die frühere "Zoom N"-Textzeile ist gestrichen). **Zoom ist eine Informationsmechanik:** drei Stufen; herauszoomen zeigt mehr Karte, aber kleinere Icons und Balken (Übersicht gegen Lesbarkeit). Die maximale Stufe zeigt nie die ganze Karte — wer wissen will, was am Hügel passiert, muss hinlaufen oder als Geist zusehen.
 - **Die Uhr** an ihrer originalen Minimap-Position — seit M12 tatsächlich dort: als an den unteren Ring angedockte Plakette, Zeile 1 die Try-Zeit, Zeile 2 klein die Try-Nummer. **Zählt pro Try von 0:00 hoch.**
 - **XP-Leiste als dünner Bogen an der Innenkante des Minimap-Kreises** — dezent, aber ablesbar; füllt sich im Uhrzeigersinn. Tooltip bei Hover: "Noch 399 Erfahrung bis Stufe 2."
+- **Bedrohungsbogen (Runde 14, #174):** das Gegenstück zur XP-Leiste — ein zweiter dünner Bogen etwas weiter innen, der gegen den Uhrzeigersinn vom unteren Scheitel läuft und den **eigenen Anteil an der Spitzenbedrohung** zeigt (gelb bei wenig, rot bei viel, ab 80 % pulsierend). Er erscheint erst, wenn überhaupt Bedrohung besteht, damit der Ring auf dem Anmarsch ruhig bleibt; Hover erklärt ihn im Klartext ("Du bist Hoggers nächstes Ziel."). Kosten im Netz: **ein Byte je Spieler** — der Host rechnet den Anteil aus seiner Bedrohungstabelle, der Client bekommt nur seine eigene Zahl und sieht die Tabelle nie. Per F10 abschaltbar (`ui_threat_meter`); ob ein Meter im 40-Mann-Zerg hilft oder nur Unruhe stiftet, entscheidet der Playtest.
 
 ### 4.3 Die HUD-Tafeln am Ring (früher: Eckbereiche)
 
@@ -269,7 +270,7 @@ TOD → Fluchbruch-Sequenz (Kap. 11)
 
 ### 9.4 Bedrohung
 
-1 Schaden = 1 Bedrohung, **1 Heilung = 0,75 Bedrohung** (über Vanilla-0,5, damit der Erste-Heilung-zieht-Aggro-Gag früh im Pull lebt, aber ohne dass Heiler nach jedem Spruch verdammt sind; Panel-Parameter). Melee-Ziel = höchste Bedrohung in Reichweite, sonst höchste gesamt. Bedrohung wird beim Tod gelöscht.
+1 Schaden = 1 Bedrohung, **1 Heilung = 0,75 Bedrohung** (über Vanilla-0,5, damit der Erste-Heilung-zieht-Aggro-Gag früh im Pull lebt, aber ohne dass Heiler nach jedem Spruch verdammt sind; Panel-Parameter). Melee-Ziel = höchste Bedrohung in Reichweite, sonst höchste gesamt. Bedrohung wird beim Tod gelöscht — und beim Totstellen des Jägers (8.2), der einzigen Klasse, die sie loswird. **Sichtbar ist sie seit Runde 14 (#174)** als Bedrohungsbogen am Minimap-Rand (4.2): der Host schickt jedem Spieler ein Byte mit seinem Anteil an der Spitzenbedrohung, die Tabelle selbst bleibt beim Host.
 
 ---
 

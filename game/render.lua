@@ -1639,6 +1639,40 @@ function R:draw(view, ui)
     end
   end
 
+  -- Bedrohungsbogen an der Innenkante (Runde 14, #174): das Gegenstueck
+  -- zur XP-Leiste, unten statt oben und gegen den Uhrzeigersinn. Er zeigt
+  -- den EIGENEN Anteil an der Spitzenbedrohung — wer bei 100 % steht, ist
+  -- Hoggers naechstes Ziel. Unsichtbar, solange niemand Bedrohung hat,
+  -- damit der Ring auf dem Anmarsch ruhig bleibt.
+  if me and me.alive and model.p("ui_threat_meter") >= 1
+     and (me.threat_frac or 0) > 0.01 then
+    local frac = math.max(0, math.min(1, me.threat_frac))
+    local rr = L.radius - 14
+    local hot = frac >= 0.8
+    local puls = hot and (0.72 + 0.28 * math.sin(love.timer.getTime() * 6)) or 1
+    love.graphics.setColor(0.30, 0.12, 0.10, 0.55)
+    love.graphics.setLineWidth(3)
+    love.graphics.circle("line", L.ox, L.oy, rr)
+    -- gelb bei wenig, rot bei viel Bedrohung
+    love.graphics.setColor(0.55 + 0.45 * frac, 0.75 - 0.55 * frac, 0.15,
+      0.95 * puls)
+    love.graphics.setLineWidth(hot and 4 or 3)
+    love.graphics.arc("line", "open", L.ox, L.oy, rr,
+      math.pi / 2, math.pi / 2 - frac * 2 * math.pi)
+    love.graphics.setLineWidth(1)
+    if ui.mouse then
+      local md = math.sqrt((ui.mouse[1] - L.ox) ^ 2 + (ui.mouse[2] - L.oy) ^ 2)
+      if md > rr - 8 and md < rr + 6 then
+        aura_tip = aura_tip or { lines = {
+          string.format("Bedrohung: %d %% der Spitze", math.floor(frac * 100 + 0.5)),
+          frac >= 0.999 and "Du bist Hoggers naechstes Ziel."
+            or "Wer die Spitze hat, wird verpruegelt.",
+          "Schaden und Heilung erzeugen Bedrohung",
+        } }
+      end
+    end
+  end
+
   -- XP-Bogen an der Innenkante, fuellt im Uhrzeigersinn (GDD 4.2)
   if me then
     local frac = math.min(1, (me.xp or 0) / model.p("xp_level2"))

@@ -292,6 +292,10 @@ M.params = {
   zoom_radius_3          = p(600, 300, 1200, 25, "4.2"),
   floating_text_max      = p(30, 10, 60, 5, "4.1"),
   floating_text_duration = p(1.5, 0.5, 4.0, 0.25, "4.1"),
+  -- Bedrohungsbogen am Minimap-Rand (Runde 14, #174): eigener Anteil an der
+  -- Spitzenbedrohung. Abschaltbar, weil er im 40-Mann-Zerg auch Unruhe
+  -- stiften kann — das entscheidet der Playtest.
+  ui_threat_meter        = p(1, 0, 1, 1, "4.2"),
 }
 
 -- GDD-Stand jedes Parameters, eingefroren beim Laden: das F10-Panel mutiert

@@ -438,8 +438,18 @@ local function refresh_npc_targets(state)
   end
   -- Kampfflag am Spieler festhalten: der Snapshot transportiert es nur
   -- (wire.lua bleibt ohne Abhaengigkeit auf die Simulation).
+  -- Dazu der eigene Anteil an der Spitzenbedrohung (Runde 14, #174): der
+  -- Host kennt die ganze Tabelle, der Client bekommt nur seine eine Zahl —
+  -- ein Byte je Spieler statt einer Bedrohungsliste im Netz.
+  local top = 0
+  for _, p in ipairs(state.players) do
+    local th = state.hogger.threat[p.id]
+    if th and th > top then top = th end
+  end
   for _, p in ipairs(state.players) do
     p.in_combat = S.in_combat(state, p)
+    local th = state.hogger.threat[p.id] or 0
+    p.threat_frac = (top > 0) and (th / top) or 0
   end
 end
 

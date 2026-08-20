@@ -186,6 +186,8 @@ return {
     "hoeher = der Finisher trifft haerter" },
   rogue_evis_energy = { "Energiekosten des Ausweidens.",
     "hoeher = seltener finishen" },
+  ui_threat_meter = { "Schalter fuer den Bedrohungsbogen am Kartenrand.",
+    "hoeher = Anzeige ist an" },
   rogue_stealth_enabled = { "Schalter fuer die Verstohlenheit des Schurken.",
     "hoeher = Faehigkeit ist an" },
   rogue_stealth_speed = { "Tempoanteil in der Verstohlenheit.",

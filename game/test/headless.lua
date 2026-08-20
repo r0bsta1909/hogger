@@ -274,6 +274,24 @@ function T.run()
           ok(math.abs(sp.x - p.x) <= 1 and math.abs(sp.y - p.y) <= 1,
             "Codec: Position (Quantisierung <= 1 px)")
           ok(sp.alive == (p.alive and true or false), "Codec: alive-Flag")
+          -- Bedrohungsanteil (Runde 14, #174): ein Byte, 0..1 quantisiert
+          ok(sp.threat_frac >= 0 and sp.threat_frac <= 1,
+            "Codec: Bedrohungsanteil liegt zwischen 0 und 1")
+          ok(math.abs(sp.threat_frac - (p.threat_frac or 0)) <= 1 / 255 + 1e-6,
+            "Codec: Bedrohungsanteil ueberlebt die Quantisierung")
+        end
+      end
+      -- Wer die Spitzenbedrohung hat, muss auch 1,0 melden — sonst zeigt
+      -- der Bogen nie Vollausschlag
+      do
+        local top_pid, top = nil, 0
+        for _, p in ipairs(st.players) do
+          local th = st.hogger.threat[p.id]
+          if th and th > top then top, top_pid = th, p.id end
+        end
+        if top_pid then
+          ok(snap.players[top_pid].threat_frac >= 254 / 255,
+            "Codec: der Spitzenreiter meldet vollen Bedrohungsanteil")
         end
       end
       ok(snap.hogger.hp == math.max(0, math.floor(st.hogger.hp + 0.5)),
