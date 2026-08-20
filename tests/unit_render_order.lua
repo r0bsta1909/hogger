@@ -26,3 +26,48 @@ do
     T.eq(a[i], b[i], "order: Reihenfolge identisch bei Wiederholung #" .. i)
   end
 end
+
+-- ---------------------------------------------------------------------------
+-- Gnarlwurzeln waren unsichtbar (Runde 14, #167): der Ring wurde mit
+-- Radius 14 gezeichnet und danach vom Mob-Icon zugedeckt — Platzhalter-Icons
+-- sind deckende Scheiben. Zwei Invarianten halten das jetzt fest.
+-- ---------------------------------------------------------------------------
+do
+  local manifest = require("assets.manifest")
+  local MOBS = { "add", "boar", "wolf", "kobold", "murloc" }
+
+  -- Wie assets.draw zeichnet: Kantenlaenge = groesse * 1.8 * scale,
+  -- Halbausdehnung also groesse * 0.9. Der Ring muss darueber liegen.
+  local groesster = 0
+  for _, kind in ipairs(MOBS) do
+    local m = manifest["icon_" .. kind]
+    T.ok(m ~= nil, "wurzeln: Manifest kennt icon_" .. kind)
+    groesster = math.max(groesster, (m.groesse or 0) * 0.9)
+  end
+  T.ok(render.ROOT_RING_R > groesster,
+    string.format("wurzeln: Ringradius %.1f liegt ausserhalb des groessten Mob-Icons (%.1f)",
+      render.ROOT_RING_R, groesster))
+
+  -- Und er muss NACH dem Icon gezeichnet werden. Das ist der eigentliche
+  -- Fehler gewesen und in der Zeichenreihenfolge sonst unsichtbar.
+  local src = assert(io.open("game/render.lua")):read("*a")
+  local block = src:match("if view%.npcs then(.-)\n  end")
+  T.ok(block ~= nil, "wurzeln: NPC-Zeichenblock im Renderer gefunden")
+  if block then
+    local icon_at = block:find('assets%.draw%("icon_" %.%. npc%.kind')
+    local ring_at = block:find("npc%.rooted")
+    T.ok(icon_at and ring_at and icon_at < ring_at,
+      "wurzeln: der Wurzelring wird NACH dem Mob-Icon gezeichnet")
+  end
+end
+
+-- Das root-Ereignis muss im Netz-Wortschatz stehen, sonst verwirft der Host
+-- es in seiner Whitelist und kein Client sieht je einen Fliesstext (#167).
+do
+  local wire_src = assert(io.open("game/net/wire.lua")):read("*a")
+  local ev_block = wire_src:match("W%.EV = {(.-)}")
+  T.ok(ev_block and ev_block:find("root%s*=%s*%d"),
+    "wurzeln: root steht in wire.EV (Ereignis-Whitelist des Hosts)")
+  T.ok(ev_block and ev_block:find("taunt%s*=%s*19"),
+    "wurzeln: die bestehenden Ereignisnummern bleiben unangetastet")
+end

@@ -27,6 +27,9 @@ W.EV = {
   eat_complete = 9, crit_kill = 10, try_start = 11, try_end = 12,
   revive = 13, loot_pickup = 14, mob_kill = 15, mob_death_by = 16, ding = 17,
   leeroy_line = 18, taunt = 19,
+  -- Runde 14 (#167): ohne diesen Eintrag verwirft der Host das root-Ereignis
+  -- in seiner Whitelist — der Druide sah nie, dass seine Wurzeln sassen
+  root = 20,
 }
 W.EV_NAMES = {}
 for name, id in pairs(W.EV) do W.EV_NAMES[id] = name end
@@ -421,9 +424,16 @@ function W.snapshot_body(state)
   for _, id in ipairs(npc_ids) do
     local npc = state.npcs[id]
     -- NPC-Flags (Runde 13): Bit 1 = gewurzelt (#158) — Erweiterung ohne
-    -- PROTO-Bump, dieselbe Politik wie flags3 am Spieler
+    -- PROTO-Bump, dieselbe Politik wie flags3 am Spieler.
+    -- Runde 14 (#167): die restlichen sieben Bits tragen die Restdauer der
+    -- Wurzeln in Vierteln einer Sekunde (bis 31,75 s). So zeigt der Client
+    -- einen echten Countdown, ohne eigene Buchfuehrung und ohne ein
+    -- zusaetzliches Byte im Snapshot.
     local nflags = 0
-    if state.time < (npc.rooted_until or 0) then nflags = nflags + 1 end
+    local rest = (npc.rooted_until or 0) - state.time
+    if rest > 0 then
+      nflags = 1 + 2 * math.min(127, math.floor(rest * 4))
+    end
     parts[#parts + 1] = pack("<BBI2I2BB", id, NPC_KIND_IDX[npc.kind] or 0,
       q16(npc.x), q16(npc.y),
       math.max(0, math.min(255, math.floor(npc.hp + 0.5))), nflags)
@@ -529,7 +539,8 @@ function W.read_snapshot(data, off)
     nid, nkind, nx, ny, nhp, nflags, off =
       love.data.unpack("<BBI2I2BB", data, off)
     s.npcs[nid] = { id = nid, kind = W.NPC_KINDS[nkind], x = nx, y = ny,
-                    hp = nhp, rooted = nflags % 2 >= 1 }
+                    hp = nhp, rooted = nflags % 2 >= 1,
+                    root_rest = math.floor(nflags / 2) / 4 }
   end
   local lcount
   lcount, off = love.data.unpack("<B", data, off)

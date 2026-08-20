@@ -131,6 +131,13 @@ local AURA = {
                string.format("Frostruestung, haelt %d s je Treffer",
                  model.p("mage_frostarmor_slow_duration")) }
     end },
+  -- Die einzige Aura, die ein NPC traegt (Runde 14, #167): vorher war der
+  -- Wurzel-Zustand nirgends ablesbar
+  roots = { kuerzel = "GW", name = "Gnarlwurzeln", debuff = true,
+    text = function()
+      return { "Festgewurzelt, kann sich nicht bewegen",
+               "Schaden bricht die Wurzeln sofort" }
+    end },
 }
 
 function R.new()
@@ -384,6 +391,12 @@ end
 -- in Heil-Reichweite; Rechtsklick auf eine Zeile heilt diesen Spieler
 -- (HEAL_REQUEST), Linksklick waehlt ihn als Ziel. Layout/Builder/Hit-Test
 -- sind love-frei (Muster raid_rows).
+-- Radius des Wurzelrings um einen Mob (Runde 14, #167). MUSS groesser sein
+-- als die halbe Ausdehnung des groessten Mob-Icons, sonst verschwindet der
+-- Ring darunter — genau das war der Fehler: er stand auf 14, das groesste
+-- Mob-Icon misst 21,6. Ein Test in unit_render_order haelt das fest.
+R.ROOT_RING_R = 22
+
 R.HEALBAR = { x = 12, y = 142, w = 190, header_h = 18, row_h = 18,
               max_rows = 24 }
 
@@ -1047,14 +1060,36 @@ function R:draw(view, ui)
         love.graphics.circle("fill", x, y,
           model.p("warlock_pact_radius") * scale)
       end
+      assets.draw("icon_" .. npc.kind, x, y, scale * 1.8)
       if npc.rooted then
-        -- Gnarlwurzeln (Runde 13, #158): gruener Wurzelgriff um den Mob
-        love.graphics.setColor(0.35, 0.75, 0.25, 0.8)
+        -- Gnarlwurzeln (Runde 13, #158; sichtbar erst seit Runde 14, #167):
+        -- der Ring lag mit Radius 14 UNTER dem Mob-Icon, dessen Platzhalter
+        -- eine deckende Scheibe von ~20 px Halbmesser ist — man sah nie
+        -- etwas. Jetzt nach dem Icon und ausserhalb davon, mit Wurzel-
+        -- stacheln und einem Bogen, der die Restdauer abbaut.
+        local r = R.ROOT_RING_R * scale
+        love.graphics.setColor(0.10, 0.22, 0.06, 0.85)
+        love.graphics.setLineWidth(4)
+        love.graphics.circle("line", x, y, r)
+        love.graphics.setColor(0.35, 0.78, 0.25, 0.95)
         love.graphics.setLineWidth(2)
-        love.graphics.circle("line", x, y, 14 * scale)
+        love.graphics.circle("line", x, y, r)
+        for k = 0, 5 do
+          local a = k * math.pi / 3 + 0.4
+          love.graphics.line(x + math.cos(a) * r, y + math.sin(a) * r,
+            x + math.cos(a) * (r + 4 * scale), y + math.sin(a) * (r + 4 * scale))
+        end
+        -- Restdauer als schrumpfender Bogen (Vorbild Cooldown-Sweep)
+        local rest = npc.root_rest or 0
+        local full = model.p("druid_roots_duration")
+        if rest > 0 and full > 0 then
+          love.graphics.setColor(0.75, 0.95, 0.55, 0.9)
+          love.graphics.setLineWidth(3)
+          love.graphics.arc("line", "open", x, y, r + 2 * scale,
+            -math.pi / 2, -math.pi / 2 + math.min(1, rest / full) * 2 * math.pi)
+        end
         love.graphics.setLineWidth(1)
       end
-      assets.draw("icon_" .. npc.kind, x, y, scale * 1.8)
       if npc.kind ~= "imp" then
         local maxhp = npc.kind == "add" and model.p("add_hp")
                       or model.p(npc.kind .. "_hp")
@@ -1389,7 +1424,8 @@ function R:draw(view, ui)
       end
       -- Ziel-Auren unter der Zieltafel (Runde 8, #107): die Auren des
       -- ZIELS, nicht mehr die eigenen. Hogger zeigt hier seinen
-      -- Frost-Slow (Magier-Frostruestung); NPCs haben keine Auren.
+      -- Frost-Slow (Magier-Frostruestung); Mobs seit Runde 14 (#167) die
+      -- Gnarlwurzeln — die einzige Aura, die ein NPC tragen kann.
       local tauras = {}
       if t == 0 then
         if (view.hogger.slow_rest or 0) > 0 then
@@ -1397,6 +1433,8 @@ function R:draw(view, ui)
         end
       elseif view.players[t] then
         tauras = aura_list(view.players[t])
+      elseif view.npcs and view.npcs[t] and view.npcs[t].rooted then
+        tauras[1] = { AURA.roots, view.npcs[t].root_rest or 0 }
       end
       aura_tip = draw_auras(tauras, L.frames.buffs.x, L.frames.buffs.y, ui)
         or aura_tip

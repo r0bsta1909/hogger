@@ -346,6 +346,12 @@ local function process_cosmetics(view)
     elseif e.ev == "taunt" then
       local tx, ty = entity_pos(e.dst)
       app.floating:add("Spott!", tx, ty, { 1, 0.75, 0.3 }, 2)
+    elseif e.ev == "root" then
+      -- Gnarlwurzeln (Runde 14, #167): der Druide muss SEHEN, dass sie
+      -- sassen — vorher gab es dafuer kein einziges Signal
+      local tx, ty = entity_pos(e.dst)
+      app.floating:add("Verwurzelt!", tx, ty, { 0.45, 0.9, 0.35 }, 2)
+      audio.play("snd_impact_frost")
     elseif e.ev == "eat_complete" then
       app.render:announce("Hogger hat gefressen ...", 2.5)
     elseif e.ev == "try_end" then
