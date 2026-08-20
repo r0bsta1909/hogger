@@ -1130,14 +1130,15 @@ function love.mousepressed(mx, my, button)
     local me = app.view.players[app.view.me]
     local slot = me and me.alive and me.class and step_mod.ALLY_SLOT[me.class]
     if slot then
-      local HB = L.frames.healbar
-      local rows, more_n = app.render.heal_rows(app.view,
-        model.p("heal_range"), HB.max_rows)
-      local ph = HB.header_h + (#rows + ((more_n > 0) and 1 or 0)) * HB.row_h + 8
-      if #rows > 0 and mx >= HB.x and mx <= HB.x + HB.w
-         and my >= HB.y and my <= HB.y + ph then
-        local i = app.render.healbar_row_at(#rows, mx, my, HB)
-        local row = i and rows[i]
+      -- Die Liste kommt aus dem letzten Frame (render:heal_view), nicht aus
+      -- einem zweiten Aufbau: geklickt wird genau das, was gezeichnet wurde.
+      local hv = app.render.heal_cache
+      local row, auf_der_leiste
+      if hv then
+        row, auf_der_leiste = app.render.healbar_hit(hv.rows, hv.more_n,
+          mx, my, hv.hb)
+      end
+      if auf_der_leiste then
         if row and button == 2 then
           -- Fehlerzeile vorab (Issue #56): der Host verwirft stumm, der
           -- Client sagt, warum nichts passiert (GCD/Mana; Reichweite ist
