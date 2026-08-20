@@ -602,8 +602,6 @@ function R.heal_rows(view, heal_range, max_rows)
   return rows, more_n
 end
 
--- Reine Arithmetik: welche Zeile liegt unter (mx, my)? nil = keine.
--- hb: optionales Layout (Dock-Variante, M12); Default = R.HEALBAR.
 -- Uhrtext (GDD 4.2). Love-frei, damit die Rechnung testbar ist.
 -- Runde 17: RESTZEIT statt verstrichener Zeit. Eine hochzaehlende Uhr nennt
 -- die Frist nie — Robs Trys endeten bei 15:00, und auf dem Bildschirm stand
@@ -613,12 +611,38 @@ function R.clock_text(clock, limit)
   return string.format("%d:%02d", math.floor(rest / 60), math.floor(rest % 60))
 end
 
+-- Reine Arithmetik: welche Zeile liegt unter (mx, my)? nil = keine.
+-- hb: optionales Layout (Dock-Variante, M12); Default = R.HEALBAR.
 function R.healbar_row_at(n_rows, mx, my, hb)
   local HB = hb or R.HEALBAR
   if mx < HB.x or mx > HB.x + HB.w then return nil end
   local i = math.floor((my - (HB.y + HB.header_h)) / HB.row_h) + 1
   if i >= 1 and i <= n_rows then return i end
   return nil
+end
+
+-- Hoehe der Plakette. EINE Formel (Runde 17): sie stand bis dahin zweimal
+-- da — im Zeichner und noch einmal von Hand im Klickpfad von main.lua. Zwei
+-- Kopien derselben Rechnung sind eine Kopie zu viel; laeuft eine davon aus
+-- dem Tritt, klickt man auf eine Flaeche, die woanders gezeichnet wurde.
+function R.healbar_height(n_rows, more_n, hb)
+  local HB = hb or R.HEALBAR
+  local extra = (more_n or 0) > 0 and 1 or 0
+  return HB.header_h + (n_rows + extra) * HB.row_h + 8
+end
+
+-- Trefferpruefung, die die ZEILE liefert statt eines Index (Vorbild
+-- P:row_at in game/ui/panel.lua): so kann die Fenster-Arithmetik nicht mehr
+-- neben der Listen-Arithmetik herlaufen. Schliesst die Rechteckpruefung ein,
+-- die vorher im Aufrufer stand.
+function R.healbar_hit(rows, more_n, mx, my, hb)
+  if not rows or #rows == 0 then return nil end
+  local HB = hb or R.HEALBAR
+  local ph = R.healbar_height(#rows, more_n, HB)
+  if mx < HB.x or mx > HB.x + HB.w then return nil end
+  if my < HB.y or my > HB.y + ph then return nil end
+  local i = R.healbar_row_at(#rows, mx, my, HB)
+  return i and rows[i] or nil, true -- zweiter Wert: Klick lag auf der Leiste
 end
 
 -- M12: eine Layout-Wahrheit fuer die gesamte Minimap-Moeblierung — Renderer
@@ -747,15 +771,33 @@ local function ui_bar(x, y, w, h, frac, col, text)
   end
 end
 
-function R:draw_healbar(view, hb)
+-- Die Liste EINMAL je Frame bauen und merken (Runde 17). Vorher baute der
+-- Klickpfad in main.lua sie ein zweites Mal, mit frischeren Daten als das
+-- Bild — man klickte also auf eine Liste, die so nie auf dem Schirm stand.
+-- Der Cache ist beim Klick hoechstens einen Frame alt: genau das, was der
+-- Spieler gesehen hat.
+function R:heal_view(view, hb)
   local me = view.players[view.me]
-  if not (me and me.alive and me.class and ALLY_SLOT[me.class]) then return end
+  if not (me and me.alive and me.class and ALLY_SLOT[me.class]) then
+    self.heal_cache = nil -- sonst klickt man nach dem Tod auf eine Leiste,
+    return nil            -- die gar nicht mehr gezeichnet wird
+  end
   local HB = hb or R.HEALBAR
   -- max_rows aus dem Layout (M13-Klemme gegen die Fensterhoehe)
   local rows, more_n = R.heal_rows(view, model.p("heal_range"), HB.max_rows)
-  if #rows == 0 then return end
-  local extra = more_n > 0 and 1 or 0
-  local ph = HB.header_h + (#rows + extra) * HB.row_h + 8
+  if #rows == 0 then
+    self.heal_cache = nil
+    return nil
+  end
+  self.heal_cache = { rows = rows, more_n = more_n, hb = HB }
+  return self.heal_cache
+end
+
+function R:draw_healbar(view, hb)
+  local hv = self:heal_view(view, hb)
+  if not hv then return end
+  local rows, more_n, HB = hv.rows, hv.more_n, hv.hb
+  local ph = R.healbar_height(#rows, more_n, HB)
   -- Deckende Plakette im Original-Stil (Runde 14, #173): vorher lag hier
   -- ein Rechteck mit Alpha 0,85, durch das die helle Karte und der Goldring
   -- durchschlugen. Die Leiste ist Pflicht-UI fuer Heiler — sie muss auf
@@ -849,6 +891,9 @@ function R:add_shake(amount)
 end
 
 function R:update(dt)
+  -- Monotone UI-Uhr (Runde 17): Grundlage fuer alles, was in der Moeblierung
+  -- pulsiert oder nachlaeuft, ohne dass die Sim-Zeit dafuer herhalten muss.
+  self.ui_t = (self.ui_t or 0) + dt
   if self.banner_t > 0 then self.banner_t = self.banner_t - dt end
   if (self.bubble_t or 0) > 0 then self.bubble_t = self.bubble_t - dt end
   if self.killcam_t > 0 then self.killcam_t = self.killcam_t - dt end

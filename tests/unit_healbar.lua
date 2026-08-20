@@ -108,3 +108,80 @@ end
 
 -- Der Parameter existiert und die Leiste nutzt denselben Wert wie die Sim
 T.eq(model.p("heal_range"), 250, "healbar: heal_range-Parameter = 250")
+
+-- ---------------------------------------------------------------------------
+-- Eine Wahrheit statt zweier (Runde 17). Die Plakettenhoehe stand bis dahin
+-- zweimal da — im Zeichner und noch einmal von Hand im Klickpfad. Und der
+-- Klickpfad baute die Liste ein ZWEITES Mal auf, mit frischeren Daten als das
+-- Bild: geklickt wurde also eine Liste, die so nie auf dem Schirm stand.
+-- ---------------------------------------------------------------------------
+do
+  local HB = render.HEALBAR
+
+  -- Die Hoehenformel
+  T.eq(render.healbar_height(3, 0, HB), HB.header_h + 3 * HB.row_h + 8,
+    "healbar: Hoehe ohne Restzeile")
+  T.eq(render.healbar_height(3, 6, HB), HB.header_h + 4 * HB.row_h + 8,
+    "healbar: die Restzeile zaehlt als eine Zeile mit")
+  T.eq(render.healbar_height(24, 16, HB), render.healbar_height(24, 1, HB),
+    "healbar: wie GROSS der Ueberhang ist, aendert die Hoehe nicht")
+
+  -- healbar_hit liefert die ZEILE, nicht den Index
+  local rows = { { pid = 11 }, { pid = 22 }, { pid = 33 } }
+  local mitte_x = HB.x + 10
+  local zeile2_y = HB.y + HB.header_h + HB.row_h + 1
+
+  local row, drauf = render.healbar_hit(rows, 0, mitte_x, zeile2_y, HB)
+  T.ok(type(row) == "table", "healbar: Treffer ist die Zeile, kein Index")
+  T.eq(row and row.pid, 22, "healbar: die richtige Zeile")
+  T.eq(drauf, true, "healbar: der Klick lag auf der Leiste")
+
+  -- Kopfzeile: auf der Leiste, aber keine Zeile — der Klick darf trotzdem
+  -- nicht auf die Karte durchfallen
+  local kopf_row, kopf_drauf = render.healbar_hit(rows, 0, mitte_x, HB.y + 4, HB)
+  T.eq(kopf_row, nil, "healbar: die Kopfzeile ist keine Zeile")
+  T.eq(kopf_drauf, true, "healbar: ... liegt aber auf der Leiste")
+
+  -- Neben der Leiste: gar nichts, der Klick gehoert der Karte
+  local _, daneben = render.healbar_hit(rows, 0, HB.x - 5, zeile2_y, HB)
+  T.ok(not daneben, "healbar: links daneben gehoert der Klick der Karte")
+  local _, drunter = render.healbar_hit(rows, 0, mitte_x,
+    HB.y + render.healbar_height(#rows, 0, HB) + 5, HB)
+  T.ok(not drunter, "healbar: unterhalb der Plakette ebenso")
+
+  -- Die Restzeile ist Teil der Flaeche, aber keine anklickbare Zeile
+  local rest_y = HB.y + HB.header_h + #rows * HB.row_h + 1
+  local rest_row, rest_drauf = render.healbar_hit(rows, 6, mitte_x, rest_y, HB)
+  T.eq(rest_row, nil, "healbar: die Restzeile waehlt niemanden aus")
+  T.eq(rest_drauf, true, "healbar: ... schluckt den Klick aber")
+
+  -- Leere Liste: kein Treffer, keine Flaeche
+  local _, leer = render.healbar_hit({}, 0, mitte_x, zeile2_y, HB)
+  T.ok(not leer, "healbar: ohne Zeilen gibt es keine Klickflaeche")
+end
+
+-- ---------------------------------------------------------------------------
+-- Der gemerkte Frame darf einen Tod nicht ueberleben: sonst klickt man auf
+-- eine Leiste, die gar nicht mehr gezeichnet wird.
+-- ---------------------------------------------------------------------------
+do
+  local self_ = { heal_cache = nil }
+  local hv = render.heal_view(self_, mkview(), render.HEALBAR)
+  T.ok(hv ~= nil and #hv.rows == 3, "healbar: heal_view baut die Liste")
+  T.ok(self_.heal_cache == hv, "healbar: ... und merkt sie sich fuer den Klick")
+
+  local tot = mkview()
+  tot.players[tot.me].alive = false
+  T.eq(render.heal_view(self_, tot, render.HEALBAR), nil,
+    "healbar: als Toter gibt es keine Leiste")
+  T.eq(self_.heal_cache, nil,
+    "healbar: der gemerkte Frame wird dabei geloescht (sonst klickt man ins Leere)")
+
+  -- Keine Heilerklasse: dasselbe
+  self_.heal_cache = { rows = { {} } }
+  local krieger = mkview()
+  krieger.players[krieger.me].class = "warrior"
+  T.eq(render.heal_view(self_, krieger, render.HEALBAR), nil,
+    "healbar: ohne Heilzauber keine Leiste")
+  T.eq(self_.heal_cache, nil, "healbar: auch dann wird der Frame geloescht")
+end
