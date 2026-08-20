@@ -414,13 +414,16 @@ function W.snapshot_body(state)
     -- Gesetzt wird das Flag in der Simulation (step.in_combat), hier reist
     -- es nur mit.
     if p.in_combat then flags3 = flags3 + 32 end
-    parts[#parts + 1] = pack("<BBBBBBI2I2I2BBBBBI2I2I2B",
+    -- Bedrohungsanteil (Runde 14, #174): eigener Wert geteilt durch die
+    -- Spitzenbedrohung, als ein Byte. Der Client zeichnet daraus seinen
+    -- Bogen und braucht die Tabelle nie zu sehen.
+    parts[#parts + 1] = pack("<BBBBBBI2I2I2BBBBBI2I2I2BB",
       p.id, flags, CLASS_IDX[p.class] or 0, race_idx, flags2, p.cp or 0,
       q16(p.x), q16(p.y), math.max(0, math.floor(p.hp + 0.5)),
       q8((p.resource or 0) / 100), p.facing or 0,
       p.target or 255, prog, shout_rest,
       math.min(65535, p.xp or 0), math.min(65535, p.kupfer or 0),
-      math.min(65535, p.plunder or 0), flags3)
+      math.min(65535, p.plunder or 0), flags3, q8(p.threat_frac or 0))
   end
   -- NPCs (Wichtel; ab M3-2 Mobs/Adds)
   local npc_ids = {}
@@ -505,9 +508,9 @@ function W.read_snapshot(data, off)
   pcount, off = love.data.unpack("<B", data, off)
   s.players = {}
   for _ = 1, pcount do
-    local pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, pshout, pxp, pku, ppl, flags3
-    pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, pshout, pxp, pku, ppl, flags3, off =
-      love.data.unpack("<BBBBBBI2I2I2BBBBBI2I2I2B", data, off)
+    local pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, pshout, pxp, pku, ppl, flags3, pthreat
+    pid, flags, cls, race, flags2, cp, px, py, php, pres, pfacing, ptarget, pprog, pshout, pxp, pku, ppl, flags3, pthreat, off =
+      love.data.unpack("<BBBBBBI2I2I2BBBBBI2I2I2BB", data, off)
     s.players[pid] = {
       id = pid,
       alive = flags % 2 >= 1,
@@ -537,6 +540,8 @@ function W.read_snapshot(data, off)
       facing = pfacing, target = ptarget, progress = pprog / 255,
       dead_rest = pprog, -- nur sinnvoll, solange tot und noch kein Geist
       shout_rest = pshout, xp = pxp, kupfer = pku, plunder = ppl,
+      -- Anteil an der Spitzenbedrohung (Runde 14, #174), 0..1
+      threat_frac = pthreat / 255,
     }
   end
   local ncount
