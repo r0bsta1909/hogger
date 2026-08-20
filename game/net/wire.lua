@@ -409,6 +409,11 @@ function W.snapshot_body(state)
     if state.time < (p.feign_until or 0) then flags3 = flags3 + 4 end
     if p.pact then flags3 = flags3 + 8 end
     if state.time < (p.weak_soul_until or 0) then flags3 = flags3 + 16 end
+    -- Bit 6 (Runde 14, #169): im Kampf. Der Client braucht es fuer die
+    -- Fehlerzeile der Verstohlenheit — die Bedrohungstabelle sieht er nicht.
+    -- Gesetzt wird das Flag in der Simulation (step.in_combat), hier reist
+    -- es nur mit.
+    if p.in_combat then flags3 = flags3 + 32 end
     parts[#parts + 1] = pack("<BBBBBBI2I2I2BBBBBI2I2I2B",
       p.id, flags, CLASS_IDX[p.class] or 0, race_idx, flags2, p.cp or 0,
       q16(p.x), q16(p.y), math.max(0, math.floor(p.hp + 0.5)),
@@ -526,6 +531,7 @@ function W.read_snapshot(data, off)
       feigning = flags3 % 8 >= 4,        -- Totstellen (#157)
       pact = flags3 % 16 >= 8,           -- Blutpakt-Aura (#159)
       weak_soul = flags3 % 32 >= 16,     -- Schwache Seele (#156)
+      in_combat = flags3 % 64 >= 32,     -- im Kampf (Runde 14, #169)
       cp = cp,
       x = px, y = py, hp = php, resource = pres / 255 * 100,
       facing = pfacing, target = ptarget, progress = pprog / 255,

@@ -1615,6 +1615,70 @@ do
   model.params.hunter_feign_enabled.wert = 1
 end
 
+-- Runde 14 (#169): Verstohlenheit nur ausserhalb des Kampfes -------------
+do
+  local st = world.new(61)
+  world.add_player(st, "sc", { quest_done = true })
+  world.begin_try(st, {})
+  local sc = st.players[1]
+  sc.alive, sc.ghost, sc.class, sc.race = true, false, "rogue", "mensch"
+  sc.max_hp, sc.hp = model.hp_for_class("rogue"), model.hp_for_class("rogue")
+  sc.resource = 100
+  sc.x, sc.y = st.hogger.x + 400, st.hogger.y
+
+  -- ausserhalb des Kampfes: geht
+  T.ok(not step.in_combat(st, sc), "stealth: ausser Kampf")
+  step.step(st, { [1] = { mask = input.AB3 } })
+  step.step(st, { [1] = { mask = 0 } })
+  T.ok(sc.stealth, "stealth: ausserhalb des Kampfes schaltet sie an")
+
+  -- Ausschalten geht auch im Kampf (sonst klebte man in der Tarnung fest)
+  st.hogger.threat[1] = 10
+  T.ok(step.in_combat(st, sc), "stealth: Bedrohung bei Hogger heisst Kampf")
+  for _ = 1, math.ceil(model.p("gcd") / model.TICK_DT) + 1 do step.step(st, {}) end
+  step.step(st, { [1] = { mask = input.AB3 } })
+  step.step(st, { [1] = { mask = 0 } })
+  T.ok(not sc.stealth, "stealth: ausschalten geht auch im Kampf")
+
+  -- ... anschalten im Kampf aber nicht, und der GCD bleibt unangetastet
+  for _ = 1, math.ceil(model.p("gcd") / model.TICK_DT) + 1 do step.step(st, {}) end
+  sc.gcd = 0
+  step.step(st, { [1] = { mask = input.AB3 } })
+  T.ok(not sc.stealth, "stealth: im Kampf laesst sie sich nicht anschalten")
+  T.eq(sc.gcd, 0, "stealth: der abgelehnte Versuch verbrennt keinen GCD")
+
+  -- Aggro bleibt stehen (Rob-Entscheid): Verstohlenheit ist kein Verschwinden
+  st.hogger.threat[1] = 10
+  sc.x, sc.y = st.hogger.x + 400, st.hogger.y
+  st.npcs = {}
+  st.npc_targets = nil
+  sc.gcd = 0
+  step.step(st, { [1] = { mask = input.AB3 } })
+  step.step(st, { [1] = { mask = 0 } })
+  T.eq(st.hogger.threat[1], 10,
+    "stealth: sie setzt die Bedrohung NICHT zurueck")
+
+  -- Ein Mob, der mich anvisiert, ist ebenfalls Kampf
+  st.hogger.threat[1] = nil
+  local wolf = world.add_npc(st, "wolf", sc.x + 500, sc.y, 10)
+  wolf.spawn_x, wolf.spawn_y = wolf.x, wolf.y
+  wolf.target_pid = 1
+  st.npc_targets = nil
+  T.ok(step.in_combat(st, sc), "stealth: ein Mob im Visier heisst Kampf")
+  wolf.target_pid = nil
+  st.npc_targets = nil
+  T.ok(not step.in_combat(st, sc), "stealth: laesst er ab, ist der Kampf vorbei")
+
+  -- F10-Schalter
+  sc.stealth = false
+  sc.gcd = 0
+  model.params.rogue_stealth_enabled.wert = 0
+  step.step(st, { [1] = { mask = input.AB3 } })
+  step.step(st, { [1] = { mask = 0 } })
+  T.ok(not sc.stealth, "stealth: per F10 abgeschaltet -> verworfen")
+  model.params.rogue_stealth_enabled.wert = 1
+end
+
 -- Runde 14 (#168): Totstellen war loechrig — vier Wege zurueck zum Angriff
 do
   local st = world.new(48)

@@ -154,6 +154,10 @@ M.params = {
   rogue_sinister_energy  = p(40, 10, 100, 5, "8.2"),
   rogue_evis_dmg_per_cp  = p(4, 1, 10, 1, "8.2"),
   rogue_evis_energy      = p(30, 10, 100, 5, "8.2"),
+  -- Verstohlenheit (Runde 14, #169): abschaltbar wie die Faehigkeiten aus
+  -- Runde 13; nutzbar nur ausserhalb des Kampfes, Aggro setzt sie NICHT
+  -- zurueck (Rob-Entscheid)
+  rogue_stealth_enabled  = p(1, 0, 1, 1, "8.2"),
   rogue_stealth_speed    = p(0.6, 0.3, 1.0, 0.05, "8.2"),
   -- Tritt (Runde 12, #140): der EINZIGE Fress-Unterbrecher. 10 s Cooldown
   -- ist Robs Vorgabe; 25 Energie ist der Vanilla-Kick-Preis.
@@ -341,7 +345,8 @@ M.classes = {
     abilities = {
       { id = "sinister_strike", name_de = "Finsterer Stoss", dmg = "rogue_sinister_dmg", cost = "rogue_sinister_energy" },
       { id = "eviscerate", name_de = "Ausweiden", dmg_per_cp = "rogue_evis_dmg_per_cp", cost = "rogue_evis_energy" },
-      { id = "stealth", name_de = "Verstohlenheit", speed_factor = "rogue_stealth_speed" },
+      { id = "stealth", name_de = "Verstohlenheit", speed_factor = "rogue_stealth_speed",
+        enabled = "rogue_stealth_enabled" },
       { id = "kick", name_de = "Tritt", cost = "rogue_kick_energy", cd = "rogue_kick_cd" },
     },
   },

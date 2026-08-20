@@ -20,6 +20,7 @@ E.NOT_EATING = "Hogger frisst gerade nicht."
 E.ONCE_PER_LIFE = "Das geht nur einmal pro Leben."
 E.WEAK_SOUL = "Schwache Seele."
 E.IMMUNE = "Immun."
+E.IN_COMBAT = "Das geht nur ausserhalb des Kampfes."
 
 -- me: eigener Spieler aus der Sicht; spec: Faehigkeits-Spezifikation;
 -- ctx: { x, y, facing, cooldown, hogger = {x,y,hp,state}, npcs = {},
@@ -32,6 +33,12 @@ function E.check(me, spec, ctx)
   -- Handauflegung (Runde 13, #155): einmal pro Leben — me.loh_used kommt
   -- als Snapshot-Flag (flags3)
   if spec.id == "loh" and me.loh_used then return E.ONCE_PER_LIFE end
+  -- Verstohlenheit (Runde 14, #169): nur ausserhalb des Kampfes. Das
+  -- Kampfflag kommt als Snapshot-Bit (flags3) — der Client kennt die
+  -- Bedrohungstabelle nicht. Ausschalten geht jederzeit.
+  if spec.id == "stealth" and me.in_combat and not me.stealth then
+    return E.IN_COMBAT
+  end
   local cls = model.classes[me.class]
   local cost = spec.cost and model.p(spec.cost) or 0
   if cost > 0 and (me.resource or 0) + 0.5 < cost then
