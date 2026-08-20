@@ -527,6 +527,26 @@ end
 -- Mob-Icon misst 21,6. Ein Test in unit_render_order haelt das fest.
 R.ROOT_RING_R = 22
 
+-- Winkel der Zoom-Moeblierung auf der Ringbahn (Runde 15, #189), gemessen
+-- von 3 Uhr im Uhrzeigersinn: Plus bei ~4 Uhr, Minus darunter, dann die
+-- Stufenpunkte. Der Abstand muss groesser sein als zwei Knopfradien.
+R.ZOOM_A1 = math.rad(27)
+R.ZOOM_A2 = math.rad(35)
+R.ZOOM_A3 = math.rad(42)
+
+-- Welcher Zoom-Knopf liegt unter dem Cursor? "plus" | "minus" | nil.
+-- Eine Wahrheit fuer Zeichnen, Klicken und Test (Muster: ability_button_at).
+function R.zoom_button_at(L, mx, my)
+  if not (L and L.zoom) then return nil end
+  local Z = L.zoom
+  for _, name in ipairs({ "plus", "minus" }) do
+    local b = Z[name]
+    local dx, dy = mx - b.x, my - b.y
+    if dx * dx + dy * dy <= (Z.r + 2) * (Z.r + 2) then return name end
+  end
+  return nil
+end
+
 -- Combopunkte des Schurken (Runde 14, #170): fuenf Kreise in einer eigenen
 -- Leiste ueber dem Einheitenfenster. MAX kommt aus dem Modell, damit
 -- Anzeige und Wirkung nicht auseinanderlaufen.
@@ -624,8 +644,19 @@ function R.layout(w, h, docked)
     banner = { cx = ox, cy = oy - radius, h = 26, pad = 14, min_w = 140 },
     npip = { x = ox, y = oy - radius + 26, r = 9 },
     clock = { cx = ox, cy = oy + radius, w = 96, h = 34 },
-    zoom = { x = ox + radius * 0.86, y = oy + radius * 0.42,
-             r = 14, spacing = 34 },
+    -- Zoom-Knoepfe (Runde 15, #189): beide sitzen auf DERSELBEN Bahn am
+    -- Ring, wie im Original. Vorher stand der zweite 34 px unter dem ersten
+    -- — dadurch lag einer innerhalb des Goldrings und einer darauf, und die
+    -- Stufenpunkte schwebten im Dunkeln daneben.
+    zoom = {
+      r = 14, ring_r = radius,
+      plus = { x = ox + math.cos(R.ZOOM_A1) * radius,
+               y = oy + math.sin(R.ZOOM_A1) * radius },
+      minus = { x = ox + math.cos(R.ZOOM_A2) * radius,
+                y = oy + math.sin(R.ZOOM_A2) * radius },
+      dots = { x = ox + math.cos(R.ZOOM_A3) * radius,
+               y = oy + math.sin(R.ZOOM_A3) * radius },
+    },
     frames = {
       unit = unit,
       target = target,
@@ -760,6 +791,23 @@ end
 
 function R:set_zoom(level)
   self.zoom = math.max(1, math.min(3, level))
+end
+
+-- Ansage-Banner (Runde 15, #188): kurze Rufe bleiben gross und einzeilig,
+-- ganze Saetze — die Zeilen des Echos — werden auf Normalgroesse umgebrochen.
+-- Die Breite bleibt INNERHALB des Kartenkreises, damit das Banner nie mehr
+-- durch das Zielfenster oder aus dem Bild laeuft. love-frei und getestet.
+R.BANNER_SHORT = 24      -- bis hierhin ist es ein Ruf, kein Satz
+R.BANNER_MAX_LINES = 3
+
+function R.banner_style(text, w, radius, won)
+  local kurz = #(text or "") <= R.BANNER_SHORT
+  local scale = kurz and 2 or 1
+  -- Breite: bequem im Kreis (und nie breiter als das halbe Fenster)
+  local wrap = math.min(radius * 1.30, w * 0.5) / scale
+  -- Nach dem Fluchbruch nach unten, sonst ins obere Drittel der Karte
+  local dy = won and (radius * 0.72) or (-radius * 0.46)
+  return { scale = scale, wrap = wrap, dy = dy, kurz = kurz }
 end
 
 function R:announce(text, dur)
@@ -1718,32 +1766,32 @@ function R:draw(view, ui)
   do
     local Z = L.zoom
     local zoom_hover = false
-    for i, sym in ipairs({ "+", "-" }) do
-      local by = Z.y + (i - 1) * Z.spacing
+    for _, knopf in ipairs({ { "+", Z.plus }, { "-", Z.minus } }) do
+      local sym, b = knopf[1], knopf[2]
       love.graphics.setColor(0, 0, 0, 0.5)
-      love.graphics.circle("fill", Z.x + 1, by + 2, Z.r + 1)
+      love.graphics.circle("fill", b.x + 1, b.y + 2, Z.r + 1)
       love.graphics.setColor(0.15, 0.14, 0.11, 1)
-      love.graphics.circle("fill", Z.x, by, Z.r)
+      love.graphics.circle("fill", b.x, b.y, Z.r)
       love.graphics.setColor(0.78, 0.63, 0.28, 1)
       love.graphics.setLineWidth(2)
-      love.graphics.circle("line", Z.x, by, Z.r)
+      love.graphics.circle("line", b.x, b.y, Z.r)
       love.graphics.setLineWidth(1)
       love.graphics.setColor(0.95, 0.85, 0.55, 0.6)
       love.graphics.setLineWidth(1.5)
-      love.graphics.arc("line", "open", Z.x, by, Z.r - 3,
+      love.graphics.arc("line", "open", b.x, b.y, Z.r - 3,
         math.rad(-140), math.rad(-40))
       love.graphics.setLineWidth(1)
       love.graphics.setColor(0.95, 0.90, 0.70, 1)
-      love.graphics.print(sym, Z.x - 4, by - 8)
+      love.graphics.print(sym, b.x - 4, b.y - 8)
       if ui.mouse then
-        local d = math.sqrt((ui.mouse[1] - Z.x) ^ 2 + (ui.mouse[2] - by) ^ 2)
+        local d = math.sqrt((ui.mouse[1] - b.x) ^ 2 + (ui.mouse[2] - b.y) ^ 2)
         if d <= Z.r + 2 then zoom_hover = true end
       end
     end
-    -- drei Stufen-Punkte: gefuellt bis zur aktuellen Zoomstufe
+    -- drei Stufen-Punkte auf derselben Bahn, unter dem Minus-Knopf
     for s = 1, 3 do
-      local px = Z.x + (s - 2) * 9
-      local py = Z.y + Z.spacing + 22
+      local px = Z.dots.x + (s - 2) * 9
+      local py = Z.dots.y
       if s <= self.zoom then
         love.graphics.setColor(0.78, 0.63, 0.28, 1)
       else
@@ -1818,7 +1866,7 @@ function R:draw(view, ui)
       local font = love.graphics.getFont()
       love.graphics.setColor(0.62, 0.58, 0.46, 1)
       love.graphics.print(auto, L.ox - font:getWidth(auto) / 2,
-        L.oy + ring_r - BR - 22)
+        L.oy + L.ring_r - BR - 22)
     end
   end
 
@@ -1874,15 +1922,31 @@ function R:draw(view, ui)
       L.oy + L.radius * 0.45 + (i - 1) * 18)
   end
 
-  -- Ansage-Banner (Try-Ende, Sieg). In der Endsequenz rutscht es nach unten:
-  -- oben steht dann die Sprechblase an der verschmolzenen Figur, und beide
-  -- uebereinander waren im Test unlesbar (#132).
+  -- Ansage-Banner (Try-Ende, Sieg, Zeilen des Echos). In der Endsequenz
+  -- rutscht es nach unten: oben steht dann die Sprechblase an der
+  -- verschmolzenen Figur, und beide uebereinander waren im Test unlesbar
+  -- (#132). Seit Runde 15 (#188) bricht es um und sitzt auf einer Plakette:
+  -- vorher lief eine lange Echo-Zeile in doppelter Groesse quer ueber den
+  -- ganzen Bildschirm, durch das Zielfenster und aus dem Bild heraus.
   if self.banner_t > 0 and self.banner_text then
-    love.graphics.setColor(1, 0.9, 0.5, math.min(1, self.banner_t))
+    local st = R.banner_style(self.banner_text, w, L.radius, won > 0)
     local font = love.graphics.getFont()
-    local by = won > 0 and (L.oy + L.radius * 0.72) or (L.oy - L.radius * 0.4)
-    love.graphics.print(self.banner_text,
-      L.ox - font:getWidth(self.banner_text) / 2 * 2, by, 0, 2, 2)
+    local _, zeilen = font:getWrap(self.banner_text, st.wrap)
+    local n = math.max(1, math.min(#zeilen, R.BANNER_MAX_LINES))
+    local zh = font:getHeight() * st.scale
+    local ph = n * zh + 14
+    local pw = st.wrap * st.scale + 24
+    local px, py = L.ox - pw / 2, L.oy + st.dy - 7
+    local a = math.min(1, self.banner_t)
+    love.graphics.setColor(0.06, 0.05, 0.04, 0.86 * a)
+    love.graphics.rectangle("fill", px, py, pw, ph, 4, 4)
+    love.graphics.setColor(0.78, 0.63, 0.28, 0.85 * a)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", px, py, pw, ph, 4, 4)
+    love.graphics.setLineWidth(1)
+    love.graphics.setColor(1, 0.9, 0.5, a)
+    love.graphics.printf(self.banner_text, L.ox - (st.wrap * st.scale) / 2,
+      L.oy + st.dy, st.wrap, "center", 0, st.scale, st.scale)
   end
 
   -- Sprechblase am Icon des Echos (Endsequenz, GDD 11 / #132) ODER am

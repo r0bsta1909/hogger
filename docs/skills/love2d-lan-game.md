@@ -474,6 +474,22 @@ Sonderfall, der bei jeder weiteren Socket-Szene neu gebaut werden müsste.
   wie „60–90 %" ist erst mit Streuung eine messbare Größe: je Agent ein Skill-Faktor, je Lauf ein
   gemeinsamer Koordinationsfaktor, beide deterministisch aus dem geloggten Seed. Die Streuung ist
   Sim-Modellparameter, nicht Spielverhalten — die Sim bleibt reproduzierbar.
+- **[gemessen] Eine Testpyramide ohne Zeichentest hat ein Loch in der Mitte — und zwar genau dort, wo
+  der Spieler steht.** Die love-freien Stufen (Unit, Determinismus) rufen den Renderer nie auf, der
+  headless-Integrationstest läuft mit abgeschaltetem Grafikmodul, und Screenshot-Gegenproben treffen
+  immer nur den einen Zustand, in dem der Bot gerade ist. In diesem Projekt hat ein Refactoring eine
+  lokale Variable entfernt, die zwanzig Zeilen weiter unten noch benutzt wurde: **jede Wiederbelebung
+  stürzte ab**, alle Gates waren grün, und das Release ging raus. Gegenmittel ist billig: ein Modus,
+  der den Renderer für jede Klasse und jeden Zustand einmal wirklich ausführt und bei jedem Lua-Fehler
+  rot wird — 150 Zeichenläufe in fünf Sekunden. Drei Details entscheiden über seinen Wert: die Sichten
+  **durch den echten Netz-Codec** bauen (so prüft er Renderer und Wire-Format gegeneinander), **jede
+  Maus-Hover-Position** mit abklappern (Tooltips sind eigene Zweige, die sonst nie laufen), und ihn in
+  der CI auf Linux mit `xvfb` + Software-GL fahren — Windows-Runner haben kein OpenGL 2, macOS ist
+  zehnmal so teuer.
+- **[gemessen] Ein Zustandszweig, den der Testaufbau nie erreicht, ist ungetestet — auch wenn er
+  „abgedeckt" aussieht.** Der Bot-Spieler in den Screenshot-Läufen war fast immer Geist oder Leiche,
+  also lief der Zweig „lebend mit Klasse" in keinem einzigen Bild. Bei Zustandsmaschinen die Zustände
+  **aufzählen und erzwingen**, statt zu hoffen, dass ein Durchlauf sie streift.
 - **[gemessen] Die Nachweismatrix wächst schneller als ihr Nutzen — und niemand merkt es.** Eine
   Matrix aus vier Dimensionen war nach ein paar Runden auf 2,5 Stunden je Nachweis gewachsen,
   obwohl **drei Viertel ihrer Zellen eine Dimension variierten, die längst per Entscheid
