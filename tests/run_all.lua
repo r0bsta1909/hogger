@@ -66,7 +66,7 @@ local stages = {
            "tests.unit_panel", "tests.unit_raid", "tests.unit_render_order",
            "tests.unit_healbar", "tests.unit_layout", "tests.unit_gamemenu",
            "tests.unit_picktarget", "tests.unit_logleser",
-           "tests.unit_tooltip" },
+           "tests.unit_tooltip", "tests.unit_abilitybuttons" },
   determinism = { "tests.determinism" },
 }
 

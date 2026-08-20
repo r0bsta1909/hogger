@@ -206,6 +206,16 @@ local function local_input_frame()
   if kb.isDown("1") then mask = mask + input.AB1 end
   if kb.isDown("2") then mask = mask + input.AB2 end
   if kb.isDown("3") then mask = mask + input.AB3 end
+  -- Klick auf einen Faehigkeitsbutton (Runde 14, #172): genau EIN Tick mit
+  -- gesetztem Bit, denn der Host wertet Flanken. Danach ist der Riegel weg.
+  local click = app.click_ab
+  if click then
+    app.click_ab = nil
+    local bit = (click == 1 and input.AB1)
+             or (click == 2 and input.AB2)
+             or (click == 3 and input.AB3)
+    if bit and mask % (bit * 2) < bit then mask = mask + bit end
+  end
   local w, h = love.graphics.getDimensions()
   local mx, my = love.mouse.getPosition()
   local angle = math.atan2(my - h / 2, mx - w / 2) + math.pi / 2
@@ -811,6 +821,46 @@ function love.draw()
   })
 end
 
+-- Eine Wahrheit fuer Tastendruck UND Buttonklick (Runde 14, #172).
+-- Vorher lag die Logik zweimal in love.keypressed; die Buttons am Ring
+-- waren reine Grafik. via_click setzt den Ein-Tick-Riegel, damit der
+-- Klick dieselbe Flanke erzeugt wie eine gedrueckte Taste — die Maske
+-- wird pro Simulationstick gepollt, ein Klick ist aber ein Ereignis.
+local function trigger_ability(slot, via_click)
+  local me = app.view and app.view.players[app.view.me]
+  local step_mod = require("game.gamesim.step")
+  local specs = me and me.alive and me.class and step_mod.ABILITIES[me.class]
+  local spec = specs and specs[slot]
+  -- per F10 abgeschaltet (Runde 13): Taste und Klick tun nichts
+  if spec and not step_mod.ability_enabled(spec) then spec = nil end
+  if not spec then return false end
+  -- Fehlerzeile im Original-Ton (Issue #56): der Host verwirft den Versuch
+  -- stumm, also sagt der Client hier, warum nichts passiert
+  local err = require("game.ui.errors").check(me, spec, {
+    x = app.view.me_x, y = app.view.me_y,
+    facing = input.facing_from_angle(app.facing_angle or 0),
+    cooldown = app.cooldown_view[slot] or 0,
+    hogger = app.view.hogger, npcs = app.view.npcs,
+    players = app.view.players, -- Heil-Reichweite (Runde 7, #103)
+  })
+  if err then
+    app.render:error(err)
+    return true
+  end
+  if slot == 4 then
+    -- Schurken-Tritt (Runde 12, #140): kein Masken-Bit, eigene Wire-Msg
+    if app.mode == "host" then app.net:kick()
+    elseif app.net.send_kick then app.net:send_kick() end
+    local cd = model.p(spec.cd)
+    app.cooldown_view[4], app.cooldown_max[4] = cd, cd
+  else
+    if via_click then app.click_ab = slot end
+    local cd = spec.cd and model.p(spec.cd) or model.p("gcd")
+    app.cooldown_view[slot], app.cooldown_max[slot] = cd, cd
+  end
+  return true
+end
+
 function love.keypressed(key)
   if app.headless then return end
   if app.dialog and app.dialog.visible then
@@ -961,58 +1011,9 @@ function love.keypressed(key)
     app.render:set_zoom(app.render.zoom + 1)
     if app.net.send_zoom then app.net:send_zoom(app.render.zoom) end
   elseif key == "1" or key == "2" or key == "3" then
-    -- Cooldown-Anzeige aus der Faehigkeits-Spezifikation ableiten, nicht aus
-    -- Sonderfaellen (eine Wahrheit); tot loest nichts aus (Issue #29)
-    local slot = tonumber(key)
-    local me = app.view and app.view.players[app.view.me]
-    local step_mod = require("game.gamesim.step")
-    local specs = me and me.alive and me.class and step_mod.ABILITIES[me.class]
-    local spec = specs and specs[slot]
-    -- per F10 abgeschaltet (Runde 13): Taste tut nichts, wie der Button
-    if spec and not step_mod.ability_enabled(spec) then spec = nil end
-    if spec then
-      -- Fehlerzeile im Original-Ton (Issue #56): der Host verwirft den
-      -- Versuch stumm, also sagt der Client hier, warum nichts passiert
-      local err = require("game.ui.errors").check(me, spec, {
-        x = app.view.me_x, y = app.view.me_y,
-        facing = input.facing_from_angle(app.facing_angle or 0),
-        cooldown = app.cooldown_view[slot] or 0,
-        hogger = app.view.hogger, npcs = app.view.npcs,
-        players = app.view.players, -- Heil-Reichweite (Runde 7, #103)
-      })
-      if err then
-        app.render:error(err)
-      else
-        local cd = spec.cd and model.p(spec.cd) or model.p("gcd")
-        app.cooldown_view[slot] = cd
-        app.cooldown_max[slot] = cd
-      end
-    end
+    trigger_ability(tonumber(key), false)
   elseif key == "4" then
-    -- Schurken-Tritt (Runde 12, #140): Slot 4 hat kein Masken-Bit — er geht
-    -- als reliable Wire-Msg an den Host (Muster ENGAGE/HEAL_REQUEST); die
-    -- Fehlerzeile sagt vorab, warum nichts passieren wuerde (Issue #56)
-    local me = app.view and app.view.players[app.view.me]
-    local spec = me and me.alive and me.class
-      and require("game.gamesim.step").ABILITIES[me.class][4]
-    if spec then
-      local err = require("game.ui.errors").check(me, spec, {
-        x = app.view.me_x, y = app.view.me_y,
-        facing = input.facing_from_angle(app.facing_angle or 0),
-        cooldown = app.cooldown_view[4] or 0,
-        hogger = app.view.hogger, npcs = app.view.npcs,
-        players = app.view.players,
-      })
-      if err then
-        app.render:error(err)
-      else
-        if app.mode == "host" then app.net:kick()
-        elseif app.net.send_kick then app.net:send_kick() end
-        local cd = model.p(spec.cd)
-        app.cooldown_view[4] = cd
-        app.cooldown_max[4] = cd
-      end
-    end
+    trigger_ability(4, false)
   elseif key == "tab" then
     if app.mode == "host" then app.net:set_local_target(world.HOGGER_ID)
     else app.net:set_target(world.HOGGER_ID) end
@@ -1068,6 +1069,23 @@ function love.mousepressed(mx, my, button)
   end
   if app.stats and app.stats:mousepressed(mx, my) then return end
   if not app.view then return end
+
+  -- Faehigkeitsbuttons am Ring (Runde 14, #172): Linksklick loest sie aus,
+  -- exakt wie die zugehoerige Taste. Vor dem Kartenklick, damit ein Klick
+  -- auf einen Button nicht auch noch ein Ziel dahinter waehlt.
+  if button == 1 then
+    local me = app.view.players[app.view.me]
+    if me and me.alive and me.class then
+      local bw2, bh2 = love.graphics.getDimensions()
+      local L = app.render.layout(bw2, bh2, app.render.docked)
+      local slot = app.render.ability_button_at(L, me.class, mx, my)
+      if slot then
+        trigger_ability(slot, true)
+        audio.play("snd_ui_click")
+        return
+      end
+    end
+  end
 
   -- Heil-Leiste (Runde 7, #103, GDD 4.3): Rechtsklick auf eine Zeile heilt
   -- diesen Spieler (HEAL_REQUEST, p.target bleibt unberuehrt), Linksklick
