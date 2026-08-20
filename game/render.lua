@@ -340,6 +340,44 @@ function R.ability_tooltip(class, spec, def, slot)
   return lines
 end
 
+-- Sitzplaetze der Faehigkeits-Buttons am Ring (Runde 14, #172) — love-frei
+-- und EINE Wahrheit fuer Zeichnen UND Klicken. Bis Runde 14 steckte die
+-- Geometrie inline im Zeichencode, also waren die Buttons reine Grafik.
+-- Abgeschaltete Faehigkeiten (F10) haben keinen Sitzplatz.
+R.BUTTON_R = 23
+
+function R.ability_slots(L, class)
+  local out = {}
+  local specs = ABILITIES[class]
+  if not (L and specs) then return out end
+  local defs = (model.classes[class] and model.classes[class].abilities) or {}
+  local vis = {}
+  for i, spec in ipairs(specs) do
+    if ABILITIES_ENABLED(spec) then
+      vis[#vis + 1] = { spec = spec, def = defs[i], slot = i }
+    end
+  end
+  local n = #vis
+  local ring_r = L.ring_r
+  local dtheta = (R.BUTTON_R * 2 + 10) / ring_r
+  for k, entry in ipairs(vis) do
+    local a = math.pi / 2 - (k - (n + 1) / 2) * dtheta
+    entry.x = L.ox + math.cos(a) * ring_r
+    entry.y = L.oy + math.sin(a) * ring_r
+    out[k] = entry
+  end
+  return out
+end
+
+-- Welcher Button liegt unter dem Cursor? Gibt den Slot (1..4) zurueck.
+function R.ability_button_at(L, class, mx, my)
+  for _, e in ipairs(R.ability_slots(L, class)) do
+    local dx, dy = mx - e.x, my - e.y
+    if dx * dx + dy * dy <= R.BUTTON_R * R.BUTTON_R then return e.slot, e end
+  end
+  return nil
+end
+
 function R.pick_target(view, mx, my, to_screen, scale, right_click)
   local function dist_to(wx, wy)
     local x, y = to_screen(wx, wy)
@@ -1690,26 +1728,16 @@ function R:draw(view, ui)
   -- die Klasse Faehigkeiten hat — und keine, solange man tot ist (Issue #29)
   local hover_tip = nil
   if me and me.class and me.alive then
-    local specs = ABILITIES[me.class] or {}
-    local defs = model.classes[me.class].abilities or {}
     -- Klassen-Slots 1..4. Den frueheren Nahkampf-Button gibt es nicht mehr
     -- (Runde 12, #145): Rechtsklick aufs Ziel genuegt, die Hinweiszeile
     -- unterm Ring sagt es. Per F10 abgeschaltete Faehigkeiten (Runde 13)
     -- verschwinden aus der Leiste — die Tastennummer bleibt am Slot.
-    local slots = {}
-    for i, spec in ipairs(specs) do
-      if ABILITIES_ENABLED(spec) then
-        slots[#slots + 1] = { spec = spec, def = defs[i], slot = i }
-      end
-    end
-    local n = #slots
-    local BR = 23                       -- Buttonradius
-    local ring_r = L.ring_r             -- Bahn knapp innerhalb des Rings
-    local dtheta = (BR * 2 + 10) / ring_r
-    for k, entry in ipairs(slots) do
-      -- Slot 1 links, aufsteigend nach rechts (Tastenreihenfolge)
-      local a = math.pi / 2 - (k - (n + 1) / 2) * dtheta
-      local x, y = L.ox + math.cos(a) * ring_r, L.oy + math.sin(a) * ring_r
+    -- Sitzplaetze kommen aus R.ability_slots — dieselbe Rechnung, die auch
+    -- der Klick benutzt (Runde 14, #172)
+    local slots = R.ability_slots(L, me.class)
+    local BR = R.BUTTON_R
+    for _, entry in ipairs(slots) do
+      local x, y = entry.x, entry.y
       love.graphics.setColor(0.10, 0.09, 0.07, 0.95)
       love.graphics.circle("fill", x, y, BR)
       local icon = ABILITY_ICON[entry.spec.id]
