@@ -121,7 +121,7 @@ function M.decide(state, pid)
         mask = mask + input.AB1
       elseif state.tick % 30 == 0 then mask = mask + input.AB2 end
     end
-    if cls == "rogue" and (p.cp or 0) >= 5 and state.tick % 30 == 15 then
+    if cls == "rogue" and (p.cp or 0) >= model.CP_MAX and state.tick % 30 == 15 then
       mask = mask + input.AB2
     end
     -- Schurken-Tritt (Runde 12, #140): frisst Hogger im Kanal und der Bot

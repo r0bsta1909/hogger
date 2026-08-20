@@ -311,7 +311,7 @@ local INSTANT = {
   sinister_strike = function(run, p)
     if not res_cost(p, model.p("rogue_sinister_energy")) then return false end
     E.player_damage_hogger(run, p, model.p("rogue_sinister_dmg"), "ability")
-    p.cp = math.min(5, p.cp + 1)
+    p.cp = math.min(model.CP_MAX, p.cp + 1)
     return true
   end,
   eviscerate = function(run, p)
