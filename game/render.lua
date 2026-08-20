@@ -497,7 +497,10 @@ R.CP_R = 5        -- Radius eines Punktes
 R.CP_PITCH = 15   -- Abstand der Mittelpunkte
 R.CP_STRIP_H = 18 -- Hoehe der Leiste (schiebt sie ueber die Tafel)
 
-R.HEALBAR = { x = 12, y = 142, w = 190, header_h = 18, row_h = 18,
+-- Breite 190 -> 214 in Runde 14 (#173): Name und Mini-HP-Balken teilen sich
+-- jetzt eine Zeile, und die Leiste steht damit buendig unter dem
+-- Einheitenfenster (R.FRAME_W).
+R.HEALBAR = { x = 12, y = 142, w = 214, header_h = 18, row_h = 18,
               max_rows = 24 }
 
 -- Zeilen: selbst IMMER zuerst, danach alphabetisch nach Namen — STABIL,
@@ -625,6 +628,39 @@ function R.cellhash(x, y)
   return (n * 48271) % 2147483647
 end
 
+-- Plakette und Balken stehen hier oben, weil die Heil-Leiste sie seit
+-- Runde 14 (#173) benutzt — Lua loest lokale Funktionen lexikalisch auf.
+-- Plakette im Original-Minimap-Stil (M12, GDD 4.1/4.2): dunkle Fuellung,
+-- Goldrahmen, helle Innenlinie — fuer Zonenbanner und Uhr
+local function plaque(x, y, pw, ph)
+  love.graphics.setColor(0.07, 0.06, 0.05, 0.95)
+  love.graphics.rectangle("fill", x, y, pw, ph, 4, 4)
+  love.graphics.setColor(0.78, 0.63, 0.28, 1)
+  love.graphics.setLineWidth(2)
+  love.graphics.rectangle("line", x, y, pw, ph, 4, 4)
+  love.graphics.setLineWidth(1)
+  love.graphics.setColor(0.95, 0.85, 0.55, 0.5)
+  love.graphics.rectangle("line", x + 2, y + 2, pw - 4, ph - 4, 3, 3)
+end
+
+-- Balken der Eckfenster: links oben verankert, Beschriftung liegt IM Balken
+-- (Original-Vorbild spieleranzeige_und_ziel.png) — nie mehr quer durch die
+-- Zahlen wie zuvor (Issue #25)
+local function ui_bar(x, y, w, h, frac, col, text)
+  love.graphics.setColor(0.02, 0.02, 0.02, 0.9)
+  love.graphics.rectangle("fill", x - 1, y - 1, w + 2, h + 2, 2, 2)
+  love.graphics.setColor(0.12, 0.12, 0.12, 1)
+  love.graphics.rectangle("fill", x, y, w, h)
+  love.graphics.setColor(col[1], col[2], col[3], 1)
+  love.graphics.rectangle("fill", x, y, w * math.max(0, math.min(1, frac or 0)), h)
+  if text then
+    local font = love.graphics.getFont()
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(text, x + w / 2 - font:getWidth(text) / 2,
+      y + h / 2 - font:getHeight() / 2)
+  end
+end
+
 function R:draw_healbar(view, hb)
   local me = view.players[view.me]
   if not (me and me.alive and me.class and ALLY_SLOT[me.class]) then return end
@@ -634,32 +670,49 @@ function R:draw_healbar(view, hb)
   if #rows == 0 then return end
   local extra = more_n > 0 and 1 or 0
   local ph = HB.header_h + (#rows + extra) * HB.row_h + 8
-  love.graphics.setColor(0.07, 0.07, 0.11, 0.85)
-  love.graphics.rectangle("fill", HB.x, HB.y, HB.w, ph, 5, 5)
-  love.graphics.setColor(0.78, 0.63, 0.28, 0.9)
-  love.graphics.rectangle("line", HB.x, HB.y, HB.w, ph, 5, 5)
-  love.graphics.setColor(0.95, 0.85, 0.4, 1)
-  love.graphics.print("Heilziele  (Rechtsklick heilt)", HB.x + 8, HB.y + 3)
+  -- Deckende Plakette im Original-Stil (Runde 14, #173): vorher lag hier
+  -- ein Rechteck mit Alpha 0,85, durch das die helle Karte und der Goldring
+  -- durchschlugen. Die Leiste ist Pflicht-UI fuer Heiler — sie muss auf
+  -- jedem Untergrund stehen.
+  plaque(HB.x, HB.y, HB.w, ph)
   local font = love.graphics.getFont()
+  local function schatten(text, tx, ty, r2, g2, b2)
+    love.graphics.setColor(0, 0, 0, 0.85)
+    love.graphics.print(text, tx + 1, ty + 1)
+    love.graphics.setColor(r2, g2, b2, 1)
+    love.graphics.print(text, tx, ty)
+  end
+  schatten("Heilziele  (Rechtsklick heilt)", HB.x + 8, HB.y + 3, 0.95, 0.85, 0.4)
   for i, r in ipairs(rows) do
     local y = HB.y + HB.header_h + (i - 1) * HB.row_h + 1
+    -- Zebrastreifen: im Getuemmel findet das Auge die Zeile wieder
+    if i % 2 == 0 then
+      love.graphics.setColor(1, 1, 1, 0.045)
+      love.graphics.rectangle("fill", HB.x + 3, y - 1, HB.w - 6, HB.row_h)
+    end
     if r.class and CLASS_ICON[r.class] then
       local icon = CLASS_ICON[r.class]
-      assets.draw(icon, HB.x + 12, y + 8, 14 / assets.size(icon))
+      assets.draw(icon, HB.x + 13, y + 7, 14 / assets.size(icon))
     end
-    local col = (r.class and CLASS_COL[r.class]) or { 0.8, 0.8, 0.75 }
-    love.graphics.setColor(col[1], col[2], col[3], 1)
-    love.graphics.print(r.is_self and (r.name .. " (du)") or r.name,
-      HB.x + 22, y)
+    -- HP als Mini-Balken statt als Prozentzahl (Rob-Entscheid): die
+    -- Balkenlaenge liest man im Klumpen schneller als zwei Ziffern.
+    local frac = math.max(0, math.min(1, (r.hp_pct or 0) / 100))
+    local bx, bw2 = HB.x + 24, HB.w - 24 - 8
+    local low = (r.hp_pct or 0) <= 35
+    ui_bar(bx, y + 1, bw2, HB.row_h - 4, frac,
+      low and { 0.72, 0.16, 0.14 } or { 0.15, 0.62, 0.18 })
+    -- Name in Fast-Weiss statt in Klassenfarbe: auf einem gruenen Balken
+    -- verschwindet ein gruener Druidenname (gemessen am Screenshot der
+    -- Runde 14). Die Klasse traegt das Icon links, wie in Raidframes.
+    schatten(r.is_self and (r.name .. " (du)") or r.name, bx + 4, y,
+      0.98, 0.97, 0.92)
     local txt = (r.hp_pct or 0) .. "%"
-    if (r.hp_pct or 0) <= 35 then love.graphics.setColor(0.9, 0.35, 0.3, 1)
-    else love.graphics.setColor(0.55, 0.8, 0.55, 1) end
-    love.graphics.print(txt, HB.x + HB.w - 8 - font:getWidth(txt), y)
+    schatten(txt, bx + bw2 - 4 - font:getWidth(txt), y,
+      low and 1 or 0.92, low and 0.85 or 0.95, low and 0.85 or 0.9)
   end
   if more_n > 0 then
-    love.graphics.setColor(0.6, 0.56, 0.45, 1)
-    love.graphics.print("+" .. more_n .. " weitere in Reichweite",
-      HB.x + 22, HB.y + HB.header_h + #rows * HB.row_h + 1)
+    schatten("+" .. more_n .. " weitere in Reichweite",
+      HB.x + 24, HB.y + HB.header_h + #rows * HB.row_h + 1, 0.6, 0.56, 0.45)
   end
 end
 
@@ -795,18 +848,6 @@ end
 -- hell. Eine Wahrheit fuer Renderer und F10-Panel (Runde 9, #119).
 local draw_tooltip = require("game.ui.tooltip").draw
 
--- Plakette im Original-Minimap-Stil (M12, GDD 4.1/4.2): dunkle Fuellung,
--- Goldrahmen, helle Innenlinie — fuer Zonenbanner und Uhr
-local function plaque(x, y, pw, ph)
-  love.graphics.setColor(0.07, 0.06, 0.05, 0.95)
-  love.graphics.rectangle("fill", x, y, pw, ph, 4, 4)
-  love.graphics.setColor(0.78, 0.63, 0.28, 1)
-  love.graphics.setLineWidth(2)
-  love.graphics.rectangle("line", x, y, pw, ph, 4, 4)
-  love.graphics.setLineWidth(1)
-  love.graphics.setColor(0.95, 0.85, 0.55, 0.5)
-  love.graphics.rectangle("line", x + 2, y + 2, pw - 4, ph - 4, 3, 3)
-end
 
 -- Auren-Kacheln (GDD 4.3, Runde 8 #107): aura_list baut die Liste aus einem
 -- beliebigen Snapshot-Spielereintrag (die Flags stehen fuer JEDEN Spieler im
@@ -860,23 +901,6 @@ local function draw_auras(auras, ax, ay, ui)
   return tip
 end
 
--- Balken der Eckfenster: links oben verankert, Beschriftung liegt IM Balken
--- (Original-Vorbild spieleranzeige_und_ziel.png) — nie mehr quer durch die
--- Zahlen wie zuvor (Issue #25)
-local function ui_bar(x, y, w, h, frac, col, text)
-  love.graphics.setColor(0.02, 0.02, 0.02, 0.9)
-  love.graphics.rectangle("fill", x - 1, y - 1, w + 2, h + 2, 2, 2)
-  love.graphics.setColor(0.12, 0.12, 0.12, 1)
-  love.graphics.rectangle("fill", x, y, w, h)
-  love.graphics.setColor(col[1], col[2], col[3], 1)
-  love.graphics.rectangle("fill", x, y, w * math.max(0, math.min(1, frac or 0)), h)
-  if text then
-    local font = love.graphics.getFont()
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print(text, x + w / 2 - font:getWidth(text) / 2,
-      y + h / 2 - font:getHeight() / 2)
-  end
-end
 
 -- view: dekodierter Snapshot + me/me_x/me_y; ui: { facing_angle, cooldowns }
 function R:draw(view, ui)
