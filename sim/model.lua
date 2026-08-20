@@ -15,6 +15,17 @@ M.SIM_TICK_DT = 0.1  -- Tickweite der Headless-Balancing-Sim (GDD 17.2)
 -- auch die Anzeige haengt (#170).
 M.CP_MAX = 5
 
+-- Umrechnung Pixel -> Meter fuer die Anzeige (Runde 14, #171). Die Welt
+-- rechnet in Pixeln, der Spieler denkt in Metern wie im deutschen Original:
+-- cast_range 200 px entspricht den 30 m des Vanilla-Zauberbereichs, also
+-- 6,667 px je Meter. Damit werden Nahkampf 40 px = 6 m, Autoschuss 230 px
+-- = 35 m, Heilen 250 px = 38 m — alles nahe an den Originalwerten.
+M.PX_PER_METER = 200 / 30
+
+function M.meters(px)
+  return math.floor((px or 0) / M.PX_PER_METER + 0.5)
+end
+
 -- ---------------------------------------------------------------------------
 -- M.params — ALLE Balancing-Werte als flache Tabelle {wert, min, max, schritt,
 -- kapitel} (GDD 17.6). Das F10-Tuning-Panel generiert sich vollstaendig daraus.
@@ -316,10 +327,10 @@ M.classes = {
     name_de = "Krieger", races = { "mensch", "zwerg", "nachtelf", "gnom" },
     armor = "plate", resource = "rage", attack = "melee",
     abilities = {
-      { id = "heroic_strike", name_de = "Heroischer Stoss", dmg = "warrior_heroic_dmg", cost = "warrior_heroic_rage" },
-      { id = "battle_shout", name_de = "Schlachtruf", buff_bonus = "warrior_shout_bonus",
+      { id = "heroic_strike", art = "Schaden", name_de = "Heroischer Stoss", dmg = "warrior_heroic_dmg", cost = "warrior_heroic_rage" },
+      { id = "battle_shout", art = "Verstaerkung", name_de = "Schlachtruf", buff_bonus = "warrior_shout_bonus",
         duration = "warrior_shout_duration", cost = "warrior_shout_rage" },
-      { id = "taunt", name_de = "Spott", cd = "warrior_taunt_cd",
+      { id = "taunt", art = "Aggro", name_de = "Spott", cd = "warrior_taunt_cd",
         duration = "warrior_taunt_duration" },
     },
   },
@@ -327,19 +338,19 @@ M.classes = {
     name_de = "Paladin", races = { "mensch", "zwerg" },
     armor = "plate", resource = "mana", attack = "melee",
     abilities = {
-      { id = "holy_light", name_de = "Heiliges Licht", heal = "paladin_holylight_heal",
+      { id = "holy_light", art = "Heilung", name_de = "Heiliges Licht", heal = "paladin_holylight_heal",
         cast = "paladin_holylight_cast", cost = "paladin_holylight_mana" },
-      { id = "seal_of_righteousness", name_de = "Siegel der Rechtschaffenheit", bonus_hits = "paladin_seal_hits",
+      { id = "seal_of_righteousness", art = "Verstaerkung", name_de = "Siegel der Rechtschaffenheit", bonus_hits = "paladin_seal_hits",
         bonus_dmg = "paladin_seal_bonus_dmg", cost = "paladin_seal_mana" },
-      { id = "lay_on_hands", name_de = "Handauflegung", enabled = "paladin_loh_enabled" },
+      { id = "lay_on_hands", art = "Notheilung", name_de = "Handauflegung", enabled = "paladin_loh_enabled" },
     },
   },
   hunter = {
     name_de = "Jaeger", races = { "zwerg", "nachtelf" },
     armor = "leather", resource = "mana", attack = "shot",
     abilities = {
-      { id = "raptor_strike", name_de = "Raptorstoss", dmg = "hunter_raptor_dmg", cd = "hunter_raptor_cd" },
-      { id = "feign_death", name_de = "Totstellen", cd = "hunter_feign_cd",
+      { id = "raptor_strike", art = "Schaden", name_de = "Raptorstoss", dmg = "hunter_raptor_dmg", cd = "hunter_raptor_cd" },
+      { id = "feign_death", art = "Aggro-Reset", name_de = "Totstellen", cd = "hunter_feign_cd",
         duration = "hunter_feign_duration", enabled = "hunter_feign_enabled" },
     },
   },
@@ -347,20 +358,20 @@ M.classes = {
     name_de = "Schurke", races = { "mensch", "zwerg", "nachtelf", "gnom" },
     armor = "leather", resource = "energy", attack = "melee",
     abilities = {
-      { id = "sinister_strike", name_de = "Finsterer Stoss", dmg = "rogue_sinister_dmg", cost = "rogue_sinister_energy" },
-      { id = "eviscerate", name_de = "Ausweiden", dmg_per_cp = "rogue_evis_dmg_per_cp", cost = "rogue_evis_energy" },
-      { id = "stealth", name_de = "Verstohlenheit", speed_factor = "rogue_stealth_speed",
+      { id = "sinister_strike", art = "Schaden + Combopunkt", name_de = "Finsterer Stoss", dmg = "rogue_sinister_dmg", cost = "rogue_sinister_energy" },
+      { id = "eviscerate", art = "Schaden, verbraucht Combopunkte", name_de = "Ausweiden", dmg_per_cp = "rogue_evis_dmg_per_cp", cost = "rogue_evis_energy" },
+      { id = "stealth", art = "Tarnung", name_de = "Verstohlenheit", speed_factor = "rogue_stealth_speed",
         enabled = "rogue_stealth_enabled" },
-      { id = "kick", name_de = "Tritt", cost = "rogue_kick_energy", cd = "rogue_kick_cd" },
+      { id = "kick", art = "Unterbrechung", name_de = "Tritt", cost = "rogue_kick_energy", cd = "rogue_kick_cd" },
     },
   },
   priest = {
     name_de = "Priester", races = { "mensch", "zwerg", "nachtelf" },
     armor = "cloth", resource = "mana", attack = "melee",
     abilities = {
-      { id = "smite", name_de = "Goettliche Pein", dmg = "priest_smite_dmg", cast = "priest_smite_cast", cost = "priest_smite_mana" },
-      { id = "lesser_heal", name_de = "Geringes Heilen", heal = "priest_heal_amount", cast = "priest_heal_cast", cost = "priest_heal_mana" },
-      { id = "power_word_shield", name_de = "Machtwort: Schild", absorb = "priest_pws_absorb",
+      { id = "smite", art = "Schaden", name_de = "Goettliche Pein", dmg = "priest_smite_dmg", cast = "priest_smite_cast", cost = "priest_smite_mana" },
+      { id = "lesser_heal", art = "Heilung", name_de = "Geringes Heilen", heal = "priest_heal_amount", cast = "priest_heal_cast", cost = "priest_heal_mana" },
+      { id = "power_word_shield", art = "Schild", name_de = "Machtwort: Schild", absorb = "priest_pws_absorb",
         duration = "priest_pws_duration", cost = "priest_pws_mana", enabled = "priest_pws_enabled" },
     },
   },
@@ -368,25 +379,25 @@ M.classes = {
     name_de = "Magier", races = { "mensch", "gnom" },
     armor = "cloth", resource = "mana", attack = "melee",
     abilities = {
-      { id = "fireball", name_de = "Feuerball", dmg = "mage_fireball_dmg", cast = "mage_fireball_cast", cost = "mage_fireball_mana" },
-      { id = "frost_armor", name_de = "Frostruestung", slow = "mage_frostarmor_slow", slow_duration = "mage_frostarmor_slow_duration" },
+      { id = "fireball", art = "Schaden", name_de = "Feuerball", dmg = "mage_fireball_dmg", cast = "mage_fireball_cast", cost = "mage_fireball_mana" },
+      { id = "frost_armor", art = "Verstaerkung + Verlangsamung", name_de = "Frostruestung", slow = "mage_frostarmor_slow", slow_duration = "mage_frostarmor_slow_duration" },
     },
   },
   warlock = {
     name_de = "Hexenmeister", races = { "mensch", "gnom" },
     armor = "cloth", resource = "mana", attack = "melee",
     abilities = {
-      { id = "shadow_bolt", name_de = "Schattenblitz", dmg = "warlock_bolt_dmg", cast = "warlock_bolt_cast", cost = "warlock_bolt_mana" },
-      { id = "summon_imp", name_de = "Wichtel beschwoeren", cast = "warlock_imp_cast", cost = "warlock_imp_mana" },
+      { id = "shadow_bolt", art = "Schaden", name_de = "Schattenblitz", dmg = "warlock_bolt_dmg", cast = "warlock_bolt_cast", cost = "warlock_bolt_mana" },
+      { id = "summon_imp", art = "Beschwoerung", name_de = "Wichtel beschwoeren", cast = "warlock_imp_cast", cost = "warlock_imp_mana" },
     },
   },
   druid = {
     name_de = "Druide", races = { "nachtelf" },
     armor = "leather", resource = "mana", attack = "melee",
     abilities = {
-      { id = "wrath", name_de = "Zorn", dmg = "druid_wrath_dmg", cast = "druid_wrath_cast", cost = "druid_wrath_mana" },
-      { id = "healing_touch", name_de = "Heilende Beruehrung", heal = "druid_touch_heal", cast = "druid_touch_cast", cost = "druid_touch_mana" },
-      { id = "entangling_roots", name_de = "Gnarlwurzeln", duration = "druid_roots_duration",
+      { id = "wrath", art = "Schaden", name_de = "Zorn", dmg = "druid_wrath_dmg", cast = "druid_wrath_cast", cost = "druid_wrath_mana" },
+      { id = "healing_touch", art = "Heilung", name_de = "Heilende Beruehrung", heal = "druid_touch_heal", cast = "druid_touch_cast", cost = "druid_touch_mana" },
+      { id = "entangling_roots", art = "Kontrolle", name_de = "Gnarlwurzeln", duration = "druid_roots_duration",
         cd = "druid_roots_cd", cost = "druid_roots_mana", enabled = "druid_roots_enabled" },
     },
   },

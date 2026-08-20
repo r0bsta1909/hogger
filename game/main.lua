@@ -742,9 +742,31 @@ function love.draw()
       cds[i] = app.cooldown_max[i] > 0
         and app.cooldown_view[i] / app.cooldown_max[i] or 0
     end
+    -- Reichweiten-Rueckmeldung am Button (Runde 14, #171): dieselbe
+    -- Pruefung wie die Fehlerzeile, nur ohne Tastendruck — steht das Ziel
+    -- zu weit weg, faerbt sich der Button rot statt still zu versagen.
+    local oor = {}
+    do
+      local step_mod = require("game.gamesim.step")
+      local errors = require("game.ui.errors")
+      local me = app.view.players[app.view.me]
+      local specs = me and me.class and step_mod.ABILITIES[me.class]
+      if specs and me.alive then
+        for i, spec in ipairs(specs) do
+          if spec.range and step_mod.ability_enabled(spec) then
+            oor[i] = errors.check(me, spec, {
+              x = me.x, y = me.y, facing = me.facing, cooldown = 0,
+              hogger = app.view.hogger, npcs = app.view.npcs,
+              players = app.view.players,
+            }) == errors.TOO_FAR
+          end
+        end
+      end
+    end
     local to_screen = app.render:draw(app.view, {
       facing_angle = app.facing_angle,
       cooldowns = cds,
+      out_of_range = oor,
       mouse = { love.mouse.getPosition() },
     })
     app.floating:draw(to_screen)

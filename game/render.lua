@@ -55,6 +55,14 @@ local AUTO_DE = {
 }
 local RES_DE = { mana = "Mana", rage = "Wut", energy = "Energie" }
 
+-- 2,5 statt 2.5000, aber 5 statt 5,0 — Sekundenangaben im Tooltip
+local function fmt_num(v)
+  if math.abs(v - math.floor(v + 0.5)) < 1e-6 then
+    return tostring(math.floor(v + 0.5))
+  end
+  return (string.format("%.1f", v):gsub("%.", ","))
+end
+
 -- Effektive Maximal-HP eines Snapshot-Spielers (Runde 13, #159): der
 -- Blutpakt hebt den Deckel um warlock_pact_hp_pct — der Client rechnet
 -- dieselbe Formel wie step.effective_max_hp aus dem flags3-Bit und den
@@ -255,6 +263,83 @@ end
 -- erst wenn kein Feind trifft, faellt er auf die Linksklick-Wahl zurueck.
 -- Ein toter oder resetteter Hogger ist nie Ziel (war vorher klickbar).
 -- Rueckgabe: ziel_id oder nil, ist_feind.
+-- Faehigkeits-Tooltip (Runde 14, #171) — love-frei, damit die Zeilen
+-- testbar sind. Reihenfolge: Name, Kategorie, Wirkung mit Zahl, Kosten,
+-- Zauberzeit, Abklingzeit, Reichweite in METERN, Taste.
+-- Bis Runde 14 stand hier "Reichweite 200 px" und kein Wort darueber, WAS
+-- die Faehigkeit tut — obwohl alle Zahlen in der Kit-Tabelle gebunden sind.
+function R.ability_tooltip(class, spec, def, slot)
+  local cls = model.classes[class]
+  local lines = { (def and def.name_de) or spec.id }
+  if def and def.art then lines[#lines + 1] = def.art end
+
+  -- Wirkung mit der Zahl, die auch die Simulation benutzt
+  if def then
+    if def.dmg then
+      lines[#lines + 1] = string.format("%d Schaden", model.p(def.dmg))
+    elseif def.dmg_per_cp then
+      lines[#lines + 1] = string.format("%d Schaden je Combopunkt (bis %d)",
+        model.p(def.dmg_per_cp), model.p(def.dmg_per_cp) * model.CP_MAX)
+    end
+    if def.heal then
+      lines[#lines + 1] = string.format("Heilt %d", model.p(def.heal))
+    end
+    if def.absorb then
+      lines[#lines + 1] = string.format("Absorbiert %d Schaden",
+        model.p(def.absorb))
+    end
+    if def.buff_bonus then
+      lines[#lines + 1] = string.format("+%d %% Schaden fuer Verbuendete",
+        model.p(def.buff_bonus) * 100)
+    end
+    if def.bonus_hits then
+      lines[#lines + 1] = string.format("+%d Schaden auf den naechsten %d Treffern",
+        model.p(def.bonus_dmg), model.p(def.bonus_hits))
+    end
+    if def.slow then
+      lines[#lines + 1] = string.format("Verlangsamt Angreifer um %d %%",
+        model.p(def.slow) * 100)
+    end
+    if def.speed_factor then
+      lines[#lines + 1] = string.format("Unsichtbar, %d %% Tempo",
+        model.p(def.speed_factor) * 100)
+    end
+    if def.duration then
+      lines[#lines + 1] = string.format("Haelt %s s",
+        fmt_num(model.p(def.duration)))
+    end
+  end
+  -- Die Handauflegung hat keine Zahl in der Kit-Tabelle, weil sie VOLL
+  -- heilt und ALLES Mana kostet — beides Regel, kein Wert (Runde 13)
+  if spec.id == "loh" then
+    lines[#lines + 1] = "Heilt voll, kostet alles Mana, einmal pro Leben"
+  end
+
+  if spec.cost then
+    lines[#lines + 1] = string.format("%d %s", model.p(spec.cost),
+      RES_DE[cls and cls.resource] or "")
+  end
+  lines[#lines + 1] = spec.cast
+    and string.format("%.1f s Zauberzeit", model.p(spec.cast))
+    or "Sofort"
+  if spec.cd then
+    lines[#lines + 1] = string.format("%d s Abklingzeit", model.p(spec.cd))
+  end
+  -- Reichweite in Metern statt in Pixeln: "40 px" sagte niemandem etwas
+  if spec.range then
+    lines[#lines + 1] = string.format("Reichweite: %d Meter",
+      model.meters(model.p(spec.range)))
+  elseif spec.target == "ally" then
+    lines[#lines + 1] = string.format("Ziel: Verbuendeter in %d Metern (sonst selbst)",
+      model.meters(model.p("heal_range")))
+  elseif spec.target == "self" then
+    lines[#lines + 1] = "Wirkt auf einen selbst"
+  end
+  if spec.requires_cp then lines[#lines + 1] = "Braucht Combopunkte" end
+  if slot then lines[#lines + 1] = "Taste " .. slot end
+  return lines
+end
+
 function R.pick_target(view, mx, my, to_screen, scale, right_click)
   local function dist_to(wx, wy)
     local x, y = to_screen(wx, wy)
@@ -1612,10 +1697,23 @@ function R:draw(view, ui)
         love.graphics.arc("fill", "pie", x, y, BR, -math.pi / 2,
           -math.pi / 2 + cd * 2 * math.pi)
       end
+      -- Ziel ausser Reichweite: der Button wird rot ueberzogen und bekommt
+      -- einen roten Rand (Original-Signal, Runde 14, #171). Die Pruefung
+      -- laeuft ueber dieselbe errors.check-Wahrheit wie die Fehlerzeile,
+      -- damit Anzeige und Wirkung nie auseinanderlaufen.
+      local zu_weit = ui.out_of_range and ui.out_of_range[entry.slot]
+      if zu_weit then
+        love.graphics.setColor(0.75, 0.12, 0.10, 0.35)
+        love.graphics.circle("fill", x, y, BR)
+      end
       -- laufender Cast hebt seinen Button hervor
       local active = entry.slot ~= nil and (me.cast_slot or 0) == entry.slot
-      love.graphics.setColor(active and 1 or 0.78, active and 0.9 or 0.63,
-        active and 0.4 or 0.28, 1)
+      if zu_weit then
+        love.graphics.setColor(0.9, 0.25, 0.2, 1)
+      else
+        love.graphics.setColor(active and 1 or 0.78, active and 0.9 or 0.63,
+          active and 0.4 or 0.28, 1)
+      end
       love.graphics.setLineWidth(active and 3 or 2)
       love.graphics.circle("line", x, y, BR)
       love.graphics.setLineWidth(1)
@@ -1674,28 +1772,7 @@ function R:draw(view, ui)
   -- Faehigkeits-Tooltip ueber dem Button (Original-Stil, GDD 4.2)
   if hover_tip then
     local spec, def = hover_tip.spec, hover_tip.def
-    local font = love.graphics.getFont()
-    local lines = { def and def.name_de or spec.id }
-    local cls = model.classes[me.class]
-    if spec.cost then
-      lines[#lines + 1] = string.format("%d %s", model.p(spec.cost),
-        RES_DE[cls.resource] or "")
-    end
-    lines[#lines + 1] = spec.cast
-      and string.format("%.1f s Zauberzeit", model.p(spec.cast))
-      or "Sofort"
-    if spec.cd then
-      lines[#lines + 1] = string.format("%d s Abklingzeit", model.p(spec.cd))
-    end
-    if spec.range then
-      lines[#lines + 1] = string.format("Reichweite %d px", model.p(spec.range))
-    elseif spec.target == "ally" then
-      lines[#lines + 1] = "Ziel: Verbuendeter (sonst selbst)"
-    elseif spec.target == "self" then
-      lines[#lines + 1] = "Wirkt auf einen selbst"
-    end
-    if spec.requires_cp then lines[#lines + 1] = "Braucht Combopunkte" end
-    lines[#lines + 1] = "Taste " .. hover_tip.slot
+    local lines = R.ability_tooltip(me.class, spec, def, hover_tip.slot)
     draw_tooltip(lines, ui.mouse[1], ui.mouse[2], w, h)
   end
 
