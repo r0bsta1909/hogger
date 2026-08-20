@@ -16,7 +16,14 @@ function M.to_jsonl(e)
     '"crit":' .. (e.crit ~= nil and tostring(e.crit) or "null"),
   }
   if e.art then parts[#parts + 1] = '"art":"' .. tostring(e.art) .. '"' end
-  -- Zusatzfelder (nur try_end: Sprungzaehler laut GDD 17.3)
+  -- Zusatzfelder (nur try_end, GDD 17.3)
+  -- reason: WARUM der Try endete. Bis Runde 16 liess sich das aus dem Log
+  -- nicht ablesen — ein Zeitlimit endete ereignislos und war von einem Wipe
+  -- nicht zu unterscheiden. Robs Meldung "Reset obwohl alle dran waren" war
+  -- genau das: die Uhr, falsch beschriftet.
+  if e.reason then
+    parts[#parts + 1] = '"reason":"' .. tostring(e.reason) .. '"'
+  end
   if e.jumps then
     local js = {}
     for i = 1, #e.jumps do

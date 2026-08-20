@@ -386,7 +386,11 @@ local function process_cosmetics(view)
         audio.play("snd_hogger_death")           -- GDD 12 Nr. 10
         audio.play_later(1.2, "snd_fanfare")     -- Nr. 15: Sieg-Fanfare
       else
-        app.render:announce("Wipe. Naechster Try.", 4)
+        -- Neutral seit Runde 17: der Grund steht im Netz-Ereignis nicht drin
+        -- (der Client bekommt ihn ueber die Echo-Zeile und auf der Tafel).
+        -- "Wipe" hier zu behaupten war fuer zwei von drei Verlustfaellen
+        -- falsch — beim Zeitlimit prueglte der Raid munter weiter.
+        app.render:announce("Der Try ist vorbei.", 4)
         audio.play("snd_wipe_sting")             -- Nr. 15: kurz, Moll
       end
     elseif e.ev == "try_start" then

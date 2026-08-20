@@ -51,4 +51,11 @@ return {
   [33] = "Ich kann wieder die Escape-Taste druecken!",
   [34] = "ENDLICH. BIN. ICH. FREI!",
   [35] = "Moment. Haette ich vielleicht auch all die Zeit mit ALT+F...",
+  -- 36-39: Try-Ende nach Ursache (Runde 17). 21-24 bleiben der echte Wipe;
+  -- vorher liefen ALLE verlorenen Trys darueber, auch die, in denen der Raid
+  -- putzmunter weiterpruegelte. Rob las "Wipe", waehrend er zuschlug.
+  [36] = "Er trabt heim. Keiner hat ihn festgehalten.",
+  [37] = "Er ist weg. Wir standen wohl zu weit hinten.",
+  [38] = "Zeit ist um. Er lebt noch. Wir leider auch.",
+  [39] = "Von einer Uhr besiegt. Das ist ein neuer Tiefpunkt.",
 }

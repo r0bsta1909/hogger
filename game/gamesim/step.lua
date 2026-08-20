@@ -1669,9 +1669,19 @@ end
 -- ---------------------------------------------------------------------------
 -- Try-Struktur (GDD 6)
 -- ---------------------------------------------------------------------------
-local function end_try(state, ev, won)
+-- Die vier Ausgaenge eines Trys. EINE Tabelle als einzige Wahrheit: ein
+-- fuenfter Ausgang kostet dann eine Zeile statt vier Fundstellen.
+S.END_REASON = {
+  win        = "win",         -- Hogger liegt
+  wipe       = "wipe",        -- der Raid lag die Frist lang
+  no_contact = "no_contact",  -- er hat die Frist lang niemanden erreicht
+  timeout    = "timeout",     -- die Try-Uhr war um
+}
+
+local function end_try(state, ev, won, reason)
   local e = events.push(ev, state.tick, "try_end", "host",
     string.format("%.17g", math.max(0, state.hogger.hp)), won and 1 or 0, nil)
+  e.reason = reason
   local jumps = {}
   for _, p in ipairs(state.players) do
     jumps[#jumps + 1] = { p.id, p.jumps }
@@ -1680,7 +1690,7 @@ local function end_try(state, ev, won)
   -- Statistik-Tafel (GDD 11): VOR begin_try bauen (das setzt die Zaehler
   -- zurueck); haengt als e.board am Event, wird nicht ins JSONL serialisiert
   if state.stats then
-    local board = require("game.gamesim.statboard").build(state, won)
+    local board = require("game.gamesim.statboard").build(state, won, reason)
     for _, t in ipairs(board.title_awards) do
       state.players[t.pid].titel = t.title -- persistiert via session.json
     end
@@ -1845,7 +1855,7 @@ function S.step(state, inputs)
   end
 
   if state.hogger.hp <= 0 then
-    end_try(state, ev, true)
+    end_try(state, ev, true, S.END_REASON.win)
     state.phase = "won"
     state.won_t = 0
     state.won_stage = 1
@@ -1857,10 +1867,10 @@ function S.step(state, inputs)
     -- danach begin_try mit dem Full Heal.
     events.push(ev, state.tick, "hogger_reset", "hogger",
       state.hogger.reset_cause, math.max(0, state.hogger.hp), nil)
-    end_try(state, ev, false)
+    end_try(state, ev, false, state.hogger.reset_cause)
     world.begin_try(state, ev)
   elseif state.clock >= model.p("try_time_limit") then
-    end_try(state, ev, false)
+    end_try(state, ev, false, S.END_REASON.timeout)
     world.begin_try(state, ev)
   end
 

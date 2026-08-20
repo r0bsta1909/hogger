@@ -147,6 +147,74 @@ do
 end
 
 -- ---------------------------------------------------------------------------
+-- Der Grund des Try-Endes (Runde 17). Bis dahin endete ein abgelaufenes
+-- Zeitlimit ereignislos und war im Log von einem Wipe nicht zu unterscheiden
+-- — genau daran scheiterte die Auswertung von Robs Abend.
+-- ---------------------------------------------------------------------------
+do
+  local model = require("sim.model")
+  local function ende(t, rest, won, reason)
+    return { t = t, ev = "try_end", src = "host", dst = tostring(rest),
+             val = won and 1 or 0, reason = reason }
+  end
+  local L = {
+    ev(0, "param_change", "init", "try_time_limit", 900),
+    ev(0, "try_start", "host", "1", 10),
+    ende(60 * TPS, 0, true, "win"),
+    ev(60 * TPS + 1, "try_start", "host", "2", 10),
+    ev(60 * TPS + 60, "hogger_reset", "hogger", "no_contact", 500),
+    ende(120 * TPS, 500, false, "no_contact"),
+    ev(120 * TPS + 1, "try_start", "host", "3", 10),
+    ende(1020 * TPS, 800, false, "timeout"),
+  }
+  local r = logreport.analyse((lines_of(L)))
+  T.eq(r.n_try, 3, "logleser: drei Trys")
+  T.eq(r.trys[3].reason, "timeout", "logleser: reason wird aus dem Log gelesen")
+
+  local text, geraten = logreport.outcome(r.trys[3], r.params)
+  T.eq(text, "Zeit abgelaufen", "logleser: Zeitlimit wird benannt")
+  T.eq(geraten, false, "logleser: der Grund stand im Log, er wurde nicht geraten")
+
+  local t2 = logreport.outcome(r.trys[2], r.params)
+  T.eq(t2, "Abbruch: niemand am Boss", "logleser: Kein-Kontakt wird benannt")
+
+  local out = logreport.render(r, "gruende.jsonl", model.defaults)
+  T.ok(out:find("Trys nach Ursache"), "logleser: Bericht gruppiert nach Ursache")
+  T.ok(out:find("Zeit abgelaufen"), "logleser: das Zeitlimit steht im Bericht")
+  T.ok(out:find("aus der Dauer geschlossen") == nil,
+    "logleser: nichts wird geraten, wenn der Grund im Log steht")
+end
+
+-- Altlogs (Robs 30.248 Zeilen) haben das Feld nicht. Der Leser darf daraus
+-- schliessen — aber er muss es dazusagen. Ein Bericht, der "Zeit abgelaufen"
+-- behauptet, wo er es nur vermutet, ist schlimmer als "unbekannt".
+do
+  local model = require("sim.model")
+  local L = {
+    ev(0, "param_change", "init", "try_time_limit", 900),
+    ev(0, "try_start", "host", "1", 10),
+    ev(900 * TPS, "try_end", "host", "800", 0),      -- exakt an der Frist
+    ev(900 * TPS + 1, "try_start", "host", "2", 10),
+    ev(910 * TPS, "try_end", "host", "700", 0),      -- viel zu kurz
+  }
+  local r = logreport.analyse((lines_of(L)))
+
+  local t1, geraten1 = logreport.outcome(r.trys[1], r.params)
+  T.eq(t1, "Zeit abgelaufen", "altlog: aus der Dauer auf das Zeitlimit geschlossen")
+  T.eq(geraten1, true, "altlog: der Schluss ist als Schluss gekennzeichnet")
+
+  local t2, geraten2 = logreport.outcome(r.trys[2], r.params)
+  T.eq(t2, "Ende unbekannt (altes Log)", "altlog: ohne Anhaltspunkt wird nichts erfunden")
+  T.eq(geraten2, false, "altlog: 'unbekannt' ist kein Schluss, sondern ein Eingestaendnis")
+
+  local out = logreport.render(r, "alt.jsonl", model.defaults)
+  T.ok(out:find("aus der Dauer geschlossen"),
+    "altlog: der Bericht macht den Schluss sichtbar")
+  T.ok(out:find("Ende unbekannt"),
+    "altlog: der unklare Try wird als unklar ausgewiesen")
+end
+
+-- ---------------------------------------------------------------------------
 -- Ein Log ohne abgeschlossenen Try darf keinen Bericht erfinden
 -- ---------------------------------------------------------------------------
 do
