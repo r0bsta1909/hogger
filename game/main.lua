@@ -40,6 +40,7 @@ local function parse_args(args)
     elseif a == "--bots" then i = i + 1; app.bots = tonumber(args[i]) or 0; app.mode = "host"
     elseif a == "--headless" then app.headless = true
     elseif a == "--test" then app.test = true
+    elseif a == "--drawtest" then app.drawtest = true
     elseif a == "--stress" then app.stress = true
     elseif a == "--shot" then i = i + 1; app.shot_at = tonumber(args[i]) or 3
     elseif a == "--auto" then app.auto = true
@@ -141,6 +142,13 @@ function love.load(args)
   if app.headless and app.stress then
     local exit = require("game.test.stress").run()
     love.event.quit(exit)
+    return
+  end
+  -- Zeichentest (Stufe 4b, Runde 15 #187): braucht das Grafikmodul, aber
+  -- weder Netz noch Welt — er baut sich seine Sichten selbst. love.draw
+  -- fuehrt ihn im ersten Frame aus und beendet das Programm.
+  if app.drawtest then
+    require("game.audio").load()
     return
   end
   wire = require("game.net.wire")
@@ -426,7 +434,7 @@ local function process_cosmetics(view)
 end
 
 function love.update(dt)
-  if app.headless then return end
+  if app.headless or app.drawtest then return end
 
   app.uptime = app.uptime + dt
   if app.boot and app.boot:active() then
@@ -731,6 +739,25 @@ function love.update(dt)
 end
 
 function love.draw()
+  if app.drawtest then
+    if not app.drawtest_fertig then
+      app.drawtest_fertig = true
+      -- Ergebnis zusaetzlich in den Speicherordner: unter Windows kommt
+      -- stdout aus einem LOEVE-Fenster nicht zuverlaessig beim Aufrufer an,
+      -- und ein Ladefehler wuerde sonst nur die blaue Fehlerseite zeigen.
+      local ok, res = pcall(function()
+        return require("game.test.drawtest").run()
+      end)
+      -- Der Test schreibt seinen Bericht selbst; hier faengt nur ein
+      -- Ladefehler auf, der sonst als blaue Fehlerseite haengen bliebe.
+      if not ok then
+        love.filesystem.write("drawtest.txt", "LADEFEHLER " .. tostring(res))
+      end
+      if not ok then print("Zeichentest brach ab: " .. tostring(res)) end
+      love.event.quit(ok and res or 1)
+    end
+    return
+  end
   if app.headless then return end
   local bw, bh = love.graphics.getDimensions()
   if app.boot and app.boot:active() and app.boot:covers_screen() then
@@ -1145,15 +1172,17 @@ function love.mousepressed(mx, my, button)
     return w / 2 + (wx - app.view.me_x) * scale,
            h / 2 + (wy - app.view.me_y) * scale
   end
-  -- Zoom-Knoepfe am Ring (GDD 4.2); UI-Klick-Sound (GDD 12 Nr. 14)
-  if math.abs(mx - L.zoom.x) < L.zoom.r and math.abs(my - L.zoom.y) < L.zoom.r then
-    audio.play("snd_ui_click")
-    app.render:set_zoom(app.render.zoom - 1) return
-  end
-  if math.abs(mx - L.zoom.x) < L.zoom.r
-     and math.abs(my - (L.zoom.y + L.zoom.spacing)) < L.zoom.r then
-    audio.play("snd_ui_click")
-    app.render:set_zoom(app.render.zoom + 1) return
+  -- Zoom-Knoepfe am Ring (GDD 4.2); UI-Klick-Sound (GDD 12 Nr. 14).
+  -- Trefferpruefung seit Runde 15 (#189) in render.zoom_button_at — dieselbe
+  -- Rechnung wie das Zeichnen, damit Knopf und Klickflaeche zusammenbleiben.
+  do
+    local knopf = app.render.zoom_button_at(L, mx, my)
+    if knopf then
+      audio.play("snd_ui_click")
+      -- Plus = naeher heran = kleinere Zoomstufe
+      app.render:set_zoom(app.render.zoom + (knopf == "plus" and -1 or 1))
+      return
+    end
   end
   -- "Geist freilassen" (GDD Kap. 11): der Knopf greift erst, wenn der
   -- Respawn-Timer abgelaufen ist

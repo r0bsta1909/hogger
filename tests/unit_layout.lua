@@ -18,9 +18,33 @@ do
   T.eq(L.clock.cy, 778, "layout: Uhr auf der Ringunterkante")
   T.eq(L.npip.x, 640, "layout: N-Pip mittig")
   T.eq(L.npip.y, 22 + 26, "layout: N-Pip unter dem Banner")
-  T.near(L.zoom.x, 640 + 378 * 0.86, "layout: Zoom-x klassische Position")
-  T.near(L.zoom.y, 400 + 378 * 0.42, "layout: Zoom-y klassische Position")
+  -- Zoom-Knoepfe sitzen seit Runde 15 (#189) auf DERSELBEN Ringbahn:
+  -- vorher stand der zweite 34 px unter dem ersten, also einer im Kreis
+  -- und einer auf dem Goldring.
   T.eq(L.zoom.r, 14, "layout: Zoom-Radius = Hit-Radius")
+  local function bahn(b)
+    return math.sqrt((b.x - 640) ^ 2 + (b.y - 400) ^ 2)
+  end
+  T.near(bahn(L.zoom.plus), 378, "layout: Plus sitzt auf der Ringbahn")
+  T.near(bahn(L.zoom.minus), 378, "layout: Minus sitzt auf derselben Bahn")
+  T.near(bahn(L.zoom.dots), 378, "layout: die Stufenpunkte auch")
+  T.ok(L.zoom.minus.y > L.zoom.plus.y, "layout: Minus liegt unter Plus")
+  T.ok(L.zoom.dots.y > L.zoom.minus.y, "layout: Punkte unter dem Minus")
+  do -- Knoepfe duerfen sich nicht ueberlappen
+    local dx = L.zoom.minus.x - L.zoom.plus.x
+    local dy = L.zoom.minus.y - L.zoom.plus.y
+    T.ok(math.sqrt(dx * dx + dy * dy) > 2 * L.zoom.r,
+      "layout: Plus und Minus ueberlappen sich nicht")
+  end
+  -- Trefferpruefung und Zeichnung teilen sich eine Rechnung
+  T.eq(render.zoom_button_at(L, L.zoom.plus.x, L.zoom.plus.y), "plus",
+    "zoom: Klick auf Plus trifft Plus")
+  T.eq(render.zoom_button_at(L, L.zoom.minus.x, L.zoom.minus.y), "minus",
+    "zoom: Klick auf Minus trifft Minus")
+  T.eq(render.zoom_button_at(L, 640, 400), nil,
+    "zoom: die Kartenmitte ist kein Zoom-Knopf")
+  T.eq(render.zoom_button_at(L, L.zoom.plus.x, L.zoom.plus.y - L.zoom.r - 6), nil,
+    "zoom: knapp daneben trifft nicht")
 end
 
 -- Ecken-Variante reproduziert die Bestandszahlen ----------------------------
@@ -163,4 +187,56 @@ do
   T.ok(render.cellhash(7, 13) ~= render.cellhash(7, 14),
     "layout: cellhash streut ueber Nachbarzellen (y)")
   T.ok(render.cellhash(-5, -9) >= 0, "layout: cellhash nie negativ")
+end
+
+-- ---------------------------------------------------------------------------
+-- Ansage-Banner (Runde 15, #188): eine lange Echo-Zeile lief in doppelter
+-- Groesse quer durch das Zielfenster und aus dem Bild. Kurze Rufe sollen
+-- gross bleiben, ganze Saetze umbrechen — und beides IM Kartenkreis.
+-- ---------------------------------------------------------------------------
+do
+  local W, H, RADIUS = 1280, 800, 378
+
+  local kurz = render.banner_style("HOGGER FRISST!", W, RADIUS, false)
+  T.eq(kurz.scale, 2, "banner: kurze Rufe bleiben gross")
+  T.ok(kurz.kurz, "banner: ... und gelten als Ruf")
+
+  local lang = render.banner_style(
+    "Echo: Der Geistheiler? Der funktioniert nicht mehr. Frag nicht.",
+    W, RADIUS, false)
+  T.eq(lang.scale, 1, "banner: ganze Saetze werden normal gross gesetzt")
+  T.ok(not lang.kurz, "banner: ... und gelten nicht als Ruf")
+
+  -- Die gezeichnete Breite ist wrap * scale und muss in den Kreis passen
+  for _, st in ipairs({ kurz, lang }) do
+    local px_breit = st.wrap * st.scale
+    T.ok(px_breit <= 2 * RADIUS,
+      "banner: die Textbreite bleibt im Kartenkreis (" .. px_breit .. ")")
+    T.ok(px_breit <= W * 0.55,
+      "banner: ... und unter der halben Fensterbreite")
+  end
+
+  -- Es darf nicht in die HUD-Tafeln laufen: linker Rand des Banners liegt
+  -- rechts vom Einheitenfenster, rechter Rand links vom Zielfenster
+  do
+    local L = render.layout(W, H, true)
+    for _, st in ipairs({ kurz, lang }) do
+      local halb = st.wrap * st.scale / 2
+      T.ok(L.ox - halb > L.frames.unit.x + render.FRAME_W,
+        "banner: bleibt rechts vom Einheitenfenster")
+      T.ok(L.ox + halb < L.frames.target.x,
+        "banner: bleibt links vom Zielfenster")
+    end
+  end
+
+  -- Nach dem Fluchbruch rutscht es unter die Mitte (Sprechblase hat oben Platz)
+  local sieg = render.banner_style("HOGGER IST TOT!", W, RADIUS, true)
+  T.ok(sieg.dy > 0, "banner: nach dem Sieg unterhalb der Mitte")
+  T.ok(kurz.dy < 0, "banner: im Try oberhalb der Mitte")
+  T.ok(math.abs(kurz.dy) < RADIUS, "banner: bleibt innerhalb des Kreises")
+
+  -- Auch ein extrem langer Satz veraendert die Breite nicht mehr
+  local sehr_lang = render.banner_style(string.rep("wort ", 40), W, RADIUS, false)
+  T.eq(sehr_lang.wrap * sehr_lang.scale, lang.wrap * lang.scale,
+    "banner: die Breite haengt nicht an der Textlaenge")
 end
