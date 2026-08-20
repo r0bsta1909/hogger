@@ -131,6 +131,13 @@ local AURA = {
                string.format("Frostruestung, haelt %d s je Treffer",
                  model.p("mage_frostarmor_slow_duration")) }
     end },
+  -- Totstellen (Runde 14, #168): dass man liegt, sah man nur am gedrehten
+  -- Icon auf der Karte — am eigenen Rahmen stand nichts
+  feign = { kuerzel = "TS", name = "Totstellen", debuff = false,
+    text = function()
+      return { "Hogger und alle Mobs haben dich vergessen",
+               "Bewegung steht sofort wieder auf" }
+    end },
   -- Die einzige Aura, die ein NPC traegt (Runde 14, #167): vorher war der
   -- Wurzel-Zustand nirgends ablesbar
   roots = { kuerzel = "GW", name = "Gnarlwurzeln", debuff = true,
@@ -713,6 +720,7 @@ local function aura_list(p)
   if p.seal then auras[#auras + 1] = { AURA.seal } end
   if p.frost_armor then auras[#auras + 1] = { AURA.frost } end
   if p.stealth then auras[#auras + 1] = { AURA.stealth } end
+  if p.feigning then auras[#auras + 1] = { AURA.feign } end
   if p.shielded then auras[#auras + 1] = { AURA.pws } end
   if p.pact then auras[#auras + 1] = { AURA.pact } end
   if p.weak_soul and not p.shielded then

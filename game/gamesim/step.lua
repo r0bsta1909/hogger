@@ -411,6 +411,14 @@ local function player_damage_enemy(state, p, amount, kind, ev)
   end
 end
 
+-- Wer fuer Gegner nicht existiert: verstohlen ODER liegend (Runde 14, #168).
+-- Vorher stand an jeder Aggro-Stelle nur `not p.stealth` — der Jaeger, der
+-- sich totstellte, wurde von Mobs und von Hoggers Leerlauf-Aggro sofort
+-- wieder eingesammelt, und seine geloeschte Bedrohung war Makulatur.
+local function unseen(state, p)
+  return p.stealth or state.time < (p.feign_until or 0)
+end
+
 local function set_stealth(state, p, on)
   p.stealth = on
   -- Verstohlenheit schaltet den Angriff ab (Vanilla; Issue #86)
@@ -871,9 +879,17 @@ local function player_tick(state, p, inp, ev)
   -- zugleich den Nahkampf-Autohit an (Issue #86) — auch wenn der Versuch
   -- an Kosten/Reichweite scheitert: der Krieger mit 0 Wut faengt sonst
   -- nie an zu schlagen, und Bots/Leeroy druecken ohnehin regelmaessig.
-  if input.pressed(mask, p.prev_mask, input.AB1) then p.attack_on = true try_ability(state, p, 1, ev) end
-  if input.pressed(mask, p.prev_mask, input.AB2) then p.attack_on = true try_ability(state, p, 2, ev) end
-  if input.pressed(mask, p.prev_mask, input.AB3) then p.attack_on = true try_ability(state, p, 3, ev) end
+  -- NICHT waehrend des Totstellens (Runde 14, #168): der zweite Tastendruck
+  -- auf einen scheinbar toten Knopf hat den Autoangriff wieder scharf
+  -- gemacht, und im Moment des Aufstehens flog der Schuss.
+  local liegend = state.time < (p.feign_until or 0)
+  local function press(slot)
+    if not liegend then p.attack_on = true end
+    try_ability(state, p, slot, ev)
+  end
+  if input.pressed(mask, p.prev_mask, input.AB1) then press(1) end
+  if input.pressed(mask, p.prev_mask, input.AB2) then press(2) end
+  if input.pressed(mask, p.prev_mask, input.AB3) then press(3) end
 
   -- Autoattacks (GDD 8.1, Runde 5 #86 / Runde 12 #145): JEDE Autoattack
   -- muss angeschaltet sein — Rechtsklick aufs Ziel oder irgendein
@@ -881,9 +897,12 @@ local function player_tick(state, p, inp, ev)
   -- allein. Der Jaeger wechselt automatisch die Waffe: in Nahkampf-
   -- Reichweite drischt er (zu nah zum Schiessen), weiter draussen schiesst
   -- er. Nicht aus Verstohlenheit.
-  p.next_auto = p.next_auto - DT
+  -- Der Schwungtimer wird beim Hinlegen geparkt (Runde 14, #168): er lief
+  -- weiter ins Minus, also feuerte der erste Tick nach dem Aufstehen sofort.
+  -- Die Sim macht es seit jeher richtig (engine.lua) — jetzt beide gleich.
+  if not liegend then p.next_auto = p.next_auto - DT end
   if p.next_auto <= 0 and not p.cast and not p.stealth and p.attack_on
-     and state.time >= (p.feign_until or 0) then -- liegend schiesst keiner
+     and not liegend then -- liegend schiesst keiner
     local attack = model.classes[p.class].attack
     if attack == "shot"
        and not enemy_in_reach(state, p, model.p("melee_range")) then
@@ -992,7 +1011,7 @@ local function mob_tick(state, npc, ev)
     -- aggressive Typen: Wolf/Murloc ab Naehe (GDD 7.2)
     if typ == "wolf" or typ == "murloc" then
       for _, p in ipairs(state.players) do
-        if p.alive and not p.stealth
+        if p.alive and not unseen(state, p)
            and world.dist(p.x, p.y, npc.x, npc.y) <= model.p("wolf_aggro_radius") then
           npc.state = "combat"
           npc.target_pid = p.id
@@ -1041,7 +1060,7 @@ end
 local function add_tick(state, npc, ev)
   if npc.state == "idle" then
     for _, p in ipairs(state.players) do
-      if p.alive and not p.stealth
+      if p.alive and not unseen(state, p)
          and world.dist(p.x, p.y, npc.x, npc.y) <= 150 then
         npc.state = "combat"
         npc.target_pid = p.id
@@ -1184,9 +1203,12 @@ end
 -- Taste 4): Rechtsklick auf Hogger/Mob. Die Autoattack laeuft dann von
 -- selbst weiter (der Jaeger wechselt Schuss/Nahkampf nach Distanz), bis
 -- Tod, Wiederbelebung oder Verstohlenheit sie abschalten.
+-- Wer liegt, greift nicht an (Runde 14, #168): der Rechtsklick hat den
+-- Angriff sonst durch das Totstellen hindurch scharf gemacht.
 function S.engage(state, pid)
   local p = state.players[pid]
   if not p or not p.alive then return false end
+  if state.time < (p.feign_until or 0) then return false end
   p.attack_on = true
   return true
 end
@@ -1475,7 +1497,11 @@ local function hogger_tick(state, ev)
       h.patrol_i = (h.patrol_i % #map.patrol) + 1
     end
     for _, p in ipairs(state.players) do
-      if p.alive and world.dist(p.x, p.y, h.x, h.y) <= model.p("hogger_aggro_radius") then
+      -- Wer sich totstellt oder verstohlen ist, existiert fuer Hogger nicht
+      -- (Runde 14, #168): genau hier kam die geloeschte Bedrohung sofort
+      -- zurueck — 0,1 Punkte reichen, wenn sonst niemand auf der Liste steht.
+      if p.alive and not unseen(state, p)
+         and world.dist(p.x, p.y, h.x, h.y) <= model.p("hogger_aggro_radius") then
         h.state = "combat"
         -- Naehe startet den Try, stellt die Uhr aber NICHT zurueck: dafuer
         -- muss man ihn erreichen oder treffen (Runde 10, #124).
