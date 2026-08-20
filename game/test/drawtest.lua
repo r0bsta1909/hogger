@@ -258,6 +258,54 @@ function T.run()
     for _, key in ipairs(schalter) do model.params[key].wert = 1 end
   end
 
+  -- Heil-Leiste am Anschlag (Runde 17): der Ueberhang, die Kritisch-
+  -- Markierung und die Gnadenfrist sind eigene Zweige, die die Welt oben
+  -- mit ihren acht Spielern NIE erreicht. Ein gruener Zeichentest, der den
+  -- neuen Code nie zeichnet, ist genau das falsche Sicherheitsgefuehl,
+  -- gegen das diese Stufe in Runde 15 ueberhaupt gebaut wurde.
+  do
+    local voll = world.new(99)
+    for i = 1, 40 do
+      world.add_player(voll, "raid" .. i, { quest_done = true })
+    end
+    world.begin_try(voll, {})
+    local heiler_pid
+    for i = 1, 40 do
+      local p = voll.players[i]
+      local class = (i == 1) and "priest" or model.CLASS_IDS[(i % 8) + 1]
+      p.alive, p.ghost, p.dead_until = true, false, 0
+      p.class, p.race = class, model.classes[class].races[1]
+      p.max_hp = model.hp_for_class(class)
+      -- alle verwundet, gestaffelt; die ersten drei kritisch (unter 35 %)
+      p.hp = p.max_hp * ((i <= 3) and (0.10 + 0.05 * i) or 0.45)
+      p.resource = 60
+      p.x, p.y = voll.players[1].x + (i % 7) * 8, voll.players[1].y + (i % 5) * 8
+      p.target = world.HOGGER_ID
+      if i == 1 then heiler_pid = p.id end
+    end
+    local view = sicht(voll, heiler_pid)
+    for _, fall in ipairs({
+      { "Heil-Leiste am Anschlag", 0 },
+      { "Heil-Leiste, Puls in der Gegenphase", 0.5 },
+    }) do
+      versuch(fall[1], function()
+        render.ui_t = fall[2]
+        render:draw(view, { facing_angle = 0, cooldowns = { 0, 0, 0, 0 },
+                            mouse = { L.frames.healbar.x + 20,
+                                      L.frames.healbar.y + 30 } })
+      end)
+    end
+    -- Gnadenfrist: ein Vollgeheilter, der noch nachlaeuft
+    versuch("Heil-Leiste mit Nachlauf", function()
+      voll.players[5].hp = voll.players[5].max_hp
+      render.ui_t = 1.0
+      render.heal_memo = { [voll.players[5].id] = 0.5 }
+      render:draw(sicht(voll, heiler_pid),
+        { facing_angle = 0, cooldowns = { 0, 0, 0, 0 } })
+    end)
+    render.heal_memo = nil
+  end
+
   local bericht = string.format("%d Zeichenlaeufe, %d Fehler", geprueft, #fehler)
   print(bericht)
   -- Auch als Datei: unter Windows kommt stdout aus einem LOEVE-Fenster nicht
