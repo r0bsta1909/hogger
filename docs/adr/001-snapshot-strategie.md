@@ -39,6 +39,62 @@ Ebenfalls angepasst: Client-Input wird pro Tick (60 Hz) als 1-Byte-Bitmaske
 mit ~3-Tick-Redundanz gesendet (Skill §3 „Eingaben") statt der bisherigen
 30 Hz — Redundanz macht Einzelverluste unsichtbar, Kosten sind Bytes.
 
+---
+
+## Nachtrag 2026-08-20 (Runde 16): die Rechnung oben war überholt
+
+Die Entscheidung bleibt. Die Zahlen, mit der sie begründet wurde, stimmten
+nicht mehr — sie sind jetzt **gemessen** statt geschätzt
+(`game/test/budget.lua`, Stufe 4, Kosten je Datensatz aus dem echten Packer
+abgeleitet):
+
+| Block | angenommen 2026-08-16 | gemessen 2026-08-20 |
+|---|---|---|
+| je Spieler | 14 B | **25 B** |
+| je NPC | 14 B | 8 B |
+| je Leiche | 14 B | 4 B |
+| je Bodenbeute | 14 B | 5 B |
+| fester Teil | im Pauschalwert | 39 B |
+
+Damit ergibt sich für den Rumpf:
+
+| Zustand | Rumpf | Paket (+7 B Kopf) | ENet-MTU 1400 B |
+|---|---|---|---|
+| N=5, frischer Try | 212 B | 219 B | passt |
+| N=40, frischer Try | 1.215 B | 1.222 B | passt, 178 B Luft |
+| **N=40, Leichen am 255er-Deckel** | 2.295 B | **2.302 B** | **902 B darüber** |
+| N=40, alles am Anschlag | 2.655 B | 2.662 B | 1.262 B darüber |
+
+Upstream entsprechend: **23,3 Mbit/s** bei N=40 im frischen Try (statt der
+angenommenen 13,5), **44,1 Mbit/s** im gesättigten Zustand. Auf Gigabit
+weiterhin unkritisch; auf 100 Mbit ist der gesättigte Fall nicht mehr trivial.
+
+**Der gesättigte Zustand ist der Normalfall, kein Sonderfall.** Leichen
+verschwinden ausschließlich, wenn Hogger eine frisst (`step.lua`), sonst nie;
+gelöscht wird die Liste erst beim Try-Start. 255 Leichen sind 6,4 Tode je
+Spieler — bei 40 Spielern und 24 s Todesstrafe erreicht ein Try das nach
+wenigen Minuten und bleibt dann dort.
+
+**Warum das M3-Gate es nicht gesehen hat:** die 40 Clients des Stresstests
+(`game/test/stress.lua`) nehmen nie die Quest an. Unter `quest < 2` wird ihre
+Eingabemaske genullt, sie bleiben die vollen zehn Minuten Geister am Friedhof,
+sterben nie und hinterlassen keine einzige Leiche. Die dort gemessenen
+20,7 Mbit/s gehören zum leichenfreien Snapshot. Das Gate war grün, weil es den
+teuren Zustand nie erzeugt hat — und die Budget-Prüfung in `headless.lua`
+rechnete zugleich mit 20 B je Spieler und lief nur mit sechs bis acht Spielern.
+
+**Was daraus folgt und was offen bleibt:** Oberhalb der MTU fragmentiert ENet.
+Ob ein fragmentiertes Paket auf Kanal 1 unzuverlässig bleibt oder ob ENet auf
+zuverlässige Fragmente zurückfällt — und damit genau die Lückenbehandlung
+zurückholt, die diese Entscheidung vermeiden wollte —, ist **nicht gemessen**
+und wird hier ausdrücklich nicht behauptet. Das ist die offene Frage.
+
+Der naheliegende Hebel ist dabei **nicht** die Eskalationsleiter: der
+Leichen-Block ist der einzige unbegrenzt wachsende Teil des Snapshots, und
+eine Obergrenze für `state.corpses` wäre ein weit kleinerer Eingriff als eine
+neue Snapshot-Strategie. Weil das die Fressmechanik berührt, ist es eine
+Design-Entscheidung und keine technische.
+
 **Revisionsauslöser:**
 
 - Der M3-Stresstest (GDD 17.4, 40 Clients) reißt ein Gate: Host-Tickdauer
@@ -47,6 +103,11 @@ mit ~3-Tick-Redundanz gesendet (Skill §3 „Eingaben") statt der bisherigen
 - Die Entitätenzahl wächst deutlich über ~100 (z. B. durch Modus 2 oder
   Designänderungen).
 - Zielbetrieb ohne Kabel (WLAN) wird doch Realität.
+- **Der Snapshot-Rumpf erreicht die ENet-MTU (1400 B abzüglich 7 B Kopf)**
+  — seit dem Nachtrag oben im gesättigten 40er-Try **ausgelöst**; die
+  Konsequenz ist noch nicht bewertet. Nachgemessen wird das maschinell in
+  `game/test/budget.lua` (Stufe 4), das die Kosten je Datensatz aus dem
+  Packer ableitet und nicht mehr veralten kann.
 
 Dann: Leiter-Stufe 2 (Snapshot-Rate auf 20–30 Hz entkoppeln, Interpolation
 nur für Entitäten ohne Nahinteraktion, Rebase + Replay bleibt für alles
