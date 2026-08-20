@@ -13,6 +13,16 @@ local function median(list)
 end
 R.median = median
 
+-- Halbe Breite des 95-%-Vertrauensbereichs einer Siegquote (Normalapproxi-
+-- mation, Runde 14). Jede Quote im Bericht traegt sie mit sich: 300 Laeufe
+-- sind rund +/-5 pp genau, 1000 Laeufe rund +/-2,7 pp. Ohne diese Zahl
+-- liest man Rauschen als Ergebnis — genau der Fehler, den F4 lange machte.
+function R.ci95(rate, runs)
+  if not runs or runs <= 0 then return 0 end
+  local p = math.max(0, math.min(1, rate or 0))
+  return 1.96 * math.sqrt(p * (1 - p) / runs)
+end
+
 -- Laufliste einer Zelle -> Kennzahlen
 function R.summarize(results)
   local s = {

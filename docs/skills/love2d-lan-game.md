@@ -474,9 +474,41 @@ Sonderfall, der bei jeder weiteren Socket-Szene neu gebaut werden müsste.
   wie „60–90 %" ist erst mit Streuung eine messbare Größe: je Agent ein Skill-Faktor, je Lauf ein
   gemeinsamer Koordinationsfaktor, beide deterministisch aus dem geloggten Seed. Die Streuung ist
   Sim-Modellparameter, nicht Spielverhalten — die Sim bleibt reproduzierbar.
+- **[gemessen] Die Nachweismatrix wächst schneller als ihr Nutzen — und niemand merkt es.** Eine
+  Matrix aus vier Dimensionen war nach ein paar Runden auf 2,5 Stunden je Nachweis gewachsen,
+  obwohl **drei Viertel ihrer Zellen eine Dimension variierten, die längst per Entscheid
+  festlag** und deren Wert die Zahlentabelle selbst herleitet. Vor jeder Optimierung deshalb
+  erst zählen, welche Zelle überhaupt ein Kriterium trägt: die überflüssige Dimension zu
+  streichen war 4x, die Parallelisierung 5x und das Optimieren des heißen Codes nur 1,2x wert.
+- **[gemessen] Die Sim ist peinlich parallel — und pures Lua reicht dafür.** Zellen sind
+  unabhängig; `io.popen` startet Kindprozesse gleichzeitig und liefert unter Windows wie POSIX
+  dieselbe Mechanik, wenn der Interpreterpfad aus dem `arg`-Vektor kommt (der Eintrag mit dem
+  negativsten Index). Bedingung für gleiche Ergebnisse: **der Zellen-Seed hängt am Zellindex,
+  nicht an der Abarbeitungsreihenfolge** — dann sind seriell und parallel bitgleich, und das
+  gehört gegengeprüft, nicht geglaubt.
+- **Jede Quote mit ihrem Vertrauensbereich berichten.** 300 Läufe sind ±5 pp, 1.000 Läufe ±2,7 pp.
+  Ohne diese Zahl liest man Rauschen als Ergebnis — im eigenen Projekt maß ein Kriterium
+  („Krits entscheiden nichts, ≤ 5 pp") mit 2,3 pp jahrelang überwiegend sein eigenes Rauschen
+  (Niveau ~1,6 pp). Wer das nicht ausweist, tunt gegen Zufall.
+- **[gemessen] Die drei billigsten Hotspots einer Lua-Sim** (zusammen 18 %): eine `assert`-Meldung,
+  die bei **jedem** Aufruf zusammengebaut wird statt nur im Fehlerfall; ein `require` im Rumpf
+  einer heißen Funktion (Ausweg aus einem Ringschluss — gehört in einen faul gefüllten Upvalue);
+  eine Tabelle, die je Tick neu allokiert wird, statt einen Puffer wiederzuverwenden.
+- **Ein Log-Leser ist billiger als ein weiterer Playtest.** Das Event-Log wurde jeden Abend
+  geschrieben und **von nichts gelesen** — dabei beantwortet es genau die Fragen, für die man
+  sonst Menschen befragt (Siegquote, Trylängen, ob die vorgesehene Rolle überhaupt gespielt
+  wurde). Ein zweihundert Zeilen langes Auswertungsskript verwandelt jeden gespielten Abend in
+  Messdaten. Zwei Details, die es tragfähig machen: den Leser durch **denselben Serialisierer**
+  testen, den der Host benutzt (sonst driftet das Schema still), und die **abweichenden
+  Parameter** mit ausweisen — sonst vergleicht man Zahlen aus zwei verschiedenen Welten.
 - **Tuning-Protokoll als Ergebnisgedächtnis:** jede Balancing-Änderung mit Datum, **Auslöser** und
   **Ergebnis** an ein fortlaufendes Kapitel anhängen. Ohne das wird derselbe Wert dreimal in
   verschiedene Richtungen gedreht, weil niemand mehr weiß, warum er dort steht.
+- **Dem Menschen die Regler erklären, statt für ihn zu drehen.** Eine Seite „Symptom → Regler →
+  Richtung → Nebenwirkung" macht den Besitzer des Spiels handlungsfähig und spart die halben
+  Nachweisläufe. Sie muss maschinell geprüft werden (nennt sie einen Parameter, den es nicht
+  mehr gibt, schlägt der Test fehl) — eine Anleitung, die auf umbenannte Werte zeigt, ist
+  schlimmer als keine.
 - **Mensch nur fürs Gefühl.** Alles Messbare (Invarianten, Sweeps, Stresstest, Gates) prüft die
   Maschine selbst; der Mensch wird mit fertigem Validierungsbericht und **je einer Ein-Satz-Frage
   pro offenem Punkt** gerufen. Playtest-Zeit ist die knappste Ressource im Projekt.

@@ -235,3 +235,36 @@ do -- row_at: Geometrie der Listenzeilen (love-frei, line_h vom Aufrufer)
   T.eq(q:row_at(px + 20, top + 2, W, H, LH), list[4],
     "row_at: Scroll-Offset wird beruecksichtigt")
 end
+
+-- ---------------------------------------------------------------------------
+-- Der Balancing-Leitfaden fuer Rob (Runde 14, #175) nennt Regler beim Namen.
+-- Jeder davon MUSS es geben — ein Leitfaden, der auf einen umbenannten
+-- Parameter zeigt, ist schlimmer als keiner.
+-- ---------------------------------------------------------------------------
+do
+  local model = require("sim.model")
+  local fh = assert(io.open("docs/balancing-fuer-rob.md"),
+                    "Leitfaden docs/balancing-fuer-rob.md fehlt")
+  local text = fh:read("*a")
+  fh:close()
+
+  -- Backtick-Woerter, die keine Parameter sind (Werkzeuge, Schalter)
+  local KEIN_PARAM = { log_lesen = true, quick = true, sweep = true,
+                       jobs = true, out = true, tuning = true }
+
+  local geprueft = 0
+  for token in text:gmatch("`([a-z][a-z0-9_]*)`") do
+    if not KEIN_PARAM[token] then
+      T.ok(model.params[token] ~= nil,
+        "Leitfaden nennt einen Parameter, den es gibt: " .. token)
+      geprueft = geprueft + 1
+    end
+  end
+  T.ok(geprueft >= 25,
+    "Leitfaden nennt genug Regler, um brauchbar zu sein (" .. geprueft .. ")")
+
+  -- Die Vorzeichenfalle MUSS drinstehen: sie hat schon Zeit gekostet
+  T.ok(text:find("offset hoch = weniger HP")
+       or text:find("offset hoch = weniger"),
+    "Leitfaden warnt vor der Vorzeichenfalle des HP-Offsets")
+end

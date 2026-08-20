@@ -732,33 +732,45 @@ function E.run_try(cfg)
   local melee_r = model.p("melee_range")
   local frist = model.p("hogger_no_contact_reset")
   run.engaged, run.no_contact_t = false, 0
+  -- EIN Puffer fuer die Wichtel-Distanzen statt einer neuen Tabelle je Tick
+  -- (Runde 14, #175 — bis zu 9000 Allokationen pro Lauf, Verhalten gleich)
+  local imp_ds, imp_n, pact_any = {}, 0, false
   while run.t < limit do
     run.t = run.t + dt
     -- Blutpakt (Runde 13, #159) im 1D-Modell: der Wichtel steht beim
     -- Besitzer, die Aura gilt fuer |d - d_besitzer| <= Radius. Beim
     -- Verlassen (oder Abschalten) klemmt der Deckel die Bonus-HP.
     do
-      local imp_ds = {}
+      imp_n = 0
       if model.p("warlock_pact_enabled") >= 1 then
         for _, o in ipairs(run.players) do
-          if o.alive and o.imp_alive then imp_ds[#imp_ds + 1] = o.d end
-        end
-      end
-      local pr = model.p("warlock_pact_radius")
-      for _, q in ipairs(run.players) do
-        local inside = false
-        if q.alive then
-          for _, dd in ipairs(imp_ds) do
-            if math.abs(q.d - dd) <= pr then
-              inside = true
-              break
-            end
+          if o.alive and o.imp_alive then
+            imp_n = imp_n + 1
+            imp_ds[imp_n] = o.d
           end
         end
-        if q.pact and not inside and q.alive then
-          q.hp = math.min(q.hp, q.max_hp)
+      end
+      -- Lebt kein Wichtel und traegt niemand die Aura, ist die ganze
+      -- Schleife ein Leerlauf — dann uebersprungen (Runde 14, #175)
+      if imp_n > 0 or pact_any then
+        local pr = model.p("warlock_pact_radius")
+        pact_any = false
+        for _, q in ipairs(run.players) do
+          local inside = false
+          if q.alive then
+            for i = 1, imp_n do
+              if math.abs(q.d - imp_ds[i]) <= pr then
+                inside = true
+                break
+              end
+            end
+          end
+          if q.pact and not inside and q.alive then
+            q.hp = math.min(q.hp, q.max_hp)
+          end
+          q.pact = inside
+          if inside then pact_any = true end
         end
-        q.pact = inside
       end
     end
     if run.agent.tick then run.agent.tick(run) end

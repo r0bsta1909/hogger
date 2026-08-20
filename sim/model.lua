@@ -282,9 +282,14 @@ M.defaults = {}
 for k, e in pairs(M.params) do M.defaults[k] = e.wert end
 
 -- bequemer Wertzugriff: M.p("hogger_hp_coeff") -> 120
+-- Die Fehlermeldung wird ERST im Fehlerfall gebaut: assert() haette den
+-- String bei jedem der ~100 Aufrufe pro Entitaet und Tick zusammengesetzt
+-- (Runde 14, #175 — gemessener Sim-Hotspot, Verhalten unveraendert).
 function M.p(key)
   local entry = M.params[key]
-  assert(entry ~= nil, "unbekannter Parameter: " .. tostring(key))
+  if entry == nil then
+    error("unbekannter Parameter: " .. tostring(key), 2)
+  end
   return entry.wert
 end
 
@@ -465,10 +470,16 @@ end
 
 -- Todesstrafe in Sekunden: Respawn-Timer + Geisterlauf + lebendiger Restanmarsch
 -- (GDD 6/7.1; Zielkorridor 25-35 s, fixiert per M1-Sweep)
+-- Laufweg-Anteil der Todesstrafe (Geisterweg + Anmarsch). N-unabhaengig und
+-- seit Runde 6 (#96) per Rob-Entscheid fest — die Sim leitet ihren Standard
+-- hier ab, statt eine zweite Zahl zu fuehren (Runde 14, #175).
+function M.walk_time()
+  return M.p("graveyard_to_field_dist") / M.p("move_speed_ghost")
+       + M.p("field_to_hill_dist") / M.p("move_speed_alive")
+end
+
 function M.death_penalty(n)
-  return M.respawn_timer(n)
-    + M.p("graveyard_to_field_dist") / M.p("move_speed_ghost")
-    + M.p("field_to_hill_dist") / M.p("move_speed_alive")
+  return M.respawn_timer(n) + M.walk_time()
 end
 
 -- ---------------------------------------------------------------------------

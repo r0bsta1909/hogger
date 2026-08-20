@@ -16,6 +16,7 @@ Wo GDD und Skill kollidieren (z. B. Snapshot-Strategie: GDD sagt 20 Hz + Interpo
 - **Spec vor Code, ADRs vor Implementierung:** Architekturentscheidungen als `docs/adr/NNN-titel.md` mit Kontext, verworfenen Alternativen und **Revisionsauslöser** („woran erkennt man, dass die Entscheidung neu bewertet gehört").
 - **Test-first entlang der Pyramide** (GDD Kap. 17.7): Stufe 1 (Unit, reines Lua) und Stufe 3 (Determinismus, gleicher Seed → gleicher Log-Hash) laufen bei jedem Commit. `lua tests/run_all.lua` ist der eine Befehl. Kein Feature ohne Test seiner Formeln.
 - **Autonom testen, Mensch nur fürs Gefühl:** Alles Messbare prüfst du selbst (Sim, Invarianten, Stresstest, Berichte). Rob wird nur für die Gefühls-Kriterien aus GDD 13.4 gerufen — mit fertigem Validierungsbericht und je einer Ein-Satz-Frage pro offenem Punkt.
+- **Keine Stundenläufe (ADR 004, Rob-Entscheid Runde 14):** Der Balancing-Nachweis ist der **Richtungstest** `lua sim/main.lua --quick --jobs 10` — 24 Zellen, alle sieben Kriterien, ~2 Minuten. Die volle Matrix (`--sweep`, ~30 min parallel) läuft nur vor Releases oder auf ausdrückliche Ansage. **Rechenläufe über ~10 Minuten startest du nicht ungefragt.** Jede Siegquote wird mit ihrem 95-%-Vertrauensbereich berichtet (300 Läufe ≈ ±5 pp) — Unterschiede darunter sind Rauschen, keine Ergebnisse. Robs Seite des Balancings steht in `docs/balancing-fuer-rob.md` (Symptom → Regler → Nebenwirkung); einen gespielten Abend rechnet `lua tools/log_lesen.lua <session-*.jsonl>` nach.
 - **Eine Wahrheit pro Frage:** `sim/model.lua` ist die EINZIGE Quelle aller Spielzahlen und Formeln; Sim und Spiel importieren dieselbe Datei. Ein Hash, ein Ableitungspfad, eine Physik.
 - **Tuning-Protokoll:** Jede Balancing-Änderung mit Auslöser und Ergebnis in GDD Kap. 17.9 anhängen (per PR am GDD).
 
@@ -49,6 +50,7 @@ Reihenfolge und Gates stehen in GDD Kap. 15. Kurzform:
 
 - Sprache: Deutsch für Docs, Commits, Issues, Berichte. Code-Bezeichner Englisch, kurz.
 - Test alles: `lua tests/run_all.lua` (Stufe 4 separat: `love . --headless --test` aus `game/`).
-- Sim: `lua sim/main.lua --n 10 --runs 1000 --penalty 30 --crits on`
+- Sim — Einzelzelle: `lua sim/main.lua --n 10 --runs 300 --crits on --agent koordiniert` (der Laufweg kommt aus `model.walk_time()`, nicht mehr von Hand). Nachweis-Gate: `lua sim/main.lua --quick --jobs 10`. Volle Matrix nur auf Ansage: `lua sim/main.lua --sweep --runs 1000 --jobs 10 --out reports/<datum>-sweep.md`.
+- Abend nachrechnen: `lua tools/log_lesen.lua "%APPDATA%\LOVE\hogger\logs\session-<datum>.jsonl"`
 - LÖVE-Version: 11.5 pinnen (`conf.lua`), ungenutzte Module abschalten.
 - Logs/`session.json`: JSONL-Schema exakt nach GDD 17.3; neue Event-Typen nur per GDD-Update.
