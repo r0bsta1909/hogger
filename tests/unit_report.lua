@@ -68,3 +68,31 @@ do
   }), PEN, NS)
   T.ok(not f[6].ok, "F6: 26 pp zwischen N=5 und N=40 falsifiziert")
 end
+
+-- ---------------------------------------------------------------------------
+-- Vertrauensbereich (Runde 14, #175): jede Siegquote im Bericht traegt ihn
+-- mit sich, damit niemand Rauschen fuer ein Ergebnis haelt.
+-- ---------------------------------------------------------------------------
+do
+  local model = require("sim.model")
+
+  T.eq(report.ci95(0.5, 0), 0, "ci95: ohne Laeufe kein Bereich")
+  T.near(report.ci95(0.5, 100), 1.96 * 0.05, "ci95: 100 Laeufe bei 50 % = +/-9,8 pp")
+  T.ok(report.ci95(0.75, 300) > report.ci95(0.75, 1000),
+    "ci95: mehr Laeufe = engerer Bereich")
+  T.ok(report.ci95(0.75, 300) < 0.05,
+    "ci95: 300 Laeufe reichen fuer eine Aussage im 60-90-%-Band")
+  T.eq(report.ci95(0, 500), 0, "ci95: eine 0-%-Zelle streut nicht")
+  T.eq(report.ci95(1, 500), 0, "ci95: eine 100-%-Zelle streut nicht")
+
+  -- Der Richtungstest faehrt einen festen Laufweg. Diese Zahl steht in
+  -- sim/main.lua als QUICK_WALK und MUSS die Modellwahrheit sein — laeuft
+  -- sie auseinander, misst der Standardtest eine andere Welt als das Spiel.
+  T.eq(model.walk_time(), 14, "walk_time: Laufweganteil der Todesstrafe ist 14 s")
+  T.near(model.death_penalty(5), model.respawn_timer(5) + model.walk_time(),
+    "walk_time: Todesstrafe = Respawn-Timer + Laufweg")
+  local src = assert(io.open("sim/main.lua")):read("*a")
+  local quick = tonumber(src:match("QUICK_WALK%s*=%s*(%d+)"))
+  T.eq(quick, model.walk_time(),
+    "Richtungstest: QUICK_WALK haengt am Modell, nicht an einer Handzahl")
+end

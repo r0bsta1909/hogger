@@ -11,6 +11,16 @@ local model = require("sim.model")
 
 local A = {}
 
+-- sim.engine laedt sim.agents und umgekehrt — der Verweis muss also spaet
+-- aufgeloest werden. Frueher stand ein require() im Rumpf jeder Agenten-
+-- funktion und lief damit millionenfach; jetzt einmal beim ersten Zugriff
+-- (Runde 14, #175 — gemessener Hotspot, Verhalten unveraendert).
+local E
+local function engine()
+  E = E or require("sim.engine")
+  return E
+end
+
 -- ---------------------------------------------------------------------------
 -- Gemeinsame Bausteine
 -- ---------------------------------------------------------------------------
@@ -36,7 +46,7 @@ end
 -- Klassenlogik "Faehigkeiten bei Verfuegbarkeit"; heal_others steuert, ob
 -- Heiler auch Verbuendete heilen (koordiniert) oder nur sich selbst.
 local function act_class(run, p, heal_others)
-  local E = require("sim.engine")
+  local E = engine()
   local class = p.class
   local hp_pct = p.hp / p.max_hp
 
@@ -165,7 +175,7 @@ function A.make(name, run)
                and p.resource >= model.p("rogue_kick_energy") then
               p.resource = p.resource - model.p("rogue_kick_energy")
               p.kick_ready = r.t + model.p("rogue_kick_cd")
-              require("sim.engine").interrupt_eat(r, 1)
+              engine().interrupt_eat(r, 1)
               break
             end
           end
@@ -214,7 +224,7 @@ function A.make(name, run)
     agent.no_auto = function(r, p) return not p.is_leeroy end
     agent.act = function(r, p)
       if p.is_leeroy then return act_class(r, p, false) end
-      local E = require("sim.engine")
+      local E = engine()
       local target = lowest_ally(r, 0.85, false, p)
       if not target then return end -- Cast-Pause: Mana regeneriert (FSR)
       if p.class == "priest" then
