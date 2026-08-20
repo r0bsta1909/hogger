@@ -1626,9 +1626,6 @@ function R:draw(view, ui)
       L.frames.hint.x, L.frames.hint.y)
   end
 
-  -- Heil-Leiste der Heilerklassen (Runde 7, #103, GDD 4.3)
-  self:draw_healbar(view, L.frames.healbar)
-
   -- Oben rechts: Zielfenster, Ziel des Ziels, Ziel-Auren (GDD 4.3)
   if me then
     local t = me.target
@@ -1752,6 +1749,13 @@ function R:draw(view, ui)
       end
     end
   end
+
+  -- Heil-Leiste der Heilerklassen (Runde 7, #103, GDD 4.3). Sie wird
+  -- bewusst NACH den beiden Innenrand-Boegen gezeichnet (Runde 15, #196):
+  -- XP- und Bedrohungsbogen laufen auf Radius r-8 bzw. r-14 genau durch
+  -- die Flaeche der Leiste, und ein Strich quer durch eine Leseflaeche
+  -- bleibt stoerend, egal wie deckend die Plakette darunter ist.
+  self:draw_healbar(view, L.frames.healbar)
 
   -- N-Pip: Norden ist fixiert (GDD 4.1) — als Kompass-Knopf unter dem
   -- Zonenbanner, bewusst NACH dem XP-Bogen gezeichnet (M12)

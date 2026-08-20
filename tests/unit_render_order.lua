@@ -71,3 +71,22 @@ do
   T.ok(ev_block and ev_block:find("taunt%s*=%s*19"),
     "wurzeln: die bestehenden Ereignisnummern bleiben unangetastet")
 end
+
+-- ---------------------------------------------------------------------------
+-- Die Heil-Leiste muss NACH den Innenrand-Boegen gezeichnet werden
+-- (Runde 15, #196): XP-Bogen (r-8) und Bedrohungsbogen (r-14) laufen genau
+-- durch ihre Flaeche. Eine deckende Plakette hilft nichts, wenn die Boegen
+-- danach darueber gezogen werden.
+-- ---------------------------------------------------------------------------
+do
+  local src = assert(io.open("game/render.lua")):read("*a")
+  local healbar = src:find("self:draw_healbar%(view, L%.frames%.healbar%)")
+  local xp = src:find("%-%- XP%-Bogen an der Innenkante")
+  local threat = src:find("%-%- Bedrohungsbogen an der Innenkante")
+  T.ok(healbar and xp and threat, "order: alle drei Bloecke gefunden")
+  if healbar and xp and threat then
+    T.ok(healbar > xp, "order: Heil-Leiste wird nach dem XP-Bogen gezeichnet")
+    T.ok(healbar > threat,
+      "order: Heil-Leiste wird nach dem Bedrohungsbogen gezeichnet")
+  end
+end
