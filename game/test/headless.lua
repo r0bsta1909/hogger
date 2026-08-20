@@ -281,6 +281,51 @@ function T.run()
       ok(snap.hogger.slow_rest == math.max(0, math.min(255,
            math.ceil((st.hogger.slow_until or 0) - st.time))),
         "Codec: Hogger-Frost-Slow-Restsekunden (Runde 8, #107)")
+
+      -- NPC-Flags-Byte (Runde 13 gebaut, Runde 14 erstmals geprueft, #167):
+      -- Bit 1 = gewurzelt, Bits 2-8 = Restdauer in Vierteln einer Sekunde.
+      -- Fuer das Log war der Zustand da, geprueft hat ihn nie jemand.
+      for id = 100, 250 do
+        local npc = st.npcs[id]
+        if npc then
+          local sn = snap.npcs[id]
+          ok(sn ~= nil, "Codec: jeder NPC im Snapshot")
+          if sn then
+            local soll = st.time < (npc.rooted_until or 0)
+            ok(sn.rooted == soll, "Codec: Wurzel-Flag am NPC")
+            if soll then
+              local rest = (npc.rooted_until or 0) - st.time
+              ok(math.abs(sn.root_rest - math.min(31.75, rest)) <= 0.25,
+                "Codec: Wurzel-Restdauer (Viertelsekunden-Raster)")
+            end
+          end
+        end
+      end
+    end
+  end
+
+  -- Ein gewurzelter Mob geht durch den Codec: der Fall tritt im Bot-Lauf
+  -- nicht zuverlaessig auf (kein Bot spielt Druide), also hier gestellt.
+  do
+    local st = host.state
+    local npc_id
+    for id = 100, 250 do if st.npcs[id] then npc_id = id break end end
+    if npc_id then
+      local npc = st.npcs[npc_id]
+      local vorher = npc.rooted_until
+      npc.rooted_until = st.time + 5
+      local _, snap = wire.read_snapshot(
+        wire.snapshot(0, wire.snapshot_body(st)), 4)
+      ok(snap.npcs[npc_id] and snap.npcs[npc_id].rooted,
+        "Codec: gewurzelter Mob kommt als gewurzelt beim Client an")
+      ok(snap.npcs[npc_id] and math.abs(snap.npcs[npc_id].root_rest - 5) <= 0.25,
+        "Codec: seine Restdauer ueberlebt die Leitung")
+      npc.rooted_until = st.time - 1
+      local _, snap2 = wire.read_snapshot(
+        wire.snapshot(0, wire.snapshot_body(st)), 4)
+      ok(snap2.npcs[npc_id] and not snap2.npcs[npc_id].rooted,
+        "Codec: abgelaufene Wurzeln kommen als nicht gewurzelt an")
+      npc.rooted_until = vorher
     end
   end
 

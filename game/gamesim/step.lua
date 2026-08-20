@@ -609,7 +609,10 @@ local ABILITIES = {
         local enemy, etype = current_enemy(state, p)
         if etype ~= "npc" then return end
         enemy.rooted_until = state.time + model.p("druid_roots_duration")
-        events.push(ev, state.tick, "root", p.id, enemy.id, nil, nil)
+        -- val = Dauer (Runde 14, #167): das Ereignis geht jetzt auch ans
+        -- Netz (wire.EV.root) und traegt den Fliesstext am Mob
+        events.push(ev, state.tick, "root", p.id, enemy.id,
+          model.p("druid_roots_duration"), nil)
       end },
   },
 }
