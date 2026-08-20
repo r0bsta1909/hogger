@@ -2,9 +2,13 @@
 --
 --   lua tools/log_lesen.lua <pfad/session-20260820-201500.jsonl> [--out bericht.md]
 --
--- Das Host-Log (GDD 17.3) liegt unter:
---   Windows  %APPDATA%\LOVE\hogger\logs\
---   macOS    ~/Library/Application Support/LOVE/hogger/logs/
+-- Das Host-Log (GDD 17.3) liegt unter — ACHTUNG, zwei Orte:
+--   gepacktes Spiel (wow.exe):  %APPDATA%\hogger\logs\
+--   aus dem Repo (love game):   %APPDATA%\LOVE\hogger\logs\
+--   macOS entsprechend ~/Library/Application Support/[LOVE/]hogger/logs/
+-- LOEVE legt fusionierte Spiele direkt unter den Identity-Namen, die
+-- Entwicklungsversion unter LOVE/<identity> (Runde 15 am Release gemessen —
+-- der zuvor dokumentierte Pfad galt nur fuer die Entwicklungsversion).
 -- Es ist die einzige Datei, die einen gespielten Abend nachrechenbar macht —
 -- session.json enthaelt nur XP, Kupfer, Plunder und den Try-Zaehler.
 --

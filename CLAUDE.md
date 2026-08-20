@@ -49,8 +49,8 @@ Reihenfolge und Gates stehen in GDD Kap. 15. Kurzform:
 ## Umgebung & Befehle
 
 - Sprache: Deutsch für Docs, Commits, Issues, Berichte. Code-Bezeichner Englisch, kurz.
-- Test alles: `lua tests/run_all.lua` · Stufe 4 (headless): `lovec game --headless --test` · **Stufe 4b (Zeichentest): `lovec game --drawtest`** — führt den Renderer für jede Klasse und jeden Zustand wirklich aus und ist der EINZIGE Test, der Fehler im Zeichencode findet (Stufe 1/3 sind love-frei, Stufe 4 läuft ohne Grafikmodul). Ergebnis steht auch in `%APPDATA%\LOVE\hogger\drawtest.txt`. **Nach jeder Änderung an `render.lua` Pflicht.**
+- Test alles: `lua tests/run_all.lua` · Stufe 4 (headless): `lovec game --headless --test` · **Stufe 4b (Zeichentest): `lovec game --drawtest`** — führt den Renderer für jede Klasse und jeden Zustand wirklich aus und ist der EINZIGE Test, der Fehler im Zeichencode findet (Stufe 1/3 sind love-frei, Stufe 4 läuft ohne Grafikmodul). Ergebnis steht auch in `drawtest.txt` im Speicherordner. **Nach jeder Änderung an `render.lua` Pflicht.**
 - Sim — Einzelzelle: `lua sim/main.lua --n 10 --runs 300 --crits on --agent koordiniert` (der Laufweg kommt aus `model.walk_time()`, nicht mehr von Hand). Nachweis-Gate: `lua sim/main.lua --quick --jobs 10`. Volle Matrix nur auf Ansage: `lua sim/main.lua --sweep --runs 1000 --jobs 10 --out reports/<datum>-sweep.md`.
-- Abend nachrechnen: `lua tools/log_lesen.lua "%APPDATA%\LOVE\hogger\logs\session-<datum>.jsonl"`
+- Abend nachrechnen: `lua tools/log_lesen.lua <pfad>`. **Zwei Speicherorte:** gepacktes Spiel (`wow.exe`) -> `%APPDATA%\hogger\logs\`, aus dem Repo (`love game`) -> `%APPDATA%\LOVE\hogger\logs\`. LÖVE trennt fusionierte Spiele von der Entwicklungsversion — Robs Logs liegen im ERSTEN Pfad.
 - LÖVE-Version: 11.5 pinnen (`conf.lua`), ungenutzte Module abschalten.
 - Logs/`session.json`: JSONL-Schema exakt nach GDD 17.3; neue Event-Typen nur per GDD-Update.
