@@ -356,6 +356,60 @@ function T.run()
     render.heal_memo = nil
   end
 
+  -- ---------------------------------------------------------------------
+  -- Das Questfenster (Runde 18). Es wurde in dieser Stufe NIE gezeichnet
+  -- (hier stand nur `quest_done = true`), und Stufe 1 kann es nicht: das
+  -- Fenster hat weder setScissor noch Scrolling, ein zu langer Text laeuft
+  -- ungebremst aus dem Pergament heraus. Hier wird beides geprueft — dass
+  -- der Zeichencode laeuft UND dass der Text mit der ECHTEN Schrift passt.
+  -- ---------------------------------------------------------------------
+  do
+    local questmod = require("game.ui.quest")
+    local frisch = baue_welt()
+    local view = sicht(frisch, 4)
+    view.try_nr, view.clock = 4711, 0
+    local w, h = love.graphics.getDimensions()
+
+    for _, fall in ipairs({
+      { "Annahme", function(q) q.state = "open"; q.mode = "quest" end },
+      { "Annahme mit Namen", function(q)
+          q.state = "open"; q.mode = "quest"; q.buffer = "Testspieler" end },
+      { "Namenskollision", function(q)
+          q.state = "open"; q.mode = "quest"; q.buffer = "Anna"
+          q.note = questmod.NAME_TAKEN end },
+      { "Questlog", function(q) q.state = "done"; q.mode = "log" end },
+      { "Lore Seite 1", function(q)
+          q.state = "done"; q.mode = "lore"; q.page = 1 end },
+      { "Lore letzte Seite", function(q)
+          q.state = "done"; q.mode = "lore"; q.page = #questmod.LORE end },
+    }) do
+      local q = questmod.new(view)
+      fall[2](q)
+      versuch("Questfenster: " .. fall[1], function()
+        q:draw(view, w, h, function(x, y) return x, y end)
+      end)
+    end
+
+    -- Die eigentliche Zusage, mit der Schrift, die auch zeichnet
+    versuch("Questtext passt ins Pergament (echte Schrift)", function()
+      local font = love.graphics.getFont()
+      local q = questmod.new(view)
+      local L = q:layout(w, h)
+      local function wrap(text, breite)
+        local _, lines = font:getWrap(text, breite)
+        return #lines
+      end
+      local unten = questmod.walk(questmod.blocks(view), questmod.content_top(L),
+        questmod.text_width(L), wrap, font:getHeight())
+      local platz = questmod.content_bottom(L)
+      if unten > platz then
+        error(string.format(
+          "Questtext laeuft %d px ueber das Pergament hinaus (%d von %d)",
+          math.ceil(unten - platz), math.ceil(unten), math.ceil(platz)))
+      end
+    end)
+  end
+
   local bericht = string.format("%d Zeichenlaeufe, %d Fehler", geprueft, #fehler)
   print(bericht)
   -- Auch als Datei: unter Windows kommt stdout aus einem LOEVE-Fenster nicht

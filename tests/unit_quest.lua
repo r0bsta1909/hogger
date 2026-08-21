@@ -102,17 +102,113 @@ do
     T.ok(in_a[nm], "botnamen: Zulosung ist eine Permutation (" .. nm .. ")")
   end
 end
+-- Der Test fesselte bis Runde 18 die woertliche Wendung "uebrig ist". Der
+-- neue Wortlaut (Rob, 2026-08-21) sagt dasselbe anders. Gefesselt wird
+-- deshalb, WOFUER der Test da war: dass das Echo im Questtext seine eigene
+-- Natur erklaert — der Name allein sagt es nicht (GDD 10.1).
 do
-  local erklaert = false
-  for _, s in ipairs(quest.BODY or {}) do
-    if s:find("uebrig ist") then erklaert = true end
-  end
-  T.ok(erklaert, "der Questtext klaert auf, dass er nur das Echo ist")
+  local body = table.concat(quest.BODY, " ")
+  T.ok(body:find("Echo") ~= nil,
+    "der Questtext klaert auf, dass er nur das Echo ist")
+  -- Er darf sie auch nicht NUR behaupten: irgendwo muss stehen, dass da
+  -- noch ein zweiter, koerperlicher Leeroy herumrennt (GDD 10.2)
+  T.ok(body:find("Koerper") ~= nil or body:find("Huelle") ~= nil,
+    "der Questtext nennt die zweite, koerperliche Haelfte")
 end
-T.ok(#quest.BODY >= 4, "Questtext hat die Intro-Informationen")
+T.ok(#quest.BODY >= 3, "Questtext hat die Intro-Informationen")
 T.ok(#quest.GOALS >= 2, "Questziele sind benannt")
 local goals = table.concat(quest.GOALS, " ")
 T.ok(goals:find("Hogger") ~= nil, "Questziel nennt Hogger")
+-- Das Onboarding darf beim Umschreiben nicht verlorengehen: diese Zeile
+-- ist die EINZIGE Anweisung, die einem frischen Geist sagt, wofuer die
+-- acht Klassenicons am Wiederbelebungsfeld da sind (GDD 5.5).
+T.ok(goals:find("Leiche") ~= nil and goals:find("belebt") ~= nil,
+  "Questziel erklaert die Wiederbelebung am Klassenicon")
+
+-- ---------------------------------------------------------------------------
+-- Alle Anzeigetexte ASCII (Spielcode-Konvention, CLAUDE.md). Bis Runde 18
+-- galt die Pruefung nur fuer names.lua — Umlaute in quest.lua waeren gruen
+-- durchgerutscht und haetten trotzdem die Konvention gebrochen.
+-- ---------------------------------------------------------------------------
+do
+  local function ascii(s, wo)
+    T.ok(type(s) == "string" and s:find("[\128-\255]") == nil,
+      "ASCII: " .. wo .. " (" .. tostring(s):sub(1, 40) .. ")")
+  end
+  ascii(quest.TITLE, "Questtitel")
+  for i, s in ipairs(quest.BODY) do ascii(s, "Body " .. i) end
+  for i, s in ipairs(quest.GOALS) do ascii(s, "Ziel " .. i) end
+  for i, s in ipairs(quest.REWARDS) do ascii(s, "Belohnung " .. i) end
+  ascii(quest.TIME_GOAL, "Zeitziel")
+  ascii(quest.REWARD_LEAD, "Belohnungs-Einleitung")
+  ascii(quest.REWARD_NOTE, "Belohnungs-Fussnote")
+  for i, seite in ipairs(quest.LORE) do
+    ascii(seite.titel, "Lore-Titel " .. i)
+    for k, s in ipairs(seite.absaetze) do ascii(s, "Lore " .. i .. "." .. k) end
+  end
+end
+
+-- ---------------------------------------------------------------------------
+-- Die Frist im Questtext kommt aus dem Parameter, nie als feste Zahl. Wer
+-- im F10-Panel dreht, muss sie hier sofort lesen (GDD 4.2 fuer die Uhr am
+-- Ring — dieselbe Zusage gilt fuers Questfenster).
+-- ---------------------------------------------------------------------------
+do
+  local model = require("sim.model")
+  local alt = model.params.try_time_limit.wert
+  local body = table.concat(quest.BODY, " ")
+  T.ok(body:find("{ZEIT}") ~= nil, "die Frist steht als Platzhalter im Text")
+  T.ok(body:find("%d%d? Minuten") == nil and body:find("16:00") == nil,
+    "keine festgetippte Frist im Questtext")
+
+  model.params.try_time_limit.wert = 960
+  T.ok(quest.fill("Frist {ZEIT}"):find("16:00") ~= nil,
+    "Platzhalter zeigt 16:00 bei 960 s")
+  model.params.try_time_limit.wert = 600
+  T.ok(quest.fill("Frist {ZEIT}"):find("10:00") ~= nil,
+    "... und 10:00, sobald der Parameter auf 600 steht")
+  -- {REST} zaehlt mit der Try-Uhr herunter (Timed Quest wie im Original)
+  T.eq(quest.fill("{REST}", { clock = 0 }), "10:00", "Restzeit beim Try-Start")
+  T.eq(quest.fill("{REST}", { clock = 599 }), "0:01", "Restzeit kurz vor Ablauf")
+  T.eq(quest.fill("{REST}", { clock = 900 }), "0:00",
+    "Restzeit laeuft nicht ins Negative")
+  model.params.try_time_limit.wert = alt
+end
+
+-- ---------------------------------------------------------------------------
+-- Der Ueberlauf-Test, den es nie gab (Runde 18). Das Questfenster hat weder
+-- setScissor noch Hoehenpruefung noch Scrolling: ein zu langer Text laeuft
+-- ueber das Namensfeld hinaus aus dem Pergament heraus. Bis Runde 18 haette
+-- das WEDER Stufe 1 NOCH der Zeichentest gemerkt — nur ein Auge im Spiel.
+-- Hier mit einer bewusst KONSERVATIVEN Schaetzung (schmale Zeichen); die
+-- Messung mit der echten Schrift steht im Zeichentest (Stufe 4b).
+-- ---------------------------------------------------------------------------
+do
+  local FH = 15          -- love.graphics.getFont():getHeight() der Standardschrift
+  local PX_PER_CHAR = 6.9 -- Vera Sans 12 misst im Mittel ~6,4; hier mit Reserve
+  local function wrap(text, breite)
+    return math.max(1, math.ceil(#text * PX_PER_CHAR / breite))
+  end
+  local w = quest.new({ try_nr = 4711 })
+  local L = w:layout(1280, 800)
+  local tw = quest.text_width(L)
+  local unten = quest.walk(quest.blocks({ try_nr = 4711, clock = 0 }),
+    quest.content_top(L), tw, wrap, FH)
+  T.ok(unten <= quest.content_bottom(L),
+    "Questtext passt ins Pergament (" .. math.floor(unten) .. " px, Platz bis "
+    .. math.floor(quest.content_bottom(L)) .. " px)")
+
+  -- Und die Pruefung muss beissen: ein Absatz mehr soll sie kippen
+  local viele = quest.blocks({ try_nr = 4711, clock = 0 })
+  viele[#viele + 1] = { kind = "para", text = string.rep("Fuellwort ", 60) }
+  T.ok(quest.walk(viele, quest.content_top(L), tw, wrap, FH)
+       > quest.content_bottom(L),
+    "... und ein Absatz zu viel faellt auf")
+
+  -- Das Fenster selbst muss in die Fensterhoehe passen (conf.lua: 800)
+  T.ok(quest.PANEL_H + 16 <= 800, "Questfenster passt in die Fensterhoehe")
+  T.ok(L.y >= 8, "Questfenster waechst nicht oben aus dem Bild")
+end
 
 -- Taste L: wegblenden und zurueckholen gilt nur noch fuers Questlog
 -- (Issue #62, eingeschraenkt durch #83 — siehe Log-Block unten)

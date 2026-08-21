@@ -675,8 +675,7 @@ end
 -- die Frist nie — Robs Trys endeten bei 15:00, und auf dem Bildschirm stand
 -- nur, wie lange sie schon gedauert hatten.
 function R.clock_text(clock, limit)
-  local rest = math.max(0, (limit or 0) - (clock or 0))
-  return string.format("%d:%02d", math.floor(rest / 60), math.floor(rest % 60))
+  return model.mmss((limit or 0) - (clock or 0))
 end
 
 -- Reine Arithmetik: welche Zeile liegt unter (mx, my)? nil = keine.
