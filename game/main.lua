@@ -1066,6 +1066,16 @@ function love.keypressed(key)
       return
     end
   end
+  -- Dieselbe Umkehrung wie bei den Klicks (Runde 19): was oben liegt, wird
+  -- zuerst gefragt. Die Tafel kennt ESC seit Runde 10 (#126) — erreicht hat
+  -- die Taste sie nie, weil das Questfenster darueber alles schluckte.
+  -- Kollision gibt es keine: stats.keypressed verbraucht NUR escape und nur
+  -- bei sichtbarer Tafel; im Questfenster ist ESC seit #83 ohnehin wirkungslos.
+  if app.victory then
+    app.victory:keypressed(key) -- Sequenz schluckt Tasten (Welt steht)
+    return
+  end
+  if app.stats and app.stats:keypressed(key) then return end
   if app.quest and app.quest:blocking() then
     app.quest:keypressed(key) -- das Questfenster schluckt alles
     return
@@ -1074,11 +1084,6 @@ function love.keypressed(key)
     app.quest = nil
     return
   end
-  if app.victory then
-    app.victory:keypressed(key) -- Sequenz schluckt Tasten (Welt steht)
-    return
-  end
-  if app.stats and app.stats:keypressed(key) then return end
   if app.mode == "discover" then return end
   if app.panel and app.panel:keypressed(key) then return end
   if key == "f10" and app.panel then
@@ -1132,6 +1137,21 @@ function love.mousepressed(mx, my, button)
     app.boot:mousepressed() -- ab dem zweiten Start ueberspringbar (GDD 3)
     return
   end
+  -- REIHENFOLGE = UMKEHRUNG DER ZEICHENREIHENFOLGE (Runde 19).
+  -- love.draw zeichnet Questfenster -> Tafel -> Beutefenster; wer oben
+  -- liegt, muss zuerst gefragt werden. Bis Runde 18 lief es genau
+  -- andersherum: die Tafel lag sichtbar VOR dem Questfenster, wurde aber
+  -- ZULETZT gefragt — und der Quest-Block returnte bedingungslos. Ergebnis
+  -- (Robs Meldung): beim Spielstart erscheint die Wipe-Tafel ueber dem noch
+  -- offenen Questfenster und laesst sich in der Ueberlappung nicht
+  -- wegklicken. Wer hier eine neue Ueberlagerung einschiebt, muss BEIDE
+  -- Stellen anfassen — tests/unit_uiorder.lua rechnet die Umkehrung nach.
+  if app.victory then
+    -- Der Auftakt schluckt Klicks; ein Klick ins Loot-Fenster ueberspringt es
+    app.victory:mousepressed(mx, my)
+    return
+  end
+  if app.stats and app.stats:mousepressed(mx, my) then return end
   if app.quest and app.quest:visible() then
     local w2, h2 = love.graphics.getDimensions()
     local L = app.quest:layout(w2, h2)
@@ -1141,12 +1161,6 @@ function love.mousepressed(mx, my, button)
       return
     end
   end
-  if app.victory then
-    -- Der Auftakt schluckt Klicks; ein Klick ins Loot-Fenster ueberspringt es
-    app.victory:mousepressed(mx, my)
-    return
-  end
-  if app.stats and app.stats:mousepressed(mx, my) then return end
   if not app.view then return end
 
   -- Faehigkeitsbuttons am Ring (Runde 14, #172): Linksklick loest sie aus,

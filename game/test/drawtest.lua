@@ -411,6 +411,49 @@ function T.run()
   end
 
   -- ---------------------------------------------------------------------
+  -- Statistik-Tafel UEBER dem Questfenster (Runde 19) — Robs Konstellation:
+  -- man liest noch die Quest, ein anderer nimmt an, Leeroy stirbt, und die
+  -- Wipe-Tafel legt sich darueber. Die Tafel war ueberhaupt noch nie
+  -- gezeichnet worden, die Ueberlagerung erst recht nicht. Dass die Tafel
+  -- oben liegt, ist Absicht; dass sie den Klick auch bekommt, sichert
+  -- tests/unit_uiorder.lua.
+  -- ---------------------------------------------------------------------
+  do
+    local questmod = require("game.ui.quest")
+    local statsmod = require("game.ui.stats")
+    local frisch = baue_welt()
+    local view = sicht(frisch, 4)
+    view.try_nr, view.clock = 4711, 0
+    local board = {
+      header = "Wipe - Try 4711",
+      big = "Der Raid lag 30 s lang.\nEr hatte noch 87 %.",
+      hogger = { { "Gesamtschaden", "1.204" }, { "Spieler getoetet", "1" } },
+      raid = { { "Meister Schaden", "Leeroy (312)" } },
+      titles = { "Leeroy, der Unvorsichtige" },
+    }
+    for _, fall in ipairs({
+      { "Tafel allein", false },
+      { "Tafel ueber offenem Questfenster", true },
+    }) do
+      local s = statsmod.new(board)
+      local q = nil
+      if fall[2] then
+        q = questmod.new(view)
+        q.state, q.mode = "open", "quest"
+      end
+      versuch("Ueberlagerung: " .. fall[1], function()
+        -- exakt die Reihenfolge aus love.draw: erst Quest, dann Tafel
+        if q then q:draw(view, w, h, function(x, y) return x, y end) end
+        s:draw()
+      end)
+    end
+    -- Die Tafel im hold-Zustand (Schluss-Tafel des Fluchbruchs) ebenfalls
+    versuch("Ueberlagerung: Schluss-Tafel (hold)", function()
+      statsmod.new(board, { hold = true }):draw()
+    end)
+  end
+
+  -- ---------------------------------------------------------------------
   -- Das Beutefenster des Fluchbruchs (Runde 18). Es wurde bis hierher von
   -- KEINER Teststufe je gezeichnet — Thunderfury-Gag, Wams-Wurf und jetzt
   -- das Huehnchen liefen ungeprueft. Alle drei Zustaende einmal durch.
