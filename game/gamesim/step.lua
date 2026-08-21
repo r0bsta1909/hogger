@@ -1734,6 +1734,19 @@ local function end_try(state, ev, won, reason)
       state.players[t.pid].titel = t.title -- persistiert via session.json
     end
     if won then
+      -- Die Questbelohnung (Runde 18). Das Questfenster verspricht 1 Kupfer,
+      -- 10 Erfahrungspunkte und eine ungenannte legendaere Belohnung — wer
+      -- etwas verspricht und nicht liefert, hat einen Fehler, keinen Gag.
+      -- Rein deterministisch: kein RNG-Zug, der Zufallsstrom bleibt, wie er
+      -- ist (der Wams-Wurf darunter ist der einzige erlaubte, GDD 13.2).
+      for _, p in ipairs(state.players) do
+        if not p.is_leeroy then
+          p.kupfer = p.kupfer + model.QUEST_REWARD_KUPFER
+          p.xp = p.xp + model.QUEST_REWARD_XP
+          events.push(ev, state.tick, "xp_gain", p.id, nil,
+            model.QUEST_REWARD_XP, nil)
+        end
+      end
       -- Zerfledderter Wams: 2 Kupfer, Zufalls-Roll — folgenloser RNG,
       -- ausdruecklich erlaubt (GDD 11/13.2); Leeroy wuerfelt nicht (Fluch)
       local cands = {}
