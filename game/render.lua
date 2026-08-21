@@ -1544,6 +1544,18 @@ function R:draw(view, ui)
     local wx, wy = to_screen(wave.x, wave.y)
     if wave.r > 0 then
       local c = R.ENRAGE_COL
+      -- Die Front allein reicht NICHT: bei 2200 px/s durchquert sie den
+      -- Sichtkreis in 0,14 s — acht Bilder, die niemand liest. Was den
+      -- Effekt traegt, ist die Spur DAHINTER: das Gebiet, das die Welle
+      -- schon hinter sich hat, liegt rot unter der Karte und bleibt es
+      -- bis zum Try-Ende. Auf dem Kartenkreis gestencilt (siehe oben),
+      -- also nie mehr als der sichtbare Ausschnitt.
+      -- ... und sie wird dichter, je naeher das Try-Ende rueckt: das letzte
+      -- Bild vor der Tafel ist eine vollstaendig rote Karte.
+      local k = (wave.t - ENRAGE.wave) / (ENRAGE.end_t - ENRAGE.wave)
+      love.graphics.setColor(c[1] * 0.75, c[2] * 0.4, c[3] * 0.3,
+                             0.30 + 0.24 * math.min(1, math.max(0, k)))
+      love.graphics.circle("fill", wx, wy, wave.r * scale)
       for i = 0, 2 do
         local rr = (wave.r - i * 55) * scale
         if rr > 0 then
