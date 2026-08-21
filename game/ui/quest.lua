@@ -6,6 +6,8 @@
 -- docs/referenzen/quest text beispiel.jpg).
 -- Statemachine ist love-frei (Unit-Test Stufe 1); love nur im draw-Teil.
 
+local model = require("sim.model")
+
 local Q = {}
 Q.__index = Q
 
@@ -14,27 +16,57 @@ Q.__index = Q
 -- Es spricht das ECHO, nicht der Raid-Leeroy: es sieht seinem eigenen
 -- Koerper seit tausend Trys beim Sterben zu. %d = Try-Nummer.
 -- ---------------------------------------------------------------------------
-local TITLE = "Der Fluch des Leeroy Jenkins"
+-- Wortlaut: Rob, 2026-08-21. Der Titel ist der Aufbau einer Pointe, die
+-- erst beim Fluchbruch faellt — er verraet die Belohnung nicht.
+-- Beachte: in der Titelleiste steht weiter "Leeroy Leeroy Jenkins Jenkins"
+-- (GIVER aus names.lua), waehrend er sich hier als "Leeroy Jenkins"
+-- vorstellt. Die Diskrepanz sieht der Spieler selbst; erklaert wird sie
+-- nie, und beim Fluchbruch heilt sie sichtbar (GDD 10.1/11).
+local TITLE = "Wenigstens haben wir..."
 local GIVER = require("game.data.names").ECHO
 local BODY = {
-  "Da bist du ja. Nein, steh nicht auf. Du liegst nicht, du bist nur tot. "
-    .. "Das legt sich.",
-  "Ich bin Leeroy Jenkins. Genauer: das, was von ihm uebrig ist, waehrend er "
-    .. "da vorne schon wieder losrennt. Siehst du ihn? Der Paladin, der gleich "
-    .. "in den Gnoll rennt. Das bin auch ich. Ich sehe mir dabei zu. Seit "
-    .. "Try %d. Ungefaehr. Ich habe aufgehoert zu zaehlen.",
-  "Kurzfassung: Hexenmeister, Fluch, dieser Gnoll da hinten. Hogger. Solange "
-    .. "der lebt, kommt hier keiner raus. Du uebrigens auch nicht.",
-  "Mein alter Raid? Lauter Vollpfosten. Von jetzt auf gleich weg -- "
-    .. "ausgeloggt, disconnected, wer weiss das schon.",
-  "Ich erinnere mich an Drachenwelpen, einen Charge und einen Wipe. Und dann "
-    .. "... das hier. Ist dir aufgefallen, wie FLACH hier alles ist? Frag nicht.",
+  "NA ENDLICH!! Nach all der Zeit! Verzeiht meine Aufregung, aber Ihr seid "
+    .. "die erste echte Person, die hier seit Ewigkeiten auftaucht. Mein Name "
+    .. "ist Leeroy Jenkins - ja, genau der. Aber tatsaechlich bin ich nur das "
+    .. "Echo meiner physischen Huelle...",
+  -- "der Paladin da drueben" statt "rennt da vorne": beim allerersten
+  -- Spieler des Abends ist der Raid-Leeroy noch gar nicht losgerannt, er
+  -- steht als Geist neben dem Echo am Friedhof (GDD 10.2). Die Formulierung
+  -- stimmt vorher wie nachher.
+  "Wir haben keine Zeit zu verlieren! Der Hexenmeister-Fluch hat diese "
+    .. "Realitaet in eine zweidimensionale Ebene kollabieren lassen. Mein "
+    .. "physischer Koerper - der Paladin da drueben - rennt gleich wieder "
+    .. "voellig unkontrolliert und ohne Verstand in sein Verderben. Und als "
+    .. "waere das nicht genug: Hogger langweilt sich schnell! Kriegen wir das "
+    .. "Biest nicht in {ZEIT} klein, verliert er die Geduld - und dann macht "
+    .. "er kurzen Prozess. Mit allen. Auf einmal. Ich habe es oft genug "
+    .. "gesehen.",
+  -- "stehen wir alle bei seiner Leiche" statt "eile ich zu seiner Leiche":
+  -- beim Fluchbruch werden ALLE Spieler zu Hoggers Leiche teleportiert, und
+  -- das Echo steht schon in der Mitte des Kreises. Seine einzige Bewegung
+  -- ueberhaupt ist die Verschmelzung mit seinem eigenen Koerper (GDD 11).
+  "Folgt dem Pfad, schliesst Euch den anderen Abenteurern an und bringt "
+    .. "diesen verfluchten Gnoll zur Strecke, bevor die Zeit ablaeuft! Sobald "
+    .. "er liegt, stehen wir alle bei seiner Leiche - und ich ueberreiche "
+    .. "Euch Eure legendaere Belohnung. Eilt euch!",
 }
 local GOALS = {
-  "Toetet Hogger.",
+  "Toetet Hogger, bevor ihm langweilig wird.  (0/1)",
+  -- Diese Zeile ist die EINZIGE Anweisung, die einem frischen Geist sagt,
+  -- wofuer die acht Klassenicons am Wiederbelebungsfeld da sind (GDD 5.5).
+  -- Ohne sie steht ein Neuer davor und weiss nichts.
   "Sucht euch am Ende des Wegs eine Leiche aus und belebt euch wieder.",
   "Ablehnen ist keine Option. Das ist keine Redewendung.",
 }
+-- Timed Quest wie im Original. {REST} zaehlt mit der Try-Uhr herunter und
+-- kommt aus derselben Quelle wie die Uhr am Ring — nie eine feste Zahl.
+local TIME_GOAL = "Verbleibende Zeit: {REST}"
+-- Die legendaere Belohnung bleibt im Questfenster UNGENANNT (Rob-Entscheid):
+-- die Aufloesung gehoert dem Fluchbruch, und der Questtitel vervollstaendigt
+-- sich dort von selbst.
+local REWARD_LEAD = "Ihr erhaltet:"
+local REWARDS = { "1 Kupfer", "10 Erfahrungspunkte", "???  (legendaer)" }
+local REWARD_NOTE = "Vertraut mir. Es ist legendaer."
 -- Easter Egg (Issue #64): die ganze Geschichte, wenn man das Echo als Geist
 -- noch einmal anspricht. Null Spielwirkung, keine Belohnung, nur wer sucht.
 -- VORSCHLAG — Fiktion entscheidet Rob.
@@ -71,7 +103,71 @@ local NAME_PROMPT = "Und wie sollen wir dich nennen?"
 local NAME_TAKEN = "Den gibt's schon. Streng dich an."
 local NAME_HINT = "2-12 Buchstaben"
 Q.TITLE, Q.GIVER, Q.BODY, Q.GOALS = TITLE, GIVER, BODY, GOALS
+Q.TIME_GOAL, Q.REWARDS, Q.REWARD_LEAD = TIME_GOAL, REWARDS, REWARD_LEAD
+Q.REWARD_NOTE = REWARD_NOTE
 Q.NAME_TAKEN, Q.NAME_PROMPT = NAME_TAKEN, NAME_PROMPT
+
+-- ---------------------------------------------------------------------------
+-- Platzhalter: {ZEIT} = die Frist, {REST} = was davon noch laeuft, {TRY} =
+-- die Try-Nummer. Beide Zeiten kommen aus model.p("try_time_limit") und aus
+-- der Try-Uhr — NIE als feste Zeichenkette im Text. Wer im F10-Panel dreht,
+-- liest im Questfenster sofort die neue Zahl (dieselbe Zusage wie fuer die
+-- Uhr am Ring, GDD 4.2).
+-- ---------------------------------------------------------------------------
+function Q.fill(text, view)
+  local limit = model.p("try_time_limit")
+  local rest = limit - ((view and view.clock) or 0)
+  return (text:gsub("{ZEIT}", model.mmss(limit))
+              :gsub("{REST}", model.mmss(rest))
+              :gsub("{TRY}", tostring((view and view.try_nr) or 0)))
+end
+
+-- ---------------------------------------------------------------------------
+-- Der Inhalt als Liste von Bloecken. EINE Wahrheit fuer das Zeichnen UND
+-- fuer die Hoehenpruefung: bis Runde 18 lief die Hoehe nur implizit durch
+-- draw(), und das Fenster hat weder setScissor noch Hoehenpruefung noch
+-- Scrolling — ein zu langer Text lief ungebremst ueber das Namensfeld aus
+-- dem Pergament heraus, ohne dass irgendein Test es gemerkt haette.
+-- kind: "h1" Titel · "h2" Abschnitt · "para" Fliesstext · "item" Zeile ·
+--       "note" Kleingedrucktes
+-- ---------------------------------------------------------------------------
+function Q.blocks(view)
+  local b = { { kind = "h1", text = TITLE } }
+  for _, para in ipairs(BODY) do
+    b[#b + 1] = { kind = "para", text = Q.fill(para, view) }
+  end
+  b[#b + 1] = { kind = "h2", text = "Questziele" }
+  for _, g in ipairs(GOALS) do
+    b[#b + 1] = { kind = "item", text = "- " .. g }
+  end
+  b[#b + 1] = { kind = "item", text = Q.fill(TIME_GOAL, view) }
+  b[#b + 1] = { kind = "h2", text = "Belohnungen" }
+  b[#b + 1] = { kind = "item", text = REWARD_LEAD }
+  for _, r in ipairs(REWARDS) do
+    b[#b + 1] = { kind = "item", text = "  " .. r }
+  end
+  b[#b + 1] = { kind = "note", text = REWARD_NOTE }
+  return b
+end
+
+-- Laeuft die Bloecke ab und ruft emit(blk, y) fuer jeden; Rueckgabe ist die
+-- y-Position NACH dem letzten Block. draw() zeichnet in emit, der Test
+-- zaehlt nur mit — so kann die geprueffte Hoehe nicht von der gezeichneten
+-- abweichen. wrap(text, breite) -> Zeilenzahl, fh = Zeilenhoehe.
+function Q.walk(blocks, y, tw, wrap, fh, emit)
+  for _, blk in ipairs(blocks) do
+    if blk.kind == "h2" then y = y + 4 end
+    if emit then emit(blk, y) end
+    if blk.kind == "h1" then
+      y = y + 34
+    elseif blk.kind == "h2" then
+      y = y + 24
+    else
+      y = y + wrap(blk.text, tw) * fh + (blk.kind == "para" and 8 or 4)
+    end
+  end
+  return y
+end
 
 -- Anflug des Echos (Issues #61/#73; Runde 12 #138: KEINE Charge mehr —
 -- Leeroy ist Paladin, und ein Paladin chargt nicht): das Echo gleitet ohne
@@ -253,9 +349,15 @@ local function button(x, y, w, h, label, enabled, hover)
 end
 
 -- Rueckgabe: Rechtecke fuer die Klickpruefung
+-- Runde 18: 560 -> 660. Der neue Questtext samt Zielen und Belohnungsblock
+-- braucht rund 90 px mehr, als das alte Fenster hergab. Gedeckelt an den
+-- oberen Bildschirmrand, damit das Fenster bei kleinen Aufloesungen nicht
+-- nach oben aus dem Bild waechst (Q.PANEL_H, Q.content_top/bottom pruefen
+-- den Rest maschinell, siehe tests/unit_quest.lua).
+Q.PANEL_W, Q.PANEL_H = 620, 660
 function Q:layout(w, h)
-  local pw, ph = 620, 560
-  local px, py = (w - pw) / 2, (h - ph) / 2
+  local pw, ph = Q.PANEL_W, Q.PANEL_H
+  local px, py = (w - pw) / 2, math.max(8, (h - ph) / 2)
   return {
     x = px, y = py, w = pw, h = ph,
     close = { px + pw - 34, py + 8, 26, 26 },
@@ -264,6 +366,14 @@ function Q:layout(w, h)
     name = { px + 24, py + ph - 92, 260, 26 },
   }
 end
+
+-- Wo der Inhalt beginnt und wo er spaetestens enden muss. Die Untergrenze
+-- ist die Oberkante der Namensfrage (name.y - 20) — laeuft der Text
+-- darueber hinaus, steht er im Namensfeld.
+Q.CONTENT_TOP = 60
+function Q.content_top(L) return L.y + Q.CONTENT_TOP end
+function Q.content_bottom(L) return L.name[2] - 22 end
+function Q.text_width(L) return L.w - 52 end
 
 local function inside(r, mx, my)
   return mx >= r[1] and mx <= r[1] + r[3] and my >= r[2] and my <= r[2] + r[4]
@@ -365,7 +475,14 @@ function Q:draw(view, w, h, to_screen)
     love.graphics.print("X", L.close[1] + 9, L.close[2] + 5)
   end
 
-  local tx, ty, tw = px + 26, py + 60, pw - 52
+  local tx, ty, tw = px + 26, Q.content_top(L), Q.text_width(L)
+  -- Zeilenzahl aus der echten Schrift; dieselbe Funktion bekommt der
+  -- Ueberlauf-Test in den Fingern (Stufe 4b), damit gemessen wird, was
+  -- wirklich gezeichnet wird
+  local function wrap_lines(text, width)
+    local _, l = font:getWrap(text, width)
+    return #l
+  end
 
   if self.mode == "lore" then
     -- Easter Egg: Seite fuer Seite, sonst nichts (Issue #64)
@@ -392,29 +509,24 @@ function Q:draw(view, w, h, to_screen)
     return
   end
 
-  -- Questtitel und Fliesstext
-  love.graphics.setColor(PARCH_DARK[1], PARCH_DARK[2], PARCH_DARK[3], 1)
-  love.graphics.print(TITLE, tx, ty, 0, 1.5, 1.5)
-  ty = ty + 34
-  love.graphics.setColor(0.16, 0.12, 0.07, 1)
-  for _, para in ipairs(BODY) do
-    local text = para:find("%%d") and string.format(para, view and view.try_nr or 0)
-                 or para
-    local _, lines = font:getWrap(text, tw)
-    love.graphics.printf(text, tx, ty, tw)
-    ty = ty + #lines * font:getHeight() + 8
-  end
-
-  -- Questziele
-  ty = ty + 4
-  love.graphics.setColor(PARCH_DARK[1], PARCH_DARK[2], PARCH_DARK[3], 1)
-  love.graphics.print("Questziele", tx, ty, 0, 1.2, 1.2)
-  ty = ty + 24
-  love.graphics.setColor(0.16, 0.12, 0.07, 1)
-  for _, g in ipairs(GOALS) do
-    love.graphics.printf("- " .. g, tx, ty, tw)
-    ty = ty + font:getHeight() + 4
-  end
+  -- Titel, Fliesstext, Ziele, Belohnungen — gezeichnet aus DERSELBEN
+  -- Blockliste, die der Ueberlauf-Test misst (Q.walk, Runde 18)
+  Q.walk(Q.blocks(view), ty, tw, wrap_lines, font:getHeight(),
+    function(blk, y)
+      if blk.kind == "h1" then
+        love.graphics.setColor(PARCH_DARK[1], PARCH_DARK[2], PARCH_DARK[3], 1)
+        love.graphics.print(blk.text, tx, y, 0, 1.5, 1.5)
+      elseif blk.kind == "h2" then
+        love.graphics.setColor(PARCH_DARK[1], PARCH_DARK[2], PARCH_DARK[3], 1)
+        love.graphics.print(blk.text, tx, y, 0, 1.2, 1.2)
+      elseif blk.kind == "note" then
+        love.graphics.setColor(0.42, 0.35, 0.24, 1)
+        love.graphics.printf(blk.text, tx, y, tw)
+      else
+        love.graphics.setColor(0.16, 0.12, 0.07, 1)
+        love.graphics.printf(blk.text, tx, y, tw)
+      end
+    end)
 
   if self.mode == "log" then
     -- Questlog: nichts zu entscheiden, nur nachlesen (Taste L)

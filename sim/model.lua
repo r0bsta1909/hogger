@@ -492,6 +492,14 @@ function M.cleave_targets(n)
   return math.ceil(n / M.p("hogger_cleave_divisor"))
 end
 
+-- Sekunden als m:ss. Steht hier, weil sie inzwischen an drei Stellen
+-- gebraucht wird (Uhr am Ring, Questziel, Questtext) und eine zweite
+-- Formatierung frueher oder spaeter anders rundet als die erste.
+function M.mmss(sec)
+  sec = math.max(0, sec or 0)
+  return string.format("%d:%02d", math.floor(sec / 60), math.floor(sec % 60))
+end
+
 function M.respawn_timer(n)
   return clamp(M.p("respawn_base") + M.p("respawn_factor") * n,
                M.p("respawn_min"), M.p("respawn_max"))
