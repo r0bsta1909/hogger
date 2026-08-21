@@ -133,6 +133,10 @@ function M.run(ok)
   local szenarien = {
     { name = "N=5, frischer Try",        n = 5,  leichen = 0,   beute = 0,  imps = 1 },
     { name = "N=40, frischer Try",       n = 40, leichen = 0,   beute = 0,  imps = 5 },
+    -- Der Enrage (Runde 18) legt in anderthalb Sekunden den ganzen Raid um.
+    -- Das ist der dickste Snapshot, den ein FRISCHER Try erreichen kann —
+    -- und die Frage, die beim Bauen der Sequenz offen war.
+    { name = "N=40, Enrage (alle liegen)", n = 40, leichen = 40, beute = 6, imps = 5 },
     { name = "N=40, Leichen am Deckel",  n = 40, leichen = 255, beute = 12, imps = 5 },
     { name = "N=40, alles am Anschlag",  n = 40, leichen = 400, beute = 60, imps = 20 },
   }
