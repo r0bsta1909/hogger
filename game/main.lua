@@ -541,6 +541,23 @@ function love.update(dt)
   process_cosmetics(view)
   app.view = view
 
+  -- Wenn die Enrage-Welle EINEN SELBST erreicht, soll man es spueren
+  -- (Runde 18). Der Ring ist in 0,14 s durch den Sichtkreis — ohne diesen
+  -- Schlag waere der eigene Tod nur eine Zahl, die verschwindet. Genau
+  -- einmal je Sequenz, abgeleitet aus derselben Geometrie wie die Wirkung.
+  local wv = app.render:enrage_wave(view)
+  if wv then
+    if not app.enrage_hit and view.me_x then
+      if world.dist(view.me_x, view.me_y, wv.x, wv.y) <= wv.r then
+        app.enrage_hit = true
+        app.render:add_hurt_flash(1.0)
+        app.render:add_shake(22)
+      end
+    end
+  else
+    app.enrage_hit = nil
+  end
+
   -- Endet ein Cast, faellt die lokale Cooldown-Anzeige des Slots (Runde 10,
   -- #125). Der lokale Timer ist nur eine Schaetzung der GCD; nach einem
   -- Abbruch hat der Host sie genullt und der naechste Versuch ist sofort
