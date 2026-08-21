@@ -37,13 +37,18 @@ function R.ready(rest)
   return (rest or 0) <= 0
 end
 
--- me: eigener Spieler aus der Sicht; sichtbar nur zwischen Tod und Freigabe
-function R.visible(me)
-  return me ~= nil and not me.alive and not me.ghost
+-- me: eigener Spieler aus der Sicht; sichtbar nur zwischen Tod und Freigabe.
+-- verdeckt: waehrend einer laufenden Sequenz haelt das Panel den Mund
+-- (Runde 18). Der Enrage toetet mitten in seiner eigenen Inszenierung —
+-- ohne diese Bremse springt der Freigabe-Knopf ueber die Schockwelle,
+-- bevor sie den Kartenrand erreicht hat. Der Timer laeuft davon unberuehrt
+-- weiter, es geht nur um die zwei Sekunden Bild.
+function R.visible(me, verdeckt)
+  return me ~= nil and not me.alive and not me.ghost and not verdeckt
 end
 
-function R.draw(me, w, h, hover)
-  if not R.visible(me) then return end
+function R.draw(me, w, h, hover, verdeckt)
+  if not R.visible(me, verdeckt) then return end
   local L = R.layout(w, h)
   local p, b = L.panel, L.button
   local rest = me.dead_rest or 0

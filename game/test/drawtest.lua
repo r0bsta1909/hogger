@@ -219,6 +219,56 @@ function T.run()
     render.banner_t, render.bubble_t = 0, 0
   end
 
+  -- Enrage (Runde 18): rote Blase am Hogger-Anker und die Schockwelle in
+  -- ihren drei Phasen. Die Welle haengt an view.clock, nicht an einem
+  -- Client-Countdown — hier wird die Uhr deshalb von Hand gestellt.
+  do
+    local limit = model.p("try_time_limit")
+    local ENRAGE = require("game.gamesim.step").ENRAGE
+    local phasen = {
+      { "Aufladen (vor der Welle)", ENRAGE.wave * 0.5 },
+      { "Welle im Sichtkreis",      ENRAGE.wave + 0.15 },
+      { "Welle weit draussen",      ENRAGE.still - 0.05 },
+      { "Stille danach",            ENRAGE.end_t - 0.1 },
+    }
+    for _, ph in ipairs(phasen) do
+      local frisch = baue_welt()
+      local view = sicht(frisch, 4)
+      view.clock = limit + ph[2]
+      render:bubble("Gnarr, Hogger langweilig, sterbt!", 3.4, "hogger",
+        render.ENRAGE_COL)
+      versuch("Enrage: " .. ph[1], function()
+        render:draw(view, { facing_angle = 0, cooldowns = { 0, 0, 0, 0 } })
+      end)
+    end
+    -- ... und in jeder Zoomstufe: der Radius waechst in Weltmass, ein
+    -- Ring in Bildschirm-px saehe hier ueberall gleich aus
+    for zoom = 1, 3 do
+      local frisch = baue_welt()
+      local view = sicht(frisch, 4)
+      view.clock = limit + ENRAGE.wave + 0.4
+      render.zoom = zoom
+      versuch("Enrage-Welle bei Zoom " .. zoom, function()
+        render:draw(view, { facing_angle = 0, cooldowns = { 0, 0, 0, 0 } })
+      end)
+    end
+    render.zoom = 1
+    -- Die ganze Karte tot: das Bild unmittelbar vor der Tafel
+    do
+      local frisch = baue_welt()
+      for _, p in ipairs(frisch.players) do
+        p.alive, p.hp, p.ghost = false, 0, false
+        frisch.corpses[#frisch.corpses + 1] = { x = p.x, y = p.y, owner = p.id }
+      end
+      local view = sicht(frisch, 4)
+      view.clock = limit + ENRAGE.still
+      versuch("Enrage: alles liegt", function()
+        render:draw(view, { facing_angle = 0, cooldowns = { 0, 0, 0, 0 } })
+      end)
+    end
+    render.bubble_t = 0
+  end
+
   -- Zoomstufen und Fenstergroessen
   for zoom = 1, 3 do
     local frisch = baue_welt()

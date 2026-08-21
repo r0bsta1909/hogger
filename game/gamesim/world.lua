@@ -55,9 +55,10 @@ function M.new(seed)
     time = 0,           -- monotone Spielzeit (Buffs/Casts; laeuft ueber Trys weiter)
     clock = 0,          -- Try-Uhr in Sekunden (zaehlt hoch, GDD 4.2)
     try_nr = 0,
-    phase = "try",      -- "try" | "won"
+    phase = "try",      -- "try" | "enrage" | "won"
     won_t = 0,
     won_stage = 0,      -- Endsequenz-Beat fuer den Client (GDD 11, #131)
+    enrage_t = 0,       -- Sekunden seit Ablauf der Frist (Runde 18, GDD 6)
     merge_from = nil,   -- Startpunkt von Leeroys Koerper fuer die Verschmelzung
     n_scale = 0,        -- N beim Try-Start (GDD 6)
     players = {},       -- Array; Index == Spieler-ID (1..40)
@@ -270,7 +271,11 @@ function M.begin_try(state, evlist)
   state.try_nr = state.try_nr + 1
   state.clock = 0
   state.phase = "try"
+  state.enrage_t = 0
   state.n_scale = M.count_n(state)
+  -- Frische Spielerleichen sind mit dem Try vorbei (Rob-Entscheid Runde 18):
+  -- auf der Karte bleiben nur die Deko-Schaedel vergangener Raids, und die
+  -- waren noch nie fressbar (GDD 2 — sie sind reine Szenerie im Renderer).
   state.corpses = {}
   -- Statistik-Tafel (GDD 11): Zaehler je Try, gefuellt in step.lua
   state.stats = {

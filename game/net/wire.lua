@@ -32,6 +32,9 @@ W.EV = {
   -- nur im Log. Niemand sah je, dass Wurzeln sassen, dass sich jemand
   -- totstellte oder dass ein Schild lag (#167, #168).
   root = 20, feign = 21, shield = 22,
+  -- Runde 18: der Enrage am Ende der Frist. Ohne Eintrag hier saehe ihn
+  -- kein Client — genau der Fehler, den der Kommentar darueber festhaelt.
+  enrage = 23,
 }
 W.EV_NAMES = {}
 for name, id in pairs(W.EV) do W.EV_NAMES[id] = name end

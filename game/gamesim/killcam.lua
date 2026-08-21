@@ -11,6 +11,7 @@ local K = {}
 K.CAUSE = {
   autohit = 1, charge = 2, slice = 3, dot = 4,
   boar = 5, wolf = 6, kobold = 7, murloc = 8, add = 9,
+  enrage = 10, -- Runde 18: die Schockwelle am Ende der Frist (GDD 6/9.1)
 }
 
 -- Zeilengruppen je Ursache
@@ -55,6 +56,12 @@ local GROUPS = {
   },
   [9] = { -- Gnoll-Welpe
     "Ein Welpe. Niemand hat es gesehen. Ausser allen.",
+  },
+  [10] = { -- Enrage: Hogger wurde langweilig (Runde 18)
+    "Hogger wurde langweilig. Du warst der Beweis.",
+    "Er hatte Besseres vor. Zum Beispiel das.",
+    "Todesursache: Ungeduld. Nicht deine.",
+    "Ihr wart zu langsam. Alle. Gleichzeitig.",
   },
 }
 

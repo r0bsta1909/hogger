@@ -5,8 +5,13 @@ local killcam = require("game.gamesim.killcam")
 
 T.ok(killcam.count() >= 28, "Pool umfasst ~30 Zeilen (" .. killcam.count() .. ")")
 
--- jede Todesursache liefert immer eine Zeile (alle Zaehlerstaende)
-for cause = 1, 9 do
+-- jede Todesursache liefert immer eine Zeile (alle Zaehlerstaende).
+-- Die Obergrenze haengt an der Tabelle, nicht an einer getippten Zahl —
+-- eine neue Ursache ohne Zeilengruppe soll hier auffallen.
+local hoechste = 0
+for _, v in pairs(killcam.CAUSE) do hoechste = math.max(hoechste, v) end
+T.eq(hoechste, killcam.CAUSE.enrage, "Enrage ist die juengste Todesursache")
+for cause = 1, hoechste do
   for deaths = 0, 20 do
     local line = killcam.pick(cause, false, deaths, false)
     T.ok(type(line) == "string" and #line > 0,
@@ -14,6 +19,14 @@ for cause = 1, 9 do
   end
 end
 T.ok(#killcam.pick(nil, nil, 0, nil) > 0, "unbekannte Ursache faellt auf Allgemein zurueck")
+
+-- Der Enrage braucht eine EIGENE Gruppe: ohne sie faellt er still auf die
+-- Allgemein-Zeilen zurueck ("Todesursache: Optimismus.") und der Spieler
+-- erfaehrt nie, dass ihn die Frist erwischt hat.
+T.ok(killcam.pick(killcam.CAUSE.enrage, false, 0, false):find("langweilig") ~= nil,
+  "Enrage-Tod bekommt eine Enrage-Zeile")
+T.ok(killcam.pick(killcam.CAUSE.enrage, false, 0, true):find("Priester") == nil,
+  "Enrage ignoriert den Heilungs-Kontext (geheilt oder nicht, die Welle traf alle)")
 
 -- Kontext: Krit schlaegt alles, Heilung nur bei Hogger-Ursachen
 T.ok(killcam.pick(2, true, 0, false):find("5%-Prozent")

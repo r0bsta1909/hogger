@@ -36,7 +36,10 @@ local HEADER = {
   win        = "SIEG",
   wipe       = "Wipe",
   no_contact = "Abbruch: kein Kontakt",
-  timeout    = "Zeit abgelaufen",
+  -- Runde 18: die Frist laeuft nicht mehr still ab, Hogger wird langweilig
+  -- und raeumt auf. Der Grund im Log bleibt technisch "timeout" — die Uhr
+  -- ist die Ursache, der Enrage ist, was man davon sieht.
+  timeout    = "Enrage",
 }
 
 function B.build(state, won, reason)
@@ -78,7 +81,7 @@ function B.build(state, won, reason)
       big = string.format("Der Raid lag %d s lang.\n%s",
         math.floor(model.p("hogger_no_contact_reset") + 0.5), rest)
     elseif cause == "timeout" then
-      big = "Die Zeit war um.\n" .. rest
+      big = "Hogger wurde langweilig.\n" .. rest
     else
       big = rest
     end
