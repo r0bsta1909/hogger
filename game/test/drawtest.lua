@@ -410,6 +410,44 @@ function T.run()
     end)
   end
 
+  -- ---------------------------------------------------------------------
+  -- Das Beutefenster des Fluchbruchs (Runde 18). Es wurde bis hierher von
+  -- KEINER Teststufe je gezeichnet — Thunderfury-Gag, Wams-Wurf und jetzt
+  -- das Huehnchen liefen ungeprueft. Alle drei Zustaende einmal durch.
+  -- ---------------------------------------------------------------------
+  do
+    local victorymod = require("game.ui.victory")
+    local frisch = baue_welt()
+    frisch.hogger.hp = 0
+    local view = sicht(frisch, 4)
+    local boards = {
+      { "ohne Wurf", { header = "SIEG - Try 4711", hogger = {}, raid = {},
+                       titles = {} } },
+      { "mit Wurf",  { header = "SIEG - Try 4711", hogger = {}, raid = {},
+                       titles = {}, wams = "Testspieler gewinnt den Wurf (94)" } },
+    }
+    for _, b in ipairs(boards) do
+      for _, phase in ipairs({ "shatter", "loot" }) do
+        local v = victorymod.new(b[2])
+        v.state, v.t = phase, 0.4
+        versuch("Beutefenster " .. b[1] .. " / " .. phase, function()
+          v:draw(view, function(x, y) return x, y end, w, h)
+        end)
+      end
+    end
+    -- Die Zeilen duerfen nicht aus dem Fenster laufen: gezeichnet wird mit
+    -- print(), also OHNE Umbruch — ein zu langer Name liefe stumm ins Bild
+    versuch("Beutefenster: Zeilen passen in die Breite", function()
+      local font = love.graphics.getFont()
+      for _, txt in ipairs({ victorymod.HUHN, victorymod.HUHN_SUB,
+                             "Questbelohnung: Wenigstens haben wir..." }) do
+        if font:getWidth(txt) > 480 - 32 then
+          error("Zeile zu breit fuers Beutefenster: " .. txt)
+        end
+      end
+    end)
+  end
+
   local bericht = string.format("%d Zeichenlaeufe, %d Fehler", geprueft, #fehler)
   print(bericht)
   -- Auch als Datei: unter Windows kommt stdout aus einem LOEVE-Fenster nicht

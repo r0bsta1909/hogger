@@ -15,6 +15,15 @@ M.SIM_TICK_DT = 0.1  -- Tickweite der Headless-Balancing-Sim (GDD 17.2)
 -- auch die Anzeige haengt (#170).
 M.CP_MAX = 5
 
+-- Die Questbelohnung (Runde 18, GDD 5): kein Stellhebel, sondern Inhalt.
+-- Steht hier, weil das Questfenster sie VERSPRICHT und der Fluchbruch sie
+-- LIEFERT — zwei getippte Zahlen liefen frueher oder spaeter auseinander,
+-- und ein Questfenster, das eine Belohnung nennt und nicht liefert, ist
+-- ein Fehler, kein Gag. Was das dritte, legendaere Stueck ist, sagt das
+-- Questfenster bewusst nicht (game/ui/victory.lua loest es auf).
+M.QUEST_REWARD_KUPFER = 1
+M.QUEST_REWARD_XP = 10
+
 -- Umrechnung Pixel -> Meter fuer die Anzeige (Runde 14, #171). Die Welt
 -- rechnet in Pixeln, der Spieler denkt in Metern wie im deutschen Original:
 -- cast_range 200 px entspricht den 30 m des Vanilla-Zauberbereichs, also

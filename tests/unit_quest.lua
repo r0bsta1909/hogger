@@ -210,6 +210,59 @@ do
   T.ok(L.y >= 8, "Questfenster waechst nicht oben aus dem Bild")
 end
 
+-- ---------------------------------------------------------------------------
+-- Die Belohnung: was das Questfenster verspricht, muss beim Fluchbruch auch
+-- ankommen. Ein Questfenster, das eine Belohnung nennt und nicht liefert,
+-- ist ein Fehler und kein Gag (Runde 18).
+-- ---------------------------------------------------------------------------
+do
+  local model = require("sim.model")
+  local step = require("game.gamesim.step")
+  local world = require("game.gamesim.world")
+  local rewards = table.concat(quest.REWARDS, " | ")
+
+  -- Die genannten Zahlen kommen aus model.lua, nicht aus dem Text
+  T.ok(rewards:find(tostring(model.QUEST_REWARD_KUPFER) .. " Kupfer") ~= nil,
+    "Questfenster nennt die Kupfer-Belohnung aus model.lua")
+  T.ok(rewards:find(tostring(model.QUEST_REWARD_XP) .. " Erfahrungspunkte") ~= nil,
+    "Questfenster nennt die XP-Belohnung aus model.lua")
+
+  -- Und das dritte Stueck bleibt UNGENANNT (Rob-Entscheid): die Aufloesung
+  -- gehoert dem Fluchbruch, sonst ist der Questtitel ohne Pointe
+  T.ok(rewards:find("???") ~= nil, "die legendaere Belohnung steht als ??? drin")
+  T.ok(rewards:lower():find("huehnchen") == nil,
+    "das Huehnchen wird im Questfenster NICHT verraten")
+  T.ok(quest.TITLE:find("Wenigstens") ~= nil,
+    "der Questtitel baut die Pointe auf")
+
+  -- Der Fluchbruch liefert wirklich
+  local st = world.new(77)
+  for i = 1, 3 do world.add_player(st, "belohnt" .. i, { quest_done = true }) end
+  world.begin_try(st, {})
+  local vorher = {}
+  for _, p in ipairs(st.players) do
+    p.alive, p.hp = true, p.max_hp
+    vorher[p.id] = { kupfer = p.kupfer, xp = p.xp }
+  end
+  step.admin_kill_hogger(st)
+  step.step(st, {})
+  -- Achtung: EIN Spieler gewinnt zusaetzlich den Wams-Wurf (2 Kupfer,
+  -- GDD 11) — die Questbelohnung bekommen trotzdem alle.
+  local n_belohnt, extra = 0, 0
+  for _, p in ipairs(st.players) do
+    if not p.is_leeroy then
+      n_belohnt = n_belohnt + 1
+      extra = extra + (p.kupfer - vorher[p.id].kupfer)
+      T.ok(p.kupfer >= vorher[p.id].kupfer + model.QUEST_REWARD_KUPFER,
+        "Fluchbruch: " .. p.name .. " bekommt sein Kupfer")
+      T.eq(p.xp, vorher[p.id].xp + model.QUEST_REWARD_XP,
+        "Fluchbruch: " .. p.name .. " bekommt seine Erfahrung")
+    end
+  end
+  T.eq(extra, n_belohnt * model.QUEST_REWARD_KUPFER + 2,
+    "Fluchbruch: Questbelohnung fuer alle, Wams-Wurf genau einmal obendrauf")
+end
+
 -- Taste L: wegblenden und zurueckholen gilt nur noch fuers Questlog
 -- (Issue #62, eingeschraenkt durch #83 — siehe Log-Block unten)
 

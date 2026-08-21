@@ -65,7 +65,13 @@ local TIME_GOAL = "Verbleibende Zeit: {REST}"
 -- die Aufloesung gehoert dem Fluchbruch, und der Questtitel vervollstaendigt
 -- sich dort von selbst.
 local REWARD_LEAD = "Ihr erhaltet:"
-local REWARDS = { "1 Kupfer", "10 Erfahrungspunkte", "???  (legendaer)" }
+local REWARDS = {
+  -- Zahlen aus model.lua, nicht getippt: was hier steht, wird beim
+  -- Fluchbruch wirklich gutgeschrieben (step.lua, end_try)
+  model.QUEST_REWARD_KUPFER .. " Kupfer",
+  model.QUEST_REWARD_XP .. " Erfahrungspunkte",
+  "???  (legendaer)",
+}
 local REWARD_NOTE = "Vertraut mir. Es ist legendaer."
 -- Easter Egg (Issue #64): die ganze Geschichte, wenn man das Echo als Geist
 -- noch einmal anspricht. Null Spielwirkung, keine Belohnung, nur wer sucht.

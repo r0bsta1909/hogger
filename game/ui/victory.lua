@@ -11,13 +11,20 @@ local V = {}
 V.__index = V
 
 local SHATTER_T = 2.2
-local LOOT_T = 5.0 -- zeitgesteuert: ein Klickzwang liesse die Runde driften
+local LOOT_T = 6.5 -- zeitgesteuert: ein Klickzwang liesse die Runde driften
+                   -- (Runde 18: 5,0 -> 6,5 s, das Fenster hat eine Zeile mehr)
 
 -- Loot-Texte (GDD-Wortlaut bzw. Vorschlag)
 local THUNDERFURY =
   "Thunderfury, Gesegnete Klinge des Windsuchers"
 local THUNDERFURY_SUB = "Dropchance: 0,0000 %. Nicht gedroppt."
 local WAMS = "Zerfledderter Wams  (2 Kupfer)"
+-- Die Aufloesung (Runde 18): im Questfenster stand nur "???  (legendaer)".
+-- Hier faellt die Pointe, und der Questtitel "Wenigstens haben wir..."
+-- vervollstaendigt sich von selbst. Wortlaut: Rob, 2026-08-21.
+local HUHN = "Kaltes, angebissenes Huehnchen"
+local HUHN_SUB = "\"Schmeckt nach Reue und Wipe\""
+V.HUHN, V.HUHN_SUB = HUHN, HUHN_SUB
 
 function V.new(board)
   local self = setmetatable({}, V)
@@ -60,8 +67,9 @@ end
 
 -- ---------------------------------------------------------------------------
 local function draw_loot(self, w, h)
-  local pw, ph = 480, 170
-  local px, py = (w - pw) / 2, h / 2 - 120
+  -- Runde 18: 170 -> 236 px, das Huehnchen braucht seine eigenen Zeilen
+  local pw, ph = 480, 236
+  local px, py = (w - pw) / 2, h / 2 - 150
   love.graphics.setColor(0.07, 0.07, 0.11, 0.96)
   love.graphics.rectangle("fill", px, py, pw, ph, 5, 5)
   love.graphics.setColor(0.78, 0.63, 0.28, 1)
@@ -82,6 +90,18 @@ local function draw_loot(self, w, h)
     love.graphics.setColor(0.85, 0.75, 0.5, 1)
     love.graphics.print(self.board.wams, px + 16, py + 112)
   end
+  -- Die Questbelohnung: die legendaere Zeile, die im Questfenster nur
+  -- "???" hiess. Legendaeres Orange wie Thunderfury — der Witz ist, dass
+  -- sie es tatsaechlich ernst meint.
+  love.graphics.setColor(0.38, 0.33, 0.24, 1)
+  love.graphics.line(px + 16, py + 142, px + pw - 16, py + 142)
+  love.graphics.setColor(0.75, 0.72, 0.62, 1)
+  love.graphics.print("Questbelohnung: Wenigstens haben wir...",
+    px + 16, py + 152)
+  love.graphics.setColor(1.0, 0.5, 0.1, 1)
+  love.graphics.print(HUHN, px + 16, py + 178)
+  love.graphics.setColor(0.62, 0.60, 0.52, 1)
+  love.graphics.print(HUHN_SUB, px + 16, py + 198)
 end
 
 function V:draw(view, to_screen, w, h)
