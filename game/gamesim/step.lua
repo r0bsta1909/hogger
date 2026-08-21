@@ -39,6 +39,36 @@ end
 S.WON_EXIT = WON_EXIT -- der Client zeigt danach Systemnachricht und Tafel
 
 -- ---------------------------------------------------------------------------
+-- Der Enrage (Runde 18, GDD 6/9.1) — die zweite Zeitachse, ab dem Ablauf
+-- der Frist in Sekunden. Hogger haut nicht ab, wenn die Uhr durch ist: ihm
+-- wird langweilig. Er sagt es, eine Schockwelle geht ueber die Karte und
+-- loescht den Raid aus, dann steht er wieder am Huegel.
+--
+-- Warum in der Sim und nicht im Client: dieselbe Begruendung wie beim
+-- Fluchbruch — alle Rechner sehen dieselben Beats zur selben Zeit.
+-- Warum OHNE eigenes Snapshot-Feld: das Phasen-Byte ist mit won_stage
+-- belegt (wire.lua) und vier Stellen im Client lesen es als "Fluchbruch
+-- laeuft". state.clock zaehlt waehrend der Phase weiter, der Client leitet
+-- seine Zeitachse aus clock - try_time_limit ab. Kosten im Netz: null Byte.
+-- ---------------------------------------------------------------------------
+local ENRAGE_WAVE  = 1.6    -- bis dahin nur Bruellen und rote Sprechblase
+local ENRAGE_STILL = 3.0    -- die Welle hat die Karte hinter sich, alles liegt
+local ENRAGE_END   = 3.8    -- Try-Ende, Tafel, naechster Try
+-- 2200 Welt-px/s * 1,4 s = 3080 px. Die Karte ist 3000x2000 (map.lua), der
+-- Huegel liegt bei 420/1650 — der entfernteste Punkt ist rund 3060 px weg.
+-- Die Welle streift damit jeden Fleck der Karte, bevor ENRAGE_STILL faellt.
+local ENRAGE_SPEED = 2200
+S.ENRAGE = { wave = ENRAGE_WAVE, still = ENRAGE_STILL, end_t = ENRAGE_END,
+             speed = ENRAGE_SPEED }
+
+-- Radius der Schockwelle in Weltmass zur Enrage-Zeit t. Der Client zeichnet
+-- sie aus derselben Funktion — eine Wahrheit fuer Optik und Wirkung.
+function S.enrage_radius(t)
+  if (t or 0) < ENRAGE_WAVE then return 0 end
+  return (t - ENRAGE_WAVE) * ENRAGE_SPEED
+end
+
+-- ---------------------------------------------------------------------------
 -- Kampfhelfer
 -- ---------------------------------------------------------------------------
 local function crit_roll(state, side, kind)
@@ -49,6 +79,15 @@ local function crit_roll(state, side, kind)
 end
 
 local CAUSE = require("game.gamesim.killcam").CAUSE
+
+-- Was zaehlt auf der Tafel als "Spieler getoetet"? Alles, was Hogger selbst
+-- macht. Bis Runde 17 stand hier `cause <= 4` — die Zahl war stumm darueber,
+-- was sie meint, und der Enrage (Ursache 10) waere still durchgefallen.
+local HOGGER_CAUSES = {
+  [CAUSE.autohit] = true, [CAUSE.charge] = true, [CAUSE.slice] = true,
+  [CAUSE.dot] = true, [CAUSE.enrage] = true,
+}
+S.HOGGER_CAUSES = HOGGER_CAUSES -- der Test prueft die Menge, nicht die Zahl
 
 -- Statistik-Tafel (GDD 11): Zaehler je Try; Spieler-Eintrag lazy angelegt
 local function stat_p(state, pid)
@@ -204,7 +243,7 @@ local function kill_player(state, p, ev, was_crit, cause)
     local sp = stat_p(state, p.id)
     sp.deaths = sp.deaths + 1
     if not s.first_death then s.first_death = p.id end
-    if cause and cause <= 4 then -- Hogger-Ursachen (Autohit/Charge/Slice/DoT)
+    if cause and HOGGER_CAUSES[cause] then
       s.hogger.kills = s.hogger.kills + 1
       if was_crit then s.hogger.crit_kills = s.hogger.crit_kills + 1 end
     end
@@ -1801,6 +1840,37 @@ function S.step(state, inputs)
     return ev
   end
 
+  if state.phase == "enrage" then
+    -- Hogger wurde langweilig (GDD 6): die Welt haelt an wie beim Fluchbruch,
+    -- es laeuft nur noch die Welle. clock zaehlt weiter — sie IST die
+    -- Zeitachse, an der sich der Client aufhaengt (siehe Kopf der Datei).
+    state.clock = state.clock + DT
+    state.enrage_t = state.enrage_t + DT
+    local r = S.enrage_radius(state.enrage_t)
+    if r > 0 then
+      local h = state.hogger
+      -- ipairs ueber das Spieler-Array: deterministische Reihenfolge, und
+      -- die Wirkung haengt ohnehin nur an der Entfernung (Skill Par. 2)
+      for _, p in ipairs(state.players) do
+        if p.alive and world.dist(p.x, p.y, h.x, h.y) <= r then
+          kill_player(state, p, ev, false, CAUSE.enrage)
+        end
+      end
+    end
+    if state.enrage_t >= ENRAGE_END then
+      -- Erst toeten, DANN werten: end_try baut die Tafel, und die soll den
+      -- Enrage mitzaehlen. begin_try setzt state.stats gleich danach neu.
+      end_try(state, ev, false, S.END_REASON.timeout)
+      world.begin_try(state, ev)
+      -- Der Ansager laeuft NUR in diesem Tick: waehrend die Welle rollt,
+      -- hat das Echo nichts beizutragen, und ein Todeskommentar mitten in
+      -- der Sequenz waere Rauschen (der try_end-Zweig ist ungedrosselt und
+      -- kommt in jedem Fall durch).
+      require("game.gamesim.announcer").process(state, ev)
+    end
+    return ev
+  end
+
   state.clock = state.clock + DT
 
   -- Leeroys Eingabequelle ist Teil der Sim (GDD 10, ADR-002)
@@ -1870,8 +1940,16 @@ function S.step(state, inputs)
     end_try(state, ev, false, state.hogger.reset_cause)
     world.begin_try(state, ev)
   elseif state.clock >= model.p("try_time_limit") then
-    end_try(state, ev, false, S.END_REASON.timeout)
-    world.begin_try(state, ev)
+    -- Frist abgelaufen: nicht sofort werten, sondern erst die Sequenz
+    -- (Runde 18). Der Reset-Zweig darueber gewinnt bewusst — laufen beide
+    -- Bedingungen in derselben Sekunde auf, ist der Abbruch der ehrlichere
+    -- Grund und beendet den Try ohne Show.
+    state.phase = "enrage"
+    state.enrage_t = 0
+    state.hogger.eating = nil
+    state.hogger.charge = nil
+    events.push(ev, state.tick, "enrage", "hogger", nil,
+      math.max(0, state.hogger.hp), nil)
   end
 
   -- Leeroy kommentiert die Ereignisse dieses Ticks (GDD 10.4)

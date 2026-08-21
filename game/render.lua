@@ -35,6 +35,10 @@ local ABILITIES_ENABLED = require("game.gamesim.step").ability_enabled
 local ICON_RADIUS = require("game.gamesim.step").ICON_RADIUS
 -- Heilerklassen, abgeleitet aus den Faehigkeiten (Runde 7, eine Wahrheit)
 local ALLY_SLOT = require("game.gamesim.step").ALLY_SLOT
+-- Enrage: Zeitachse und Wellenradius kommen aus der Sim, damit Optik und
+-- Wirkung EINE Wahrheit haben (Runde 18)
+local ENRAGE = require("game.gamesim.step").ENRAGE
+local enrage_radius = require("game.gamesim.step").enrage_radius
 local UI_BG = { 0.09, 0.08, 0.07 }
 local GRASS = { 0.30, 0.44, 0.22 }
 local PATH = { 0.48, 0.40, 0.26 }
@@ -947,7 +951,16 @@ function R.banner_style(text, w, radius, won)
   return { scale = scale, wrap = wrap, dy = dy, kurz = kurz }
 end
 
-function R:announce(text, dur)
+-- delay: erst nach so vielen Sekunden einblenden. Gebraucht seit Runde 18,
+-- weil Try-Ende und Try-Start im selben Tick kommen (step.lua): ohne
+-- Verzoegerung ueberschrieb "Try 2487" die Zeile "Der Try ist vorbei."
+-- noch im selben Frame — der Spieler hat sie nie zu Gesicht bekommen.
+function R:announce(text, dur, delay)
+  if delay and delay > 0 then
+    self.banner_queue = { text = text, dur = dur or 3, t = delay }
+    return
+  end
+  self.banner_queue = nil
   self.banner_text = text
   self.banner_t = dur or 3
 end
@@ -957,11 +970,35 @@ end
 R.BUBBLE_WRAP = 260 -- Textbreite; darunter wird der laengste Satz vierzeilig
 R.BUBBLE_PAD = 10
 -- anchor: nil = Echo (Monolog der Endsequenz), "leeroy" = der rennende
--- Raid-Leeroy (DER Schrei, Runde 12 #144 — er schreit, nicht das Echo)
-function R:bubble(text, dur, anchor)
+-- Raid-Leeroy (DER Schrei, Runde 12 #144 — er schreit, nicht das Echo),
+-- "hogger" = der Gnoll selbst (Enrage, Runde 18 — er sagt genau einen Satz).
+-- col: Rahmen- und Textfarbe; ohne Angabe das Questgeber-Gold von jeher.
+function R:bubble(text, dur, anchor, col)
   self.bubble_text = text
   self.bubble_t = dur or 3
   self.bubble_anchor = anchor
+  self.bubble_col = col
+end
+
+-- Rot fuer Hoggers Enrage-Satz. Als Konstante, damit Blase und Welle
+-- dieselbe Farbe tragen und der Zeichentest sie benennen kann.
+R.ENRAGE_COL = { 0.95, 0.22, 0.16 }
+
+-- ---------------------------------------------------------------------------
+-- Die Enrage-Schockwelle (Runde 18, GDD 6): ein Ring, der von Hogger ueber
+-- die ganze Karte laeuft. ANDERS als der DING-Ring (add_ding) waechst der
+-- Radius in WELTMASS und wird erst beim Zeichnen mit scale multipliziert —
+-- ein Ring in Bildschirm-px waere bei jeder Zoomstufe woanders und haette
+-- mit den Toten, die er verursacht, nichts zu tun.
+-- Die Zeitachse kommt aus der Sim (state.clock - try_time_limit), nicht aus
+-- einem eigenen Countdown: so laeuft die Welle auf jedem Rechner synchron,
+-- und ein spaet dazugestossener Client sieht sie an der richtigen Stelle.
+-- ---------------------------------------------------------------------------
+function R:enrage_wave(view)
+  if not view or not view.hogger then return nil end
+  local t = (view.clock or 0) - model.p("try_time_limit")
+  if t < 0 or t > ENRAGE.end_t then return nil end
+  return { t = t, r = enrage_radius(t), x = view.hogger.x, y = view.hogger.y }
 end
 
 function R:add_shake(amount)
@@ -973,6 +1010,13 @@ function R:update(dt)
   -- pulsiert oder nachlaeuft, ohne dass die Sim-Zeit dafuer herhalten muss.
   self.ui_t = (self.ui_t or 0) + dt
   if self.banner_t > 0 then self.banner_t = self.banner_t - dt end
+  if self.banner_queue then
+    self.banner_queue.t = self.banner_queue.t - dt
+    if self.banner_queue.t <= 0 then
+      local q = self.banner_queue
+      self:announce(q.text, q.dur) -- setzt banner_queue selbst zurueck
+    end
+  end
   if (self.bubble_t or 0) > 0 then self.bubble_t = self.bubble_t - dt end
   if self.killcam_t > 0 then self.killcam_t = self.killcam_t - dt end
   if self.shake > 0 then self.shake = math.max(0, self.shake - dt * 30) end
@@ -1491,6 +1535,34 @@ function R:draw(view, ui)
     love.graphics.setLineWidth(3)
     love.graphics.circle("line", x, y, 10 + k * 60)
     love.graphics.setLineWidth(1)
+  end
+
+  -- Enrage-Schockwelle (Runde 18, GDD 6): drei Ringe dicht hintereinander,
+  -- damit die Front auch dann Richtung hat, wenn ihr Zentrum laengst weit
+  -- ausserhalb des Sichtkreises liegt und nur noch ein Bogen durchzieht.
+  local wave = self:enrage_wave(view)
+  if wave then
+    local wx, wy = to_screen(wave.x, wave.y)
+    if wave.r > 0 then
+      local c = R.ENRAGE_COL
+      for i = 0, 2 do
+        local rr = (wave.r - i * 55) * scale
+        if rr > 0 then
+          love.graphics.setColor(c[1], c[2], c[3], (0.85 - i * 0.25))
+          love.graphics.setLineWidth(5 - i * 1.5)
+          love.graphics.circle("line", wx, wy, rr)
+        end
+      end
+      love.graphics.setLineWidth(1)
+    else
+      -- Vor dem Losrollen: Hogger laedt auf, der Ring zieht sich zusammen
+      local k = wave.t / ENRAGE.wave
+      love.graphics.setColor(R.ENRAGE_COL[1], R.ENRAGE_COL[2], R.ENRAGE_COL[3],
+                             0.35 + 0.5 * k)
+      love.graphics.setLineWidth(3)
+      love.graphics.circle("line", wx, wy, (140 - 92 * k) * scale)
+      love.graphics.setLineWidth(1)
+    end
   end
 
   -- Geschosse und Schlaege (GDD 4.1, Issue #30)
@@ -2091,6 +2163,9 @@ function R:draw(view, ui)
     for _, p in pairs(view.players) do
       if p.is_leeroy then anchor_x, anchor_y = p.x, p.y break end
     end
+  elseif self.bubble_anchor == "hogger" then
+    -- Enrage (Runde 18): der Gnoll sagt genau einen Satz pro Abend-Frist
+    if view.hogger then anchor_x, anchor_y = view.hogger.x, view.hogger.y end
   elseif view.echo then
     anchor_x, anchor_y = view.echo.x, view.echo.y
   end
@@ -2107,11 +2182,20 @@ function R:draw(view, ui)
     love.graphics.setColor(0.07, 0.07, 0.11, 0.94 * a)
     love.graphics.rectangle("fill", px, py, bw, bh, 6, 6)
     love.graphics.polygon("fill", bx - 7, py + bh, bx + 7, py + bh, bx, py + bh + 12)
-    love.graphics.setColor(0.78, 0.63, 0.28, a)
+    local c = self.bubble_col
+    love.graphics.setColor(c and c[1] or 0.78, c and c[2] or 0.63,
+                           c and c[3] or 0.28, a)
     love.graphics.setLineWidth(2)
     love.graphics.rectangle("line", px, py, bw, bh, 6, 6)
     love.graphics.setLineWidth(1)
-    love.graphics.setColor(0.95, 0.92, 0.8, a)
+    if c then
+      -- Rote Blase: der Text traegt die Farbe mit, sonst steht Hoggers
+      -- Drohung in demselben freundlichen Beige wie Leeroys Kommentare
+      love.graphics.setColor(math.min(1, c[1] + 0.25), c[2] * 0.9 + 0.2,
+                             c[3] * 0.9 + 0.2, a)
+    else
+      love.graphics.setColor(0.95, 0.92, 0.8, a)
+    end
     love.graphics.printf(self.bubble_text, px + R.BUBBLE_PAD, py + R.BUBBLE_PAD,
       wrap, "center")
   end

@@ -176,7 +176,9 @@ do
   T.eq(r.trys[3].reason, "timeout", "logleser: reason wird aus dem Log gelesen")
 
   local text, geraten = logreport.outcome(r.trys[3], r.params)
-  T.eq(text, "Zeit abgelaufen", "logleser: Zeitlimit wird benannt")
+  -- Runde 18: die Frist endet mit dem Enrage. Der Grund im Log heisst
+  -- weiter "timeout" — der Bericht nennt beides, Erscheinung und Ursache.
+  T.eq(text, "Enrage (Frist abgelaufen)", "logleser: die Frist wird benannt")
   T.eq(geraten, false, "logleser: der Grund stand im Log, er wurde nicht geraten")
 
   local t2 = logreport.outcome(r.trys[2], r.params)
@@ -184,7 +186,7 @@ do
 
   local out = logreport.render(r, "gruende.jsonl", model.defaults)
   T.ok(out:find("Trys nach Ursache"), "logleser: Bericht gruppiert nach Ursache")
-  T.ok(out:find("Zeit abgelaufen"), "logleser: das Zeitlimit steht im Bericht")
+  T.ok(out:find("Enrage"), "logleser: die Frist steht im Bericht")
   T.ok(out:find("aus der Dauer geschlossen") == nil,
     "logleser: nichts wird geraten, wenn der Grund im Log steht")
 end
@@ -204,8 +206,13 @@ do
   local r = logreport.analyse((lines_of(L)))
 
   local t1, geraten1 = logreport.outcome(r.trys[1], r.params)
+  -- Bewusst NICHT "Enrage": ein Log ohne reason-Feld ist aelter als Runde 17,
+  -- und damals lief die Frist wirklich still ab. Einen Enrage zu behaupten,
+  -- den es zu dem Zeitpunkt nicht gab, waere eine Erfindung.
   T.eq(t1, "Zeit abgelaufen", "altlog: aus der Dauer auf das Zeitlimit geschlossen")
   T.eq(geraten1, true, "altlog: der Schluss ist als Schluss gekennzeichnet")
+  T.ok(t1 ~= logreport.REASON_DE.timeout,
+    "altlog: der geschlossene Ausgang ist vom protokollierten unterscheidbar")
 
   local t2, geraten2 = logreport.outcome(r.trys[2], r.params)
   T.eq(t2, "Ende unbekannt (altes Log)", "altlog: ohne Anhaltspunkt wird nichts erfunden")

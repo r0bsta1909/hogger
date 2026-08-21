@@ -7,6 +7,13 @@ T.eq(rel.visible(nil), false, "Panel: ohne Spieler unsichtbar")
 T.eq(rel.visible({ alive = true, ghost = false }), false, "Panel: lebend unsichtbar")
 T.eq(rel.visible({ alive = false, ghost = true }), false, "Panel: als Geist unsichtbar")
 T.eq(rel.visible({ alive = false, ghost = false }), true, "Panel: tot sichtbar")
+-- Runde 18: waehrend der Enrage-Sequenz haelt das Panel den Mund. Ohne
+-- diese Bremse springt der Freigabe-Knopf ueber die Schockwelle, bevor sie
+-- den Kartenrand erreicht hat — man saehe seinen eigenen Tod nicht.
+T.eq(rel.visible({ alive = false, ghost = false }, true), false,
+  "Panel: waehrend einer Sequenz unsichtbar")
+T.eq(rel.visible({ alive = false, ghost = false }, false), true,
+  "Panel: nach der Sequenz wieder da")
 
 T.eq(rel.headline(6), "6 Sekunden bis zur Freigabe", "Ueberschrift zaehlt herunter")
 T.eq(rel.headline(0), "Bereit zur Freigabe", "Ueberschrift bei 0")

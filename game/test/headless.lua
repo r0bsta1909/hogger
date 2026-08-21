@@ -377,6 +377,87 @@ function T.run()
     ok(wire.read_heal_request(data, off) == 7, "Wire: Ziel-pid im Roundtrip")
   end
 
+  -- Der Enrage ueber das Netz (Runde 18): die Frist gezielt ablaufen lassen
+  -- und die ganze Sequenz durchfahren. Geprueft wird, was der Spieler davon
+  -- hat — dass die Phase steht, dass wirklich alle sterben, dass das
+  -- Ereignis beim Client ankommt und dass der naechste Try sauber beginnt.
+  do
+    local st = host.state
+    if st.phase == "try" then
+      local try0 = st.try_nr
+      local lebend0 = 0
+      for _, p in ipairs(st.players) do
+        -- alle auf die Beine und in Hoggers Naehe: sonst prueft der Test
+        -- nur, dass Tote tot bleiben
+        p.alive, p.ghost, p.hp, p.dead_until = true, false, p.max_hp, 0
+        p.x, p.y = st.hogger.x + 20 + p.id * 7, st.hogger.y + 15
+        lebend0 = lebend0 + 1
+      end
+      st.clock = model.p("try_time_limit") - DT / 2
+      local idle = { mask = 0, facing = 0 }
+      local log0 = #log_lines
+      -- Was der Client SCHON gesehen hat, zaehlt nicht mit
+      local kosm0 = {}
+      for i, c in ipairs(clients) do kosm0[i] = #c.cosmetics end
+      local phase_gesehen = false
+      local ticks = math.ceil((step.ENRAGE.end_t + 1) / DT)
+      for i = 1, ticks do
+        host:update(DT, idle)
+        for _, c in ipairs(clients) do
+          if not c.dead then c:update(DT, idle) end
+        end
+        if st.phase == "enrage" then
+          phase_gesehen = true
+          -- mitten in der Sequenz: der Beat muss ueber die Leitung passen
+          if i == 2 then
+            local _, snap = wire.read_snapshot(
+              wire.snapshot(0, wire.snapshot_body(st)), 4)
+            ok(snap.phase == "try",
+              "Enrage: der Snapshot meldet KEINEN Fluchbruch (Phasen-Byte frei)")
+            ok(math.abs(snap.clock - st.clock) < 0.2,
+              "Enrage: die Uhr traegt die Zeitachse ueber die Leitung")
+          end
+        end
+      end
+      local n_enrage, n_death, n_ende = 0, 0, 0
+      for i = log0 + 1, #log_lines do
+        local l = log_lines[i]
+        if l:find('"ev":"enrage"') then n_enrage = n_enrage + 1 end
+        if l:find('"ev":"death"') then n_death = n_death + 1 end
+        if l:find('"ev":"try_end"') then n_ende = n_ende + 1 end
+      end
+      ok(n_enrage == 1, "Enrage: genau ein Enrage-Ereignis im Log (" ..
+        n_enrage .. ")")
+      ok(n_ende == 1, "Enrage: genau ein try_end (" .. n_ende .. ")")
+      ok(n_death == lebend0, "Enrage: jeder Tod steht im Log (" .. n_death ..
+        " von " .. lebend0 .. ")")
+      ok(phase_gesehen, "Enrage: die Phase wird betreten")
+      ok(st.try_nr == try0 + 1, "Enrage: der Try wird danach gewertet")
+      ok(st.phase == "try", "Enrage: danach laeuft wieder ein normaler Try")
+      ok(#st.corpses == 0, "Enrage: der naechste Try startet ohne frische Leichen")
+      local lebend = 0
+      for _, p in ipairs(st.players) do if p.alive then lebend = lebend + 1 end end
+      ok(lebend0 > 0 and lebend == 0,
+        "Enrage: die Welle hat alle " .. lebend0 .. " erwischt (" .. lebend ..
+        " stehen noch)")
+      for _, p in ipairs(st.players) do
+        ok((p.dead_until or 0) > 0,
+          "Enrage: " .. p.name .. " geht durch die normale Freigabe")
+      end
+      -- Der eigentliche Beweis: ein ENTFERNTER Client hat den Enrage ueber
+      -- die Leitung bekommen. Ohne Eintrag in wire.EV filtert der Host ihn
+      -- weg, er stuende nur im Log und niemand saehe je eine Welle — genau
+      -- der Fehler aus Runde 14 (#167/#168).
+      for i, c in ipairs(clients) do
+        local gesehen = false
+        for k = kosm0[i] + 1, #c.cosmetics do
+          if c.cosmetics[k].ev == "enrage" then gesehen = true end
+        end
+        ok(gesehen, "Enrage: Client " .. i .. " sieht ihn ueber die Leitung")
+      end
+    end
+  end
+
   -- Die Endsequenz ueber das Netz (Runde 11, #131): Hogger gezielt toeten und
   -- die Szene bis zum Abgang durchlaufen lassen. Deterministisch, damit der
   -- Fluchbruch nicht davon abhaengt, ob die Bots zufaellig gewinnen.

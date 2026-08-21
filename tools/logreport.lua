@@ -49,7 +49,9 @@ M.REASON_DE = {
   win        = "Sieg",
   wipe       = "Abbruch: alle tot",
   no_contact = "Abbruch: niemand am Boss",
-  timeout    = "Zeit abgelaufen",
+  -- Runde 18: die Frist endet mit dem Enrage. Der Grund im Log heisst
+  -- weiter "timeout" (die Uhr ist die Ursache), der Bericht nennt beides.
+  timeout    = "Enrage (Frist abgelaufen)",
 }
 
 function M.outcome(t, params)
@@ -61,6 +63,9 @@ function M.outcome(t, params)
   end
   -- Kein Reset-Ereignis und kein Grund: dann war es das Zeitlimit — aber das
   -- ist ein Schluss aus der Dauer, kein Protokolleintrag.
+  -- Bewusst NICHT REASON_DE: ein Log ohne reason-Feld stammt aus einer
+  -- Version vor Runde 17, und dort lief die Frist wirklich still ab. Einen
+  -- Enrage zu behaupten, den es damals nicht gab, waere eine Erfindung.
   local limit = params and params.try_time_limit
   if limit and t.dauer and t.dauer >= limit - 2 then
     return "Zeit abgelaufen", true

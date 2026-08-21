@@ -64,8 +64,11 @@ do
       pointe = "Der Raid lag" },
     { reason = "no_contact", won = false, kopf = "^Abbruch",
       pointe = "niemanden erreicht" },
-    { reason = "timeout",    won = false, kopf = "^Zeit abgelaufen",
-      pointe = "Die Zeit war um" },
+    -- Runde 18: die Frist laeuft nicht mehr still ab. Der Grund im Log
+    -- heisst weiter "timeout" (die Uhr ist die Ursache), die Tafel nennt,
+    -- was der Spieler gerade gesehen hat.
+    { reason = "timeout",    won = false, kopf = "^Enrage",
+      pointe = "Hogger wurde langweilig" },
     { reason = "win",        won = true,  kopf = "^SIEG" },
   }
   for _, f in ipairs(faelle) do

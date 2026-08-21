@@ -17,6 +17,10 @@ local input = require("game.gamesim.input")
 local world = require("game.gamesim.world")
 local audio = require("game.audio")
 local gamemenu = require("game.ui.gamemenu")
+-- Enrage-Taktung (Runde 18): dieselben Zahlen wie in der Sim, kein zweiter
+-- Satz Konstanten im Client
+local ENRAGE_WAVE = require("game.gamesim.step").ENRAGE.wave
+local ENRAGE_LEN = require("game.gamesim.step").ENRAGE.end_t
 local wire, discovery
 
 local app = {
@@ -340,7 +344,12 @@ local function process_cosmetics(view)
       if tonumber(e.dst) == view.me then app.last_healed_t = app.uptime end
     elseif e.ev == "death" then
       local dp = view.players[tonumber(e.src)]
-      if dp then -- Todeslaut (GDD 12 Nr. 12)
+      -- Todeslaut (GDD 12 Nr. 12), aber gedrosselt: der Enrage toetet bis zu
+      -- vierzig Spieler binnen anderthalb Sekunden, im Nahkampf-Klumpen ein
+      -- Dutzend im selben Frame. Vierzig gleichzeitige Todeslaute sind kein
+      -- Feedback mehr, sondern ein Knacken. Ein Laut alle 120 ms reicht.
+      if dp and (app.uptime - (app.last_death_snd or -1)) >= 0.12 then
+        app.last_death_snd = app.uptime
         audio.play("snd_player_death",
           audio.falloff(world.dist(dp.x, dp.y, view.me_x, view.me_y)))
       end
@@ -356,6 +365,16 @@ local function process_cosmetics(view)
       app.render:add_shake(18) -- der "WAS?!"-Moment (GDD 9.2)
     elseif e.ev == "charge" then
       audio.play("snd_hogger_charge") -- Boss-Lesbarkeit (GDD 12 Nr. 10)
+    elseif e.ev == "enrage" then
+      -- Hogger wurde langweilig (Runde 18, GDD 6). Die Welle selbst zeichnet
+      -- der Renderer aus der Sim-Uhr; hier haengen nur Stimme und Ton dran.
+      app.render:bubble("Gnarr, Hogger langweilig, sterbt!", 3.4, "hogger",
+        app.render.ENRAGE_COL)
+      audio.play("snd_hogger_charge")  -- der vorhandene Roar (GDD 12 Nr. 10)
+      -- Der Sting sitzt auf der Welle, nicht auf dem Bruellen
+      audio.play_later(ENRAGE_WAVE, "snd_wipe_sting")
+      app.render:add_shake(14)
+      app.enrage_seen_t = app.uptime
     elseif e.ev == "eat_start" then
       app.render:announce("HOGGER FRISST!", 2.5)
     elseif e.ev == "eat_interrupt" then
@@ -390,11 +409,22 @@ local function process_cosmetics(view)
         -- (der Client bekommt ihn ueber die Echo-Zeile und auf der Tafel).
         -- "Wipe" hier zu behaupten war fuer zwei von drei Verlustfaellen
         -- falsch — beim Zeitlimit prueglte der Raid munter weiter.
-        app.render:announce("Der Try ist vorbei.", 4)
-        audio.play("snd_wipe_sting")             -- Nr. 15: kurz, Moll
+        -- EINE Ausnahme kennt der Client selbst: er hat den Enrage gerade
+        -- gesehen. Dann darf das Banner ihn auch benennen.
+        local frisch = app.enrage_seen_t
+          and (app.uptime - app.enrage_seen_t) <= ENRAGE_LEN + 1
+        if frisch then
+          app.render:announce("HOGGER WURDE LANGWEILIG.", 4)
+          app.enrage_seen_t = nil
+        else
+          app.render:announce("Der Try ist vorbei.", 4)
+          audio.play("snd_wipe_sting")           -- Nr. 15: kurz, Moll
+        end
       end
     elseif e.ev == "try_start" then
-      app.render:announce("Try " .. tostring(e.dst or ""), 2.5)
+      -- Verzoegert: try_end und try_start kommen im selben Tick, ohne Delay
+      -- verschluckt diese Zeile die des Try-Endes (Runde 18)
+      app.render:announce("Try " .. tostring(e.dst or ""), 2.5, 2.0)
     elseif e.ev == "loot_pickup" and tonumber(e.src) == view.me then
       local pool = require("game.gamesim.loot")
       local item = pool[tonumber(e.dst) or 0] or "Plunder"
@@ -817,7 +847,8 @@ function love.draw()
       local rel = require("game.ui.release")
       local me = app.view.players[app.view.me]
       local mx, my = love.mouse.getPosition()
-      rel.draw(me, bw, bh, rel.hit(rel.layout(bw, bh).button, mx, my))
+      rel.draw(me, bw, bh, rel.hit(rel.layout(bw, bh).button, mx, my),
+        app.render:enrage_wave(app.view) ~= nil)
     end
     if app.stats then app.stats:draw() end
     if app.victory then app.victory:draw(app.view, to_screen, bw, bh) end

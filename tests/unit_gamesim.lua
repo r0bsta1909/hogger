@@ -1257,24 +1257,91 @@ end
 do -- Zeitlimit: eigener Grund am try_end und KEIN hogger_reset. Bis Runde 17
   -- endete es voellig ereignislos und war im Log von einem Wipe nicht zu
   -- unterscheiden — genau daran scheiterte die Auswertung von Robs Abend.
+  -- Seit Runde 18 laeuft dazwischen der Enrage: die Frist beendet den Try
+  -- nicht mehr im selben Tick, sondern startet die Sequenz.
   local st = reset_world({ n = 2 })
   st.clock = model.p("try_time_limit") - model.TICK_DT / 2
   local try0 = st.try_nr
-  local reason, saw_reset, board = nil, false, nil
-  for _ = 1, 5 do
+  local reason, saw_reset, board, saw_enrage = nil, false, nil, false
+  local ticks = 0
+  for _ = 1, math.ceil((step.ENRAGE.end_t + 1) / model.TICK_DT) do
     local evs = step.step(st, {})
+    ticks = ticks + 1
     for _, e in ipairs(evs) do
       if e.ev == "try_end" then reason, board = e.reason, e.board end
       if e.ev == "hogger_reset" then saw_reset = true end
+      if e.ev == "enrage" then saw_enrage = true end
     end
     if reason then break end
   end
   T.eq(reason, "timeout", "Zeitlimit: der Grund haengt am try_end")
+  T.ok(saw_enrage, "Zeitlimit: der Enrage wird angekuendigt")
   T.ok(not saw_reset, "Zeitlimit: kein hogger_reset — es war schlicht keiner")
   T.eq(st.try_nr, try0 + 1, "Zeitlimit: der Try wird gewertet")
-  T.ok(board and board.header:find("^Zeit abgelaufen"),
+  T.ok(board and board.header:find("^Enrage"),
     "Zeitlimit: die Tafel nennt es beim Namen (" ..
     tostring(board and board.header) .. ")")
+  -- Die Sequenz braucht ihre Zeit — endete der Try sofort, waere die
+  -- ganze Inszenierung unsichtbar (und dieser Test die einzige Warnung).
+  T.ok(ticks >= math.floor(step.ENRAGE.end_t / model.TICK_DT),
+    "Zeitlimit: der Try endet erst nach der Sequenz (" .. ticks .. " Ticks)")
+end
+
+do -- Der Enrage loescht den Raid aus, und zwar von innen nach aussen:
+  -- die Welle braucht Zeit bis zum Kartenrand. Wer weit weg steht, stirbt
+  -- zuletzt — sonst waere die sichtbare Welle eine Luege.
+  local st = reset_world({ n = 3 })
+  local h = st.hogger
+  local nah, weit = st.players[1], st.players[2]
+  nah.alive, nah.hp = true, nah.max_hp
+  weit.alive, weit.hp = true, weit.max_hp
+  nah.x, nah.y = h.x + 40, h.y
+  weit.x, weit.y = h.x + 2400, h.y
+  st.clock = model.p("try_time_limit") - model.TICK_DT / 2
+  step.step(st, {}) -- betritt die Phase
+  T.eq(st.phase, "enrage", "Enrage: die Phase wird betreten")
+  local tot_nah, tot_weit = nil, nil
+  for i = 1, math.ceil(step.ENRAGE.end_t / model.TICK_DT) - 1 do
+    step.step(st, {})
+    if not tot_nah and not nah.alive then tot_nah = i end
+    if not tot_weit and not weit.alive then tot_weit = i end
+  end
+  T.ok(tot_nah ~= nil and tot_weit ~= nil, "Enrage: beide sterben")
+  T.ok(tot_nah and tot_weit and tot_nah < tot_weit,
+    "Enrage: die Welle laeuft von innen nach aussen (" ..
+    tostring(tot_nah) .. " vor " .. tostring(tot_weit) .. ")")
+  -- Die Welle streift jeden Fleck der Karte, bevor die Stille faellt
+  T.ok(step.enrage_radius(step.ENRAGE.still) >= 3060,
+    "Enrage: die Welle erreicht den entferntesten Kartenpunkt")
+  T.eq(step.enrage_radius(step.ENRAGE.wave - 0.01), 0,
+    "Enrage: vor dem Losrollen hat die Welle keinen Radius")
+end
+
+do -- Der Enrage ist Hoggers Werk und gehoert auf die Tafel; und der naechste
+  -- Try beginnt ohne frische Leichen (Rob-Entscheid Runde 18).
+  local killcam = require("game.gamesim.killcam")
+  T.ok(step.HOGGER_CAUSES[killcam.CAUSE.enrage],
+    "Enrage zaehlt als Hogger-Kill")
+  T.ok(not step.HOGGER_CAUSES[killcam.CAUSE.boar],
+    "ein Wildschwein zaehlt weiterhin nicht als Hogger-Kill")
+  local st = reset_world({ n = 4 })
+  for _, p in ipairs(st.players) do
+    p.alive, p.hp = true, p.max_hp
+    p.x, p.y = st.hogger.x + 30, st.hogger.y
+  end
+  st.clock = model.p("try_time_limit") - model.TICK_DT / 2
+  local board = nil
+  for _ = 1, math.ceil((step.ENRAGE.end_t + 1) / model.TICK_DT) do
+    for _, e in ipairs(step.step(st, {})) do
+      if e.ev == "try_end" then board = e.board end
+    end
+    if board then break end
+  end
+  T.ok(board ~= nil, "Enrage: die Tafel kommt")
+  T.eq(#st.corpses, 0, "Enrage: der naechste Try startet ohne frische Leichen")
+  for _, p in ipairs(st.players) do
+    T.ok(not p.alive, "Enrage: niemand steht danach noch (" .. p.id .. ")")
+  end
 end
 
 do -- Der Ausgang darf den Zufallsstrom nicht verschieben. Jede Ursache waehlt
