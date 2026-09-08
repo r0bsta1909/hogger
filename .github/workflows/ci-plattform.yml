@@ -57,9 +57,18 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: LOEVE einrichten (macOS)
+      # 11.5 gepinnt wie im Release (release.yml). Bis Runde 20 kam LOEVE
+      # per "brew install --cask love"; Homebrew hat den Cask am 2026-09-01
+      # wegen des Gatekeeper-Checks abgeschaltet — genau die Drift, fuer die
+      # der woechentliche schedule da ist. Der Download aus dem GitHub-
+      # Release haengt an keinem Paketmanager.
+      - name: LOEVE einrichten (macOS, 11.5 gepinnt wie im Release)
         if: runner.os == 'macOS'
-        run: brew install --cask love
+        run: |
+          curl -sL -o love-macos.zip \
+            https://github.com/love2d/love/releases/download/11.5/love-11.5-macos.zip
+          unzip -q love-macos.zip -d lovemac
+          xattr -dr com.apple.quarantine lovemac/love.app || true
       - name: LOEVE einrichten (Windows, 11.5 gepinnt wie im Release)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -72,7 +81,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           export SDL_VIDEODRIVER=dummy
-          "/Applications/love.app/Contents/MacOS/love" game --headless --test
+          "$GITHUB_WORKSPACE/lovemac/love.app/Contents/MacOS/love" game --headless --test
       - name: "Stufe 4: Integration (headless, Loopback) — Windows"
         if: runner.os == 'Windows'
         shell: pwsh
