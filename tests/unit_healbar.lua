@@ -6,6 +6,10 @@ local render = require("game.render")
 local model = require("sim.model")
 
 local RANGE = 250
+-- HP aus dem Modell, nicht hingeschrieben (Runde 17/20-Lehre)
+local FULL_P = model.hp_for_class("priest")
+local FULL_W = model.hp_for_class("warrior")
+local HALF_W = FULL_W / 2
 
 local function mkview()
   return {
@@ -13,11 +17,11 @@ local function mkview()
     names = { [1] = "Anna", [2] = "Bert", [3] = "Zora", [4] = "Karl",
               [5] = "Heiler", [6] = "Otto", [7] = "Uwe" },
     players = {
-      [5] = { alive = true, class = "priest", hp = 50, x = 1000, y = 1000 },
+      [5] = { alive = true, class = "priest", hp = FULL_P, x = 1000, y = 1000 },
       -- 249 px: drin
-      [1] = { alive = true, class = "warrior", hp = 40, x = 1249, y = 1000 },
+      [1] = { alive = true, class = "warrior", hp = HALF_W, x = 1249, y = 1000 },
       -- 251 px: draussen
-      [2] = { alive = true, class = "warrior", hp = 40, x = 1251, y = 1000 },
+      [2] = { alive = true, class = "warrior", hp = HALF_W, x = 1251, y = 1000 },
       -- Geist in Reichweite: unheilbar, raus
       [3] = { alive = false, ghost = true, class = "mage", x = 1010, y = 1000 },
       -- Toter in Reichweite: raus
@@ -30,7 +34,7 @@ local function mkview()
               x = 1000, y = 1100 },
       -- Unverletzt in Reichweite: seit Runde 17 NICHT in der Liste — er
       -- braucht keine Heilung und belegt sonst den Platz eines Sterbenden
-      [7] = { alive = true, class = "warrior", hp = 80, x = 1030, y = 1000 },
+      [7] = { alive = true, class = "warrior", hp = FULL_W, x = 1030, y = 1000 },
     },
   }
 end
@@ -41,9 +45,9 @@ do
   T.eq(more_n, 0, "healbar: kein Ueberhang")
   T.ok(rows[1].is_self, "healbar: selbst immer Zeile 1")
   T.eq(rows[1].name, "Heiler", "healbar: eigener Name in Zeile 1")
-  T.eq(rows[1].hp_pct, 100, "healbar: Priester 50/50 = 100 %")
+  T.eq(rows[1].hp_pct, 100, "healbar: Priester mit vollen HP = 100 %")
   T.eq(rows[2].name, "Anna", "healbar: 249 px ist in Reichweite, alphabetisch zuerst")
-  T.eq(rows[2].hp_pct, 50, "healbar: Krieger 40/80 = 50 %")
+  T.eq(rows[2].hp_pct, 50, "healbar: Krieger mit halben HP = 50 %")
   T.eq(rows[3].name, "Otto", "healbar: Leeroy erscheint normal")
   for _, r in ipairs(rows) do
     T.ok(r.name ~= "Bert", "healbar: 251 px ist ausser Reichweite (" .. r.name .. ")")
@@ -87,7 +91,7 @@ end
 -- unsichtbar, waehrend ein unverletzter "Anna" seinen Platz belegte.
 do
   local v = { me = 1, me_x = 0, me_y = 0, names = {}, players = {
-    [1] = { alive = true, class = "priest", hp = 50, x = 0, y = 0 } } }
+    [1] = { alive = true, class = "priest", hp = FULL_P, x = 0, y = 0 } } }
   -- pid 2..30: je hoeher die pid, desto GESUENDER (pid 2 = 4 HP von 80,
   -- pid 30 = 60 HP von 80). Die Namen laufen genau andersherum, damit
   -- Auswahl und Anzeige sich nicht zufaellig decken.
@@ -123,7 +127,7 @@ end
 -- Ohne Roster-Namen faellt die pid ein
 do
   local v = { me = 1, me_x = 0, me_y = 0, players = {
-    [1] = { alive = true, class = "priest", hp = 50, x = 0, y = 0 } } }
+    [1] = { alive = true, class = "priest", hp = FULL_P, x = 0, y = 0 } } }
   local rows = render.heal_rows(v, RANGE)
   T.eq(rows[1].name, "#1", "healbar: ohne Roster-Namen faellt die pid ein")
 end
@@ -212,31 +216,31 @@ do
   local function view_mit(hp)
     return { me = 1, me_x = 0, me_y = 0, names = { [1] = "Heiler", [2] = "Anna" },
              players = {
-               [1] = { alive = true, class = "priest", hp = 50, x = 0, y = 0 },
+               [1] = { alive = true, class = "priest", hp = FULL_P, x = 0, y = 0 },
                [2] = { alive = true, class = "warrior", hp = hp, x = 10, y = 0 },
              } }
   end
   local memo = {}
-  local rows = render.heal_rows(view_mit(40), RANGE, 24, 0, memo)
+  local rows = render.heal_rows(view_mit(HALF_W), RANGE, 24, 0, memo)
   T.eq(#rows, 2, "gnadenfrist: der Verwundete steht drin")
 
   -- voll geheilt, kurz danach: bleibt stehen
-  rows = render.heal_rows(view_mit(80), RANGE, 24, GRACE - 0.1, memo)
+  rows = render.heal_rows(view_mit(FULL_W), RANGE, 24, GRACE - 0.1, memo)
   T.eq(#rows, 2, "gnadenfrist: direkt nach der Heilung bleibt die Zeile")
 
   -- nach Ablauf: raus
-  rows = render.heal_rows(view_mit(80), RANGE, 24, GRACE + 0.1, memo)
+  rows = render.heal_rows(view_mit(FULL_W), RANGE, 24, GRACE + 0.1, memo)
   T.eq(#rows, 1, "gnadenfrist: nach Ablauf verschwindet er")
   T.eq(next(memo), nil, "gnadenfrist: die Merk-Tabelle raeumt sich auf")
 
   -- Wer NIE verwundet war, kommt auch nicht ueber die Gnadenfrist herein
   local memo2 = {}
-  local nur_gesund = render.heal_rows(view_mit(80), RANGE, 24, 0, memo2)
+  local nur_gesund = render.heal_rows(view_mit(FULL_W), RANGE, 24, 0, memo2)
   T.eq(#nur_gesund, 1, "gnadenfrist: ein nie Verwundeter erscheint nicht")
   T.eq(next(memo2), nil, "gnadenfrist: ... und wird nicht gemerkt")
 
   -- Ohne Merk-Tabelle verhaelt sich alles wie ohne Nachlauf
-  local ohne = render.heal_rows(view_mit(80), RANGE, 24)
+  local ohne = render.heal_rows(view_mit(FULL_W), RANGE, 24)
   T.eq(#ohne, 1, "gnadenfrist: ohne Merk-Tabelle kein Nachlauf")
 end
 
@@ -248,11 +252,11 @@ end
 do
   local function bau(reihenfolge)
     local v = { me = 1, me_x = 0, me_y = 0, names = {}, players = {
-      [1] = { alive = true, class = "priest", hp = 50, x = 0, y = 0 } } }
+      [1] = { alive = true, class = "priest", hp = FULL_P, x = 0, y = 0 } } }
     for _, pid in ipairs(reihenfolge) do
       -- ALLE gleich schwer verletzt: nur der pid-Endanschlag kann noch
       -- entscheiden, wer den letzten Platz bekommt
-      v.players[pid] = { alive = true, class = "warrior", hp = 40, x = 10, y = 0 }
+      v.players[pid] = { alive = true, class = "warrior", hp = HALF_W, x = 10, y = 0 }
       v.names[pid] = "gleich"
     end
     local rows = render.heal_rows(v, RANGE, 5)
@@ -274,10 +278,10 @@ end
 -- ---------------------------------------------------------------------------
 do
   local v = { me = 1, me_x = 0, me_y = 0, names = {}, players = {
-    [1] = { alive = true, class = "priest", hp = 50, x = 0, y = 0 } } }
+    [1] = { alive = true, class = "priest", hp = FULL_P, x = 0, y = 0 } } }
   for pid = 2, 20 do -- 5 verwundet, 14 kerngesund
     v.players[pid] = { alive = true, class = "warrior",
-                       hp = (pid <= 6) and 20 or 80, x = 10, y = 0 }
+                       hp = (pid <= 6) and 20 or FULL_W, x = 10, y = 0 }
   end
   local rows, more_n = render.heal_rows(v, RANGE, 4)
   T.eq(#rows, 4, "ueberhang: drei Verwundete plus man selbst passen")

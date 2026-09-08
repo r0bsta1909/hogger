@@ -342,7 +342,9 @@ T.ok(saw_damage, "step: Kampf findet statt")
 T.ok(saw_death, "step: Hogger toetet")
 T.ok(state2.hogger.hp <= state2.hogger.max_hp, "step: Hogger-HP nie ueber Max")
 for _, p in ipairs(state2.players) do
-  T.ok(p.hp <= p.max_hp + 1e-9, "step: Spieler-HP nie ueber Max (" .. p.id .. ")")
+  -- Deckel ist die EFFEKTIVE Max-HP: der Blutpakt des Wichtels hebt ihn
+  -- (Runde 13, #159) — seit die Bots den Wichtel rufen, greift das hier
+  T.ok(p.hp <= step.effective_max_hp(p) + 1e-9, "step: Spieler-HP nie ueber Max (" .. p.id .. ")")
   T.ok(p.x >= 0 and p.x <= map.WIDTH and p.y >= 0 and p.y <= map.HEIGHT,
     "step: Position in Weltgrenzen (" .. p.id .. ")")
   T.ok(not (p.alive and p.ghost), "step: nie gleichzeitig lebend und Geist (" .. p.id .. ")")

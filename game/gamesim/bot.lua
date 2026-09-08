@@ -8,8 +8,9 @@
 --              bricht keine eigenen Casts, nutzt alle drei Faehigkeiten
 --              sinnvoll, ein Schurke haelt Energie fuer den Tritt zurueck,
 --              Tritt mit 1-2 s Reaktion, Klasse nach Bedarf beim Wiederbeleben
---   kopflos  — der Bot bis Runde 19: Klasse fest, nur Faehigkeit 1/2,
---              laeuft nach und bricht Casts, tritt sofort (F2/F3-Gegenprobe)
+--   kopflos  — der unkoordinierte Raid: Klasse fest, nur Faehigkeit 1/2,
+--              laeuft nach und bricht Casts, ignoriert das Fressen
+--              (GDD 17.2 Punkt 2; F2/F3-Gegenprobe)
 --   turtle   — nur Heilerklassen, nur Heilung, kein Schaden (Anti-Stall-Gate)
 -- Alles deterministisch: jeder Bot hat einen eigenen RNG-Strom aus Seed und
 -- pid (der Spiel-Zufall state.rng bleibt unberuehrt), Iteration nur ipairs
@@ -76,7 +77,9 @@ end
 -- Gehirn: Gedaechtnis und eigener Zufallsstrom je Bot
 -- ---------------------------------------------------------------------------
 function M.new_brain(seed, pid, profile)
-  local rng = rngmod.new((seed or 0) * 131 + pid * 7 + 1)
+  -- Nebenstrom je Bot: Seed nichtlinear gemischt (rng.mix), sonst haetten
+  -- Bot 1, 2, 3 ... eine Treppe von Reaktionszeiten
+  local rng = rngmod.new(rngmod.mix(seed or 0, 100 + pid))
   return {
     profile = profile or M.DEFAULT_PROFILE,
     rng = rng,
@@ -146,6 +149,12 @@ local ROLE_CLASSES = {
   ranged = { "hunter", "mage", "warlock" },
 }
 
+-- Rollenziele. Bei fuenf Leuten sind EIN Schurke und EIN Heiler typisch —
+-- zwei und zwei liessen nur einen Schadensmacher uebrig (gemessen Runde 20:
+-- N=5 klebte am Zeitlimit, waehrend N=10 zu 97 % gewann).
+-- Mindestens zwei Schurken und zwei Heiler: mit einem einzigen Schurken
+-- frisst Hogger durch, sobald der Kicker liegt (gemessen: N=5 fiel auf
+-- 10 % Siege), mit einem Heiler sinkt die Lebensdauer bei N=5 unter F7.
 function M.role_targets(n)
   return {
     rogue  = math.max(2, math.ceil(n / 10)),
@@ -281,9 +290,10 @@ local function decide_kopflos(state, p)
     if cls == "rogue" and (p.cp or 0) >= model.CP_MAX and state.tick % 30 == 15 then
       mask = mask + input.AB2
     end
-    if cls == "rogue" and eating_channel(h) and d <= model.p("melee_range") then
-      kick = true
-    end
+    -- kopflos ignoriert das Fressen (GDD 17.2 Punkt 2: der unkoordinierte
+    -- Agent). Der Bot bis Runde 19 trat SOFORT und ohne Reaktionszeit —
+    -- als F2-Gegenprobe war er damit ein besserer Unterbrecher als der
+    -- typische Raid und gewann bei N=20 zu 100 % (Runde 20).
     if cls == "warlock" and state.tick % 600 == 30 then
       mask = mask + input.AB2
     end

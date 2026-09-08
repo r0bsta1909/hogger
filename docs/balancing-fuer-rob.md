@@ -130,4 +130,4 @@ Auch wenn die Schurken treten: ein Mensch braucht 1 bis 3 Sekunden bis zum Tritt
 ```
 lua sim/main.lua --quick --jobs 10
 ```
-Der Richtungstest: 24 Zellen, alle sieben Falsifikationskriterien, rund zwei Minuten. Die volle Matrix (`--sweep`, ~30 Minuten parallel) läuft nur noch vor einem Release oder wenn du sie ausdrücklich willst — siehe `docs/adr/004-richtungstest-statt-vollmatrix.md`.
+Seit Runde 20 heißt das `lua sim/main.lua --engine spiel --quick --jobs 10`: die echte Spielsimulation mit den Bots als typischem Raid, 16 Zellen, alle acht Kriterien (F1–F7 und Turtle), 50 Läufe je Zelle, rund sieben Minuten, ±14 Prozentpunkte je Quote — das ist ein Richtungstest, kein Feinmaß. Der Nachweis mit 100 Läufen (±10 pp) kostet rund 14 Minuten und läuft nur, wenn du ihn willst — siehe `docs/adr/004-richtungstest-statt-vollmatrix.md` und ADR 006.

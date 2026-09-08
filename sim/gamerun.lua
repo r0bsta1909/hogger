@@ -15,6 +15,7 @@
 
 local model = require("sim.model")
 local hashmod = require("sim.hash")
+local rngmod = require("sim.rng")
 local world = require("game.gamesim.world")
 local step = require("game.gamesim.step")
 local bot = require("game.gamesim.bot")
@@ -74,6 +75,22 @@ function G.run_try(cfg)
   world.add_leeroy(state)
   for i = 1, cfg.n do
     world.add_player(state, "bot" .. i, { quest_done = true, profile = profile })
+  end
+  -- Streuungsmodell (GDD 17.2 Punkt 5b, Pflicht fuer alle Agenten): ein
+  -- Gruppenfaktor je Lauf mal ein Skill-Faktor je Bot auf den verursachten
+  -- Schaden. Ohne Streuung springen Siegquoten zwischen 0 und 100 %
+  -- (Stufenfunktion, Skill-Lehre) und ein Band wie 60-90 % ist nicht
+  -- messbar. Eigener RNG-Strom, der Spiel-Zufall bleibt unberuehrt.
+  do
+    local srng = rngmod.new(rngmod.mix(cfg.seed or 0, 1)) -- Nebenstrom 1: Streuung
+    local gmin, gmax = model.p("sim_group_factor_min"), model.p("sim_group_factor_max")
+    local smin, smax = model.p("sim_skill_min"), model.p("sim_skill_max")
+    local group = gmin + (gmax - gmin) * srng:next()
+    for _, p in ipairs(state.players) do
+      if not p.is_leeroy then
+        p.skill = group * (smin + (smax - smin) * srng:next())
+      end
+    end
   end
   local evs = {}
   world.begin_try(state, evs)

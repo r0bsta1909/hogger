@@ -49,7 +49,11 @@ M.params = {
   -- HP = quad x N^2 + slope x N - offset (mild quadratisch seit Runde 6,
   -- #96): der Sockel bildet den Kleingruppen-Overhead ab, der quad-Term
   -- ersetzt die gestrichene N-Skalierung der Todesstrafe
-  hogger_hp_quad         = p(3.0, 0, 20, 0.5, "9.3"),
+  -- Runde 20 (Kalibrierung auf den typischen Raid, GDD 17.9): quad 3 -> 6,
+  -- offset 1600 -> 600. Grosse Raids brauchen den steileren quad-Term
+  -- (Cleave-Divisor 8 statt 6 nimmt ihnen weniger ab), kleine den hoeheren
+  -- Sockel — der alte Sockel machte N=5 zum Zwerg-Kampf.
+  hogger_hp_quad         = p(6.0, 0, 20, 0.5, "9.3"),
   -- slope 560 -> 620 in Runde 13 (#155-#159): die fuenf neuen Klassen-
   -- Faehigkeiten (Handauflegung, Schild, Totstellen, Wurzeln, Blutpakt)
   -- hoben koordinierte Siege auf 98/95/87 % — der Aufschlag holt F1
@@ -60,9 +64,16 @@ M.params = {
   -- Historie: Offset 950 -> 850 in Runde 5 (#86, Zauberstab-Aus); Runde 6
   -- (#96) fixer Respawn -> quad-Term neu, slope/offset nachkalibriert.
   -- F1-F6-Belege: Sweeps in GDD 17.9.
-  hogger_hp_offset       = p(1600, 0, 3000, 50, "9.3"),
-  hogger_autohit_dmg     = p(30, 10, 60, 1, "9.2"),
-  hogger_cleave_divisor  = p(6, 2, 40, 1, "9.2"),   -- Cleave-Ziele = ceil(N / Divisor)
+  hogger_hp_offset       = p(600, 0, 3000, 50, "9.3"),
+  -- Runde 20: 30 -> 20 (F7-Hebel). Mit 30 starb Stoff in zwei Schlaegen,
+  -- die mittlere Lebensdauer lag bei 15-25 s und ein Drittel der Leben
+  -- endete unter 10 s ("wiederbeleben, um sofort zu sterben"). Mit 20 und
+  -- den Ruestungs-HP unten: 31-73 s. Der Krit (40) toetet damit niemanden
+  -- mehr aus vollen HP — das ist die Gefuehlsfrage an Rob (17.9).
+  hogger_autohit_dmg     = p(20, 10, 60, 1, "9.2"),
+  -- Runde 20: 6 -> 8. Mit 6 traf Hogger bei N=10 zwei Ziele, mit 10 nur
+  -- eines wie bei N=5 (N=10 gewann dann zu 97 %); 8 staffelt 1/2/3/5.
+  hogger_cleave_divisor  = p(8, 2, 40, 1, "9.2"),   -- Cleave-Ziele = ceil(N / Divisor)
   hogger_autohit_interval= p(1.8, 1.0, 3.0, 0.1, "9.2"),
   hogger_speed           = p(155, 100, 250, 5, "9.2"),
   hogger_aggro_radius    = p(250, 100, 500, 10, "9.1"),
@@ -97,7 +108,10 @@ M.params = {
   eat_hp_threshold       = p(0.90, 0.5, 1.0, 0.05, "9.2"),
   eat_drag_duration      = p(1.0, 0, 3.0, 0.1, "9.2"),
   eat_channel_duration   = p(8, 2, 20, 1, "9.2"),
-  eat_heal_rate          = p(0.015, 0.005, 0.05, 0.001, "9.2"),  -- Anteil Max-HP pro s
+  -- Runde 20: 0,015 -> 0,010 (8 % je Kanal statt 12 %). Mit menschlicher
+  -- Tritt-Latenz (1-3 s) holte das Fressen 70-90 % des Raidschadens
+  -- zurueck, selbst bei 87 % getretenen Kanaelen (Robs Abend: 88 %).
+  eat_heal_rate          = p(0.010, 0.005, 0.05, 0.001, "9.2"),  -- Anteil Max-HP pro s
   -- Fress-Unterbrechung seit Runde 12 (#140) NUR noch per Schurken-Tritt:
   -- die Spieleranzahl-Bedingung (max(3; ceil(N/6)+1) verschiedene Spieler)
   -- und die 5-%-Schadensschwelle sind ersatzlos gestrichen (Rob-Entscheid).
@@ -132,9 +146,11 @@ M.params = {
   -- Frontbogen fuer Angriffe (GDD 8.1, Playtest 2026-08-16): das Ziel muss
   -- vor einem liegen, Wegdrehen bricht laufende Zauber ab. 360 = Regel aus.
   facing_arc_deg         = p(180, 60, 360, 10, "8.1"),
-  hp_plate               = p(80, 40, 160, 5, "8.1"),
-  hp_leather             = p(65, 30, 130, 5, "8.1"),
-  hp_cloth               = p(50, 25, 100, 5, "8.1"),
+  -- Runde 20: +30 % (80/65/50 -> 105/85/65), dritter F7-Hebel nach Cleave
+  -- und Autohit — bei N=5 blieb die Lebensdauer sonst unter 30 s.
+  hp_plate               = p(105, 40, 160, 5, "8.1"),
+  hp_leather             = p(85, 30, 130, 5, "8.1"),
+  hp_cloth               = p(65, 25, 100, 5, "8.1"),
   mana_max               = p(100, 50, 300, 10, "8.1"),
   five_sec_rule_wait     = p(5, 1, 15, 0.5, "8.1"),
   mana_regen_rate        = p(10, 0, 40, 1, "8.1"),
