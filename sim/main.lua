@@ -22,6 +22,7 @@
 package.path = "./?.lua;" .. package.path
 
 local engine = require("sim.engine")
+local gamerun = require("sim.gamerun")
 local report = require("sim.report")
 local model = require("sim.model")
 
@@ -32,8 +33,11 @@ local function note(s)
   io.stderr:flush()
 end
 
+-- --engine spiel|1d (Runde 20): "spiel" treibt die echte Spielsimulation
+-- (sim/gamerun.lua, Bots als Referenz-Raid), "1d" das alte Modell
+-- (sim/engine.lua). Standard bis zur Ausmusterung der 1D-Sim: 1d.
 local opts = { n = 10, runs = 100, walk = nil, crits = "on",
-               agent = "koordiniert", seed = 1, mode = "cell",
+               agent = nil, seed = 1, mode = "cell", engine = "1d",
                out = nil, date = "bericht", jobs = 1, part = nil, parts = nil }
 local raw = {}
 local i = 1
@@ -41,6 +45,11 @@ while i <= #arg do
   local a = arg[i]
   if a == "--sweep" then opts.mode = "sweep"; raw[#raw + 1] = a
   elseif a == "--quick" then opts.mode = "quick"; raw[#raw + 1] = a
+  elseif a == "--engine" then i = i + 1; opts.engine = arg[i]; raw[#raw + 1] = "--engine"; raw[#raw + 1] = arg[i]
+  elseif a == "--smoke" then
+    -- Rauchtest fuer Zwischenschritte: eine typische Zelle, wenige Laeufe
+    opts.mode = "cell"; opts.engine = "spiel"; opts.n = 10; opts.runs = 20
+    opts.agent = "typisch"
   elseif a == "--n" then i = i + 1; opts.n = tonumber(arg[i]); raw[#raw + 1] = "--n"; raw[#raw + 1] = arg[i]
   elseif a == "--runs" then i = i + 1; opts.runs = tonumber(arg[i]); raw[#raw + 1] = "--runs"; raw[#raw + 1] = arg[i]
   elseif a == "--walk" or a == "--penalty" then
@@ -72,17 +81,40 @@ end
 -- waehrend die Wahrheit im Modell 14 war — Spot-Checks liefen daneben.
 opts.walk = opts.walk or model.walk_time()
 
-local function run_cell(agent, n, walk, crits, runs, cell_seed)
-  local results = {}
-  for r = 1, runs do
-    results[r] = engine.run_try({
-      n = n, walk = walk, crits = crits, agent = agent,
-      seed = cell_seed + r, log = false,
-    })
+assert(opts.engine == "1d" or opts.engine == "spiel",
+  "--engine erwartet 1d oder spiel, bekam: " .. tostring(opts.engine))
+local SPIEL = opts.engine == "spiel"
+local NAMES = SPIEL and report.NAMES_SPIEL or report.NAMES_1D
+opts.agent = opts.agent or NAMES.good
+
+-- Ein Lauf. Die Spielsim liefert Listen (Lebensdauern, Tritt-Latenzen);
+-- die werden hier zu Kennzahlen verdichtet, damit ein Kindprozess keine
+-- Hunderte Zahlen je Lauf serialisieren muss.
+local function run_one(agent, n, walk, crits, seed)
+  if SPIEL then
+    local r = gamerun.run_try({ n = n, crits = crits, profile = agent,
+                                seed = seed, log = false })
+    r.life = report.compact_life(r.lifetimes)
+    r.kick = report.compact_list(r.kick_latencies)
+    r.lifetimes, r.kick_latencies = nil, nil
+    return r
   end
+  return engine.run_try({ n = n, walk = walk, crits = crits, agent = agent,
+                          seed = seed, log = false })
+end
+
+local function summarize_cell(results, n)
   local s = report.summarize(results)
   s.diag = report.diagnostics(results, n)
   return s
+end
+
+local function run_cell(agent, n, walk, crits, runs, cell_seed)
+  local results = {}
+  for r = 1, runs do
+    results[r] = run_one(agent, n, walk, crits, cell_seed + r)
+  end
+  return summarize_cell(results, n)
 end
 
 local function pct(x) return string.format("%.1f%%", x * 100) end
@@ -92,7 +124,8 @@ if opts.mode == "cell" then
   local s = run_cell(opts.agent, opts.n, opts.walk, opts.crits == "on",
                      opts.runs, opts.seed * 1000000)
   io.write(string.format(
-    "Zelle: agent=%s N=%d laufweg=%ds (Gesamtstrafe %.0fs) crits=%s runs=%d\n",
+    "Zelle [%s]: agent=%s N=%d laufweg=%ds (Gesamtstrafe %.0fs) crits=%s runs=%d\n",
+    SPIEL and "Spielsim" or "1D-Sim",
     opts.agent, opts.n, opts.walk,
     model.respawn_timer(opts.n) + opts.walk, opts.crits, s.runs))
   io.write(string.format("  Siegquote        %s (+/- %.1f pp)\n",
@@ -109,6 +142,20 @@ if opts.mode == "cell" then
   io.write(string.format("  Charges          %.1f/Lauf\n", s.charges / s.runs))
   io.write(string.format("  Abbrueche        %d von %d Laeufen (Kein-Kontakt)\n",
     s.resets, s.runs))
+  if s.mean_life then
+    io.write(string.format("  Lebensdauer      Mittel %.1f s, %s der Leben unter %d s\n",
+      s.mean_life, pct(s.short_life_share), report.SHORT_LIFE))
+    io.write(string.format("  Fress-Heilung    %.0f je Lauf gegen %.0f Raidschaden\n",
+      s.eat_heal / s.runs, s.dmg_sum / s.runs))
+  end
+  if s.mean_kick_latency then
+    io.write(string.format("  Tritt-Latenz     %.1f s (Mittel, nur getretene Kanaele)\n",
+      s.mean_kick_latency))
+  end
+  local reasons = {}
+  for k, v in pairs(s.reasons) do reasons[#reasons + 1] = k .. "=" .. v end
+  table.sort(reasons)
+  if #reasons > 0 then io.write("  Ausgaenge        " .. table.concat(reasons, " ") .. "\n") end
   if s.diag then
     io.write(string.format("  Lebensdauer am Boss (Mittel) %.1f s (GDD-Modell: 5-15 s)\n",
       s.diag.mean_life))
@@ -128,9 +175,12 @@ local NS = { 5, 10, 20, 40 }
 -- jetzt den 2-s-Wiederbelebungskanal mitrechnet (16 s statt 14). Die
 -- Zellindizes und damit die Seeds bleiben; die Welten sind trotzdem andere
 -- als vor Runde 20 — Vergleiche mit aelteren Berichten nur mit Vorbehalt.
-local WALKS = { 12, 16, 20, 24 }
-local AGENTS = { "unkoordiniert", "koordiniert", "turtle" }
 local QUICK_WALK = 16 -- = model.walk_time(), per Test festgenagelt
+-- Die Spielsim hat keine Laufweg-Achse: der Weg ist echte Geometrie
+-- (game/data/map.lua). Ihre Matrix ist N x Krits x Profil.
+local WALKS = SPIEL and { QUICK_WALK } or { 12, 16, 20, 24 }
+local AGENTS = SPIEL and { "kopflos", "typisch", "turtle" }
+                     or { "unkoordiniert", "koordiniert", "turtle" }
 
 local all_cells, cells_for_run = {}, {}
 do
@@ -153,13 +203,34 @@ do
   end
 end
 
+local function cell_seed(c) return opts.seed * 1000000 + c.idx * 10000000 end
+
 local function compute(subset, progress)
   local out = {}
   for k, c in ipairs(subset) do
-    local s = run_cell(c.agent, c.n, c.walk, c.crits, opts.runs,
-                       opts.seed * 1000000 + c.idx * 10000000)
+    local s = run_cell(c.agent, c.n, c.walk, c.crits, opts.runs, cell_seed(c))
     out[c.idx] = s
     if progress then progress(k, #subset, c, s) end
+  end
+  return out
+end
+
+-- Kindmodus (Runde 20): Sharding nach LAUFINDEX statt Zellindex. Kind k
+-- rechnet in JEDER Zelle die Laeufe r mit (r-1) % parts == k-1. Vorher bekam
+-- jedes Kind ganze Zellen, und eine N=40-Zelle kostet das Achtfache einer
+-- N=5-Zelle — alle warteten auf ein Kind. Der Seed haengt an (Zelle, r),
+-- seriell und parallel bleiben bitgleich.
+local function compute_part(part, parts, progress)
+  local out = {}
+  for k, c in ipairs(cells_for_run) do
+    local mine = {}
+    for r = 1, opts.runs do
+      if (r - 1) % parts == part - 1 then
+        mine[r] = run_one(c.agent, c.n, c.walk, c.crits, cell_seed(c) + r)
+      end
+    end
+    out[c.idx] = mine
+    if progress then progress(k, #cells_for_run, c, mine) end
   end
   return out
 end
@@ -191,14 +262,13 @@ local function serialize(v)
 end
 
 if opts.part then
-  local mine = {}
-  for k, c in ipairs(cells_for_run) do
-    if (k - 1) % opts.parts == (opts.part - 1) then mine[#mine + 1] = c end
-  end
-  local res = compute(mine, function(k, total, c, s)
-    note(string.format("  [Teil %d] %d/%d  %-13s N=%2d krits=%-3s  sieg=%s\n",
+  local t0 = os.clock()
+  local res = compute_part(opts.part, opts.parts, function(k, total, c, mine)
+    local wins, runs = 0, 0
+    for _, r in pairs(mine) do runs = runs + 1; if r.win then wins = wins + 1 end end
+    note(string.format("  [Teil %d] %d/%d  %-13s N=%2d krits=%-3s  %d/%d Siege  (%.0f s)\n",
       opts.part, k, total, c.agent, c.n, c.crits and "an" or "aus",
-      pct(s.win_rate)))
+      wins, runs, os.clock() - t0))
   end)
   io.write("return ", serialize(res), "\n")
   os.exit(0)
@@ -245,7 +315,8 @@ if opts.jobs > 1 then
     handles[k] = assert(io.popen(child_command(k, jobs), "r"),
                         "Kindprozess liess sich nicht starten")
   end
-  merged = {}
+  -- Laeufe je Zelle aus allen Kindern zusammenfuehren, dann verdichten
+  local raw_by_cell = {}
   for k = 1, jobs do
     local text = handles[k]:read("*a") or ""
     handles[k]:close()
@@ -254,7 +325,25 @@ if opts.jobs > 1 then
       io.write("Teil ", k, " lieferte keine Tabelle:\n", text:sub(1, 500), "\n")
       os.exit(3)
     end
-    for idx, s in pairs(chunk()) do merged[idx] = s end
+    for idx, runs in pairs(chunk()) do
+      raw_by_cell[idx] = raw_by_cell[idx] or {}
+      for r, res in pairs(runs) do raw_by_cell[idx][r] = res end
+    end
+  end
+  merged = {}
+  for _, c in ipairs(cells_for_run) do
+    local list = raw_by_cell[c.idx]
+    if list then
+      local ordered = {}
+      for r = 1, opts.runs do
+        if not list[r] then
+          io.write("Zelle ", c.idx, ": Lauf ", r, " fehlt — Lauf abgebrochen.\n")
+          os.exit(3)
+        end
+        ordered[r] = list[r]
+      end
+      merged[c.idx] = summarize_cell(ordered, c.n)
+    end
   end
 else
   merged = compute(cells_for_run, function(k, total, c, s)
@@ -300,7 +389,7 @@ if opts.mode == "sweep" then
   end
 end
 
-local f = report.evaluate(cells, best_walk, NS)
+local f = report.evaluate(cells, best_walk, NS, NAMES)
 
 -- ---------------------------------------------------------------------------
 -- Markdown-Bericht
@@ -319,7 +408,11 @@ local function pctci(s)
     report.ci95(s.win_rate, s.runs) * 100)
 end
 
-if opts.mode == "quick" then
+if SPIEL then
+  w("# Richtungstest — Spielsimulation (%s)\n", opts.date)
+  w("%d Laeufe je Zelle, %d Zellen: N x Krits x Bot-Profil (typisch = der Raid, gegen den balanciert wird; kopflos = Gegenprobe; turtle = Anti-Stall-Gate). Die Spielsim game/gamesim laeuft headless in reinem LuaJIT (sim/gamerun.lua, Runde 20); der Laufweg ist echte Kartengeometrie, kein Parameter.\n",
+    opts.runs, #cells_for_run)
+elseif opts.mode == "quick" then
   w("# Richtungstest — Headless-Sim (%s)\n", opts.date)
   w("%d Laeufe je Zelle, %d Zellen: N x Krits x Agent bei festem Laufweg %d s (= model.walk_time(), seit Runde 6 per Rob-Entscheid fest, #96). Deckt F1-F6 und das Turtle-Gate ab; die volle Matrix variiert zusaetzlich den Laufweg und liefert nur Belegmatrizen.\n",
     opts.runs, #cells_for_run, best_walk)
@@ -337,8 +430,8 @@ w("\n## F-Kriterien (GDD 13.3) bei Laufweg %d s\n", best_walk)
 w("| # | Kriterium | Ergebnis | Detail |")
 w("|---|---|---|---|")
 local names = {
-  "F1 koordiniert gewinnt zuverlaessig (60-90 %)",
-  "F2 unkoordiniert verliert meist (<= 35 %)",
+  "F1 " .. NAMES.good .. " gewinnt zuverlaessig (60-90 %)",
+  "F2 " .. NAMES.bad .. " verliert meist (<= 35 %)",
   "F3 Fressen ist der Hebel (<= 10 % ohne Unterbrechung)",
   "F4 Krits entscheiden nichts (<= 5 pp)",
   "F5 Median-Siegtry 6-13 min",
@@ -369,11 +462,11 @@ for _, agent in ipairs(AGENTS) do
   end
 end
 
-w("\n## Kennzahlen koordiniert (Krits an, Laufweg %d s)\n", best_walk)
+w("\n## Kennzahlen %s (Krits an, Laufweg %d s)\n", NAMES.good, best_walk)
 w("| N | Siegquote | Median-Siegtry | Uptime | Tode/Lauf | Fress-Kanaele | unterbrochen | Charges |")
 w("|---|---|---|---|---|---|---|---|")
 for _, n in ipairs(NS) do
-  local s = cells["koordiniert"][n][best_walk]["an"]
+  local s = cells[NAMES.good][n][best_walk]["an"]
   w("| %d | %s | %s | %s | %.1f | %.2f | %s | %.1f |",
     n, pctci(s),
     s.median_win_duration and string.format("%.1f min", s.median_win_duration / 60) or "-",
@@ -381,12 +474,30 @@ for _, n in ipairs(NS) do
     pct(s.eat_interrupted / math.max(1, s.eat_channels)), s.charges / s.runs)
 end
 
-w("\n## Klassenverteilung der Sieglaeufe (koordiniert, alle Zellen)\n")
+if SPIEL then
+  w("\n## Sterben und Fressen %s (Krits an)\n", NAMES.good)
+  w("| N | Lebensdauer (Mittel) | Leben < %d s | Tritt-Latenz | Fress-Heilung/Lauf | Raidschaden/Lauf | Klassenwechsel/Lauf | Ausgaenge |", report.SHORT_LIFE)
+  w("|---|---|---|---|---|---|---|---|")
+  for _, n in ipairs(NS) do
+    local s = cells[NAMES.good][n][best_walk]["an"]
+    local reasons = {}
+    for k, v in pairs(s.reasons) do reasons[#reasons + 1] = k .. " " .. v end
+    table.sort(reasons)
+    w("| %d | %s | %s | %s | %.0f | %.0f | %.1f | %s |",
+      n, s.mean_life and string.format("%.1f s", s.mean_life) or "-",
+      s.short_life_share and pct(s.short_life_share) or "-",
+      s.mean_kick_latency and string.format("%.1f s", s.mean_kick_latency) or "-",
+      s.eat_heal / s.runs, s.dmg_sum / s.runs, s.class_changes / s.runs,
+      table.concat(reasons, ", "))
+  end
+end
+
+w("\n## Klassenverteilung der Sieglaeufe (%s, alle Zellen)\n", NAMES.good)
 local class_totals, total = {}, 0
 for _, n in ipairs(NS) do
   for _, wv in ipairs(walks_shown) do
     for _, ck in ipairs({ "an", "aus" }) do
-      for cl, k in pairs(cells["koordiniert"][n][wv][ck].class_wins) do
+      for cl, k in pairs(cells[NAMES.good][n][wv][ck].class_wins) do
         class_totals[cl] = (class_totals[cl] or 0) + k
         total = total + k
       end

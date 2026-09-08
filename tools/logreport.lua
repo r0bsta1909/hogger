@@ -77,68 +77,123 @@ local function new_try(nr, n, tick)
   return {
     nr = nr, n = n, t0 = tick, deaths = 0, causes = {},
     dmg_hogger = 0, dmg_mobs = 0, dmg_taken = 0, heal = 0,
+    eat_start = 0, eat_heal = 0,
     eat_interrupt = 0, eat_complete = 0, complete_with_rogue = 0,
-    charges = 0, crit_kills = 0, heal_aggro = 0,
+    charges = 0, crit_kills = 0, heal_aggro = 0, class_changes = 0,
     interrupts_by = {}, dmg_by = {}, deaths_by = {}, last_heal_t = {},
+    -- Runde 20: Lebensdauer je Leben (Wiederbelebung -> Tod, Sekunden) —
+    -- die Messgroesse hinter F7 ("wiederbeleben, um sofort zu sterben")
+    lifetimes = {},
+    -- Tritt-Latenz je Kanal (Kanalbeginn -> Tritt, Sekunden); ein
+    -- durchgegangener Kanal steht hier nicht, er zaehlt in eat_complete
+    kick_latencies = {},
   }
 end
 
--- iter: Iterator ueber Zeilen (z. B. datei:lines() oder ipairs-Wrapper)
+-- iter: Iterator ueber Zeilen (z. B. datei:lines() oder ipairs-Wrapper).
+-- Zeile -> parse -> analyse_events; die Sim (sim/gamerun.lua) speist ihre
+-- Ereignistabellen direkt ein, damit ein gespielter Abend und ein Sim-Lauf
+-- durch DIESELBE Auswertung gehen (Runde 20, eine Wahrheit pro Frage).
 function M.analyse(iter)
-  local trys, cur = {}, nil
-  local class_of, alive = {}, {}
-  local params, seed = {}, nil
-  local lines_total, lines_bad = 0, 0
+  local bad = 0
+  local function next_event()
+    for line in iter do
+      local e = M.parse(line)
+      if e then return e end
+      bad = bad + 1
+    end
+    return nil
+  end
+  local r = M.analyse_events(next_event)
+  r.lines_total = r.lines_total + bad
+  r.lines_bad = bad
+  return r
+end
 
-  for line in iter do
+-- next_event: Funktion, die je Aufruf das naechste Ereignis (Tabelle im
+-- 17.3-Schema) oder nil liefert. Alternativ eine Liste von Ereignissen.
+function M.analyse_events(next_event)
+  if type(next_event) == "table" then
+    local list, i = next_event, 0
+    next_event = function() i = i + 1; return list[i] end
+  end
+  local trys, cur = {}, nil
+  local class_of, alive, alive_since = {}, {}, {}
+  local players_seen = {}
+  local params, seed = {}, nil
+  local lines_total = 0
+
+  for e in next_event do
     lines_total = lines_total + 1
-    local e = M.parse(line)
-    if not e then
-      lines_bad = lines_bad + 1
-    elseif e.ev == "try_start" then
+    -- Kennungen kommen aus dem Log als Text; die Sim liefert Zahlen
+    local src = e.src ~= nil and tostring(e.src) or nil
+    local dst = e.dst ~= nil and tostring(e.dst) or nil
+    if e.ev == "try_start" then
       if cur then trys[#trys + 1] = cur end
-      cur = new_try(tonumber(e.dst) or (#trys + 1), e.val, e.t)
-    elseif e.ev == "param_change" and e.dst then
-      if e.dst == "seed" then seed = e.val else params[e.dst] = e.val end
+      cur = new_try(tonumber(dst) or (#trys + 1), e.val, e.t)
+    elseif e.ev == "param_change" and dst then
+      if dst == "seed" then seed = e.val else params[dst] = e.val end
     elseif cur then
       if e.ev == "revive" then
-        class_of[e.src] = e.dst or class_of[e.src]
-        alive[e.src] = true
+        class_of[src] = dst or class_of[src]
+        alive[src] = true
+        alive_since[src] = e.t
+        players_seen[src] = true
       elseif e.ev == "class_change" then
-        class_of[e.src] = e.dst or class_of[e.src]
+        if class_of[src] and class_of[src] ~= dst then
+          cur.class_changes = cur.class_changes + 1
+        end
+        class_of[src] = dst or class_of[src]
       elseif e.ev == "spawn" then
-        alive[e.src] = true
+        alive[src] = true
+        players_seen[src] = true
       elseif e.ev == "death" then
-        alive[e.src] = false
+        alive[src] = false
+        players_seen[src] = true
+        if alive_since[src] then
+          cur.lifetimes[#cur.lifetimes + 1] = (e.t - alive_since[src]) * M.TICK
+          alive_since[src] = nil
+        end
         cur.deaths = cur.deaths + 1
         local c = M.CAUSE_DE[e.val or 0] or "unbekannt"
         cur.causes[c] = (cur.causes[c] or 0) + 1
-        cur.deaths_by[e.src] = (cur.deaths_by[e.src] or 0) + 1
-        local lh = cur.last_heal_t[e.src]
+        cur.deaths_by[src] = (cur.deaths_by[src] or 0) + 1
+        local lh = cur.last_heal_t[src]
         if lh and (e.t - lh) * M.TICK < 5 then
           cur.heal_aggro = cur.heal_aggro + 1
         end
       elseif e.ev == "damage" then
         local v = e.val or 0
-        if e.dst == "hogger" then
+        if dst == "hogger" then
           cur.dmg_hogger = cur.dmg_hogger + v
-          cur.dmg_by[e.src] = (cur.dmg_by[e.src] or 0) + v
-        elseif e.src == "hogger" or e.art == "mob" or e.art == "add" then
+          cur.dmg_by[src] = (cur.dmg_by[src] or 0) + v
+        elseif src == "hogger" or e.art == "mob" or e.art == "add" then
           cur.dmg_taken = cur.dmg_taken + v
         else
           cur.dmg_mobs = cur.dmg_mobs + v
-          cur.dmg_by[e.src] = (cur.dmg_by[e.src] or 0) + v
+          cur.dmg_by[src] = (cur.dmg_by[src] or 0) + v
         end
       elseif e.ev == "heal" then
         cur.heal = cur.heal + (e.val or 0)
-        if e.dst then cur.last_heal_t[e.dst] = e.t end
+        if dst then cur.last_heal_t[dst] = e.t end
+      elseif e.ev == "eat_start" then
+        cur.eat_start = cur.eat_start + 1
+        cur.eat_t0 = e.t
+      elseif e.ev == "eat_tick" then
+        -- Hoggers Fress-Heilung: das, was der Raid zurueckholen muss
+        cur.eat_heal = cur.eat_heal + (e.val or 0)
       elseif e.ev == "eat_interrupt" then
         cur.eat_interrupt = cur.eat_interrupt + 1
-        if e.dst then
-          cur.interrupts_by[e.dst] = (cur.interrupts_by[e.dst] or 0) + 1
+        if cur.eat_t0 then
+          cur.kick_latencies[#cur.kick_latencies + 1] = (e.t - cur.eat_t0) * M.TICK
+          cur.eat_t0 = nil
+        end
+        if dst then
+          cur.interrupts_by[dst] = (cur.interrupts_by[dst] or 0) + 1
         end
       elseif e.ev == "eat_complete" then
         cur.eat_complete = cur.eat_complete + 1
+        cur.eat_t0 = nil
         -- Die offene Frage aus Runde 12: lebte ein Schurke, als das
         -- Fressen durchging? Dann wurde der Tritt nicht gespielt.
         for pid, cls in pairs(class_of) do
@@ -152,13 +207,20 @@ function M.analyse(iter)
       elseif e.ev == "crit_kill" then
         cur.crit_kills = cur.crit_kills + 1
       elseif e.ev == "hogger_reset" then
-        cur.reset = e.dst
+        cur.reset = dst
         cur.rest_hp = e.val
       elseif e.ev == "try_end" then
         cur.won = (e.val or 0) >= 1
         cur.reason = e.reason
-        cur.rest_hp = cur.rest_hp or tonumber(e.dst)
+        cur.rest_hp = cur.rest_hp or tonumber(dst)
         cur.dauer = (e.t - cur.t0) * M.TICK
+        -- Wer beim Try-Ende noch lebt, hat sein Leben nicht "beendet": es
+        -- zaehlt trotzdem, sonst waeren die Ueberlebenden unsichtbar und
+        -- die mittlere Lebensdauer ein Kurz-Leben-Mass.
+        for pid, t0 in pairs(alive_since) do
+          cur.lifetimes[#cur.lifetimes + 1] = (e.t - t0) * M.TICK
+          alive_since[pid] = nil
+        end
         trys[#trys + 1] = cur
         cur = nil
       end
@@ -167,9 +229,12 @@ function M.analyse(iter)
   if cur then cur.dauer = 0; trys[#trys + 1] = cur end
 
   -- Summen
-  local sum = { deaths = 0, eat_interrupt = 0, eat_complete = 0,
+  local sum = { deaths = 0, eat_start = 0, eat_heal = 0,
+                eat_interrupt = 0, eat_complete = 0,
                 complete_with_rogue = 0, dmg_hogger = 0, dmg_mobs = 0,
-                charges = 0, heal_aggro = 0, crit_kills = 0 }
+                charges = 0, heal_aggro = 0, crit_kills = 0,
+                class_changes = 0 }
+  local lifetimes, kick_latencies = {}, {}
   local causes, dmg_by, int_by, deaths_by = {}, {}, {}, {}
   local wins, aborts, total_time, win_durations = 0, 0, 0, {}
   for _, t in ipairs(trys) do
@@ -181,6 +246,18 @@ function M.analyse(iter)
     for p, v in pairs(t.dmg_by) do dmg_by[p] = (dmg_by[p] or 0) + v end
     for p, v in pairs(t.interrupts_by) do int_by[p] = (int_by[p] or 0) + v end
     for p, v in pairs(t.deaths_by) do deaths_by[p] = (deaths_by[p] or 0) + v end
+    for _, v in ipairs(t.lifetimes) do lifetimes[#lifetimes + 1] = v end
+    for _, v in ipairs(t.kick_latencies) do kick_latencies[#kick_latencies + 1] = v end
+  end
+
+  -- Raidgroesse: try_start.val ist die Skalierung beim Try-Start — bei
+  -- #215-Logs stand dort eine 1, obwohl dreissig Leute spielten. Wer
+  -- wirklich gespielt hat, zaehlt man an den Kennungen ab (Runde 20).
+  -- Leeroy ist immer Spieler 1: host.lua und sim/gamerun.lua rufen
+  -- world.add_leeroy vor dem ersten add_player. Er zaehlt nie in N (GDD 6).
+  local seen = 0
+  for pid in pairs(players_seen) do
+    if pid ~= "1" then seen = seen + 1 end
   end
 
   return {
@@ -188,9 +265,27 @@ function M.analyse(iter)
     interrupts_by = int_by, deaths_by = deaths_by, class_of = class_of,
     params = params, seed = seed, wins = wins, aborts = aborts,
     total_time = total_time, win_durations = win_durations,
-    lines_total = lines_total, lines_bad = lines_bad,
+    lifetimes = lifetimes, kick_latencies = kick_latencies,
+    lines_total = lines_total, lines_bad = 0,
     n_try = #trys, raid_n = trys[1] and trys[1].n or 0,
+    players_seen = seen,
   }
+end
+
+-- Lebensdauer-Kennzahlen (Runde 20, F7): Mittel und Anteil der Leben unter
+-- `short` Sekunden. Ohne Leben: nil — nicht 0, sonst liest jemand "alle
+-- sterben sofort", wo niemand gestorben ist.
+function M.life_stats(lifetimes, short)
+  short = short or 10
+  local n = #lifetimes
+  if n == 0 then return nil end
+  local sum, shorts = 0, 0
+  for _, v in ipairs(lifetimes) do
+    sum = sum + v
+    if v < short then shorts = shorts + 1 end
+  end
+  return { mean = sum / n, short_share = shorts / n, count = n,
+           median = M.median(lifetimes) }
 end
 
 function M.median(list)
