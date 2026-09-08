@@ -169,6 +169,8 @@ do
   T.eq(bot.choose_class(st, g), "warrior", "bedarf: alles gedeckt -> Klasse behalten")
   local t = bot.role_targets(40)
   T.ok(t.rogue == 4 and t.healer == 7 and t.ranged == 14, "bedarf: Rollenziele bei N=40")
+  local t5 = bot.role_targets(5)
+  T.ok(t5.rogue == 2 and t5.healer == 2 and t5.ranged == 2, "bedarf: bei N=5 zwei Schurken, zwei Heiler")
 end
 
 -- Zwei Geister ziehen in pid-Reihenfolge: nicht beide dieselbe Luecke
@@ -203,7 +205,7 @@ do
   local p = st.players[2]
   h.eating = { phase = "channel", t_left = 6 }
   local d = bot.decide(st, p.id)
-  T.ok(d.kick == true, "kopflos: tritt ohne Reaktionszeit")
+  T.ok(not d.kick, "kopflos: ignoriert das Fressen (unkoordinierter Raid, GDD 17.2)")
   T.eq(p.brain and p.brain.profile, "kopflos", "kopflos: Profil am Gehirn")
   p.alive, p.ghost, p.class = false, true, nil
   d = bot.decide(st, p.id)

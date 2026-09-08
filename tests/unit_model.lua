@@ -14,10 +14,13 @@ local table93 = {
   -- auf 16 min verlaengerte Frist); Cleave = ceil(N/6); Respawn FEST 10 s
   -- (Rob-Entscheid Runde 6, #96). Die Unterbrecher-Spalte fiel mit
   -- Runde 12 (#140): unterbrechen kann nur noch der Schurken-Tritt.
-  { 5,   1675,  201,   1, 0, 10 },
-  { 10,  5100,  612,   2, 1, 10 },
-  { 20, 12400,  1488,  4, 2, 10 },
-  { 40, 28800,  3456,  7, 5, 10 },
+  -- Runde 20 (Kalibrierung auf den typischen Raid, GDD 17.9): HP =
+  -- 6 N^2 + 640 N - 600, Fress-Heilung 8 % je Kanal (0,010 x 8 s),
+  -- Cleave = ceil(N/8)
+  { 5,   2750,  220,   1, 0, 10 },
+  { 10,  6400,  512,   2, 1, 10 },
+  { 20, 14600,  1168,  3, 2, 10 },
+  { 40, 34600,  2768,  5, 5, 10 },
 }
 for _, row in ipairs(table93) do
   local n = row[1]
@@ -32,8 +35,8 @@ T.eq(M.eat_interrupters, nil,
 
 -- GDD 9.3: HP-Untergrenze 120 x N unterhalb der Design-Spanne --------------
 T.eq(M.hogger_hp(1), 120, "9.3 HP-Untergrenze N=1 (Solo-Wartelobby)")
-T.eq(M.hogger_hp(2), 240, "9.3 HP-Untergrenze N=2")
-T.eq(M.hogger_hp(4), 1008, "9.3 Formel greift ab N=4 (slope 640, Runde 17)")
+T.eq(M.hogger_hp(2), 704, "9.3 Formel greift ab N=2 (Sockel 600, Runde 20)")
+T.eq(M.hogger_hp(4), 2056, "9.3 Formel bei N=4 (quad 6, slope 640, Sockel 600)")
 
 -- GDD 7.2: Mob-Slots -------------------------------------------------------
 T.eq(M.mob_slots(5), 5, "7.2 Mob-Slots N=5")
@@ -92,10 +95,11 @@ T.eq(M.p("mana_regen_rate"), 10, "8.1 Fuenf-Sekunden-Regel: 10 Mana/s")
 T.eq(M.p("five_sec_rule_wait"), 5, "8.1 Fuenf-Sekunden-Regel: 5 s Wartezeit")
 
 -- GDD 8.1: HP nach Ruestungsklasse ----------------------------------------
+-- Runde 20: +30 % (80/65/50 -> 105/85/65), dritter F7-Hebel
 local expected_hp = {
-  warrior = 80, paladin = 80,
-  hunter = 65, rogue = 65, druid = 65,
-  priest = 50, mage = 50, warlock = 50,
+  warrior = 105, paladin = 105,
+  hunter = 85, rogue = 85, druid = 85,
+  priest = 65, mage = 65, warlock = 65,
 }
 for class_id, hp in pairs(expected_hp) do
   T.eq(M.hp_for_class(class_id), hp, "8.1 HP " .. class_id)

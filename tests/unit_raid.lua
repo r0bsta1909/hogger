@@ -3,16 +3,20 @@
 -- Restsekunden der Toten, Leeroy-Markierung.
 
 local render = require("game.render")
+local model = require("sim.model")
+-- HP aus dem Modell, nicht hingeschrieben (Runde 17/20-Lehre)
+local FULL_P = model.hp_for_class("priest")
+local HALF_W = model.hp_for_class("warrior") / 2
 
 local view = {
   me = 1,
   names = { [1] = "Rob", [2] = "Leeroy", [3] = "Zora", [4] = "Anna" },
   players = {
-    [1] = { alive = true, ghost = false, class = "warrior", hp = 40 },
+    [1] = { alive = true, ghost = false, class = "warrior", hp = HALF_W },
     [2] = { alive = false, ghost = false, class = "warrior",
             is_leeroy = true, dead_rest = 12 },
     [3] = { alive = false, ghost = true, class = "mage" },
-    [4] = { alive = true, ghost = false, class = "priest", hp = 50 },
+    [4] = { alive = true, ghost = false, class = "priest", hp = FULL_P },
   },
 }
 
@@ -27,8 +31,8 @@ T.eq(rows[2].name, "Rob", "raid: zweiter Lebender")
 T.eq(rows[3].status, "geist", "raid: Geister nach den Lebenden")
 T.eq(rows[4].status, "tot", "raid: Tote zuletzt")
 
-T.eq(rows[1].detail, 100, "raid: Priester mit 50/50 HP = 100 %")
-T.eq(rows[2].detail, 50, "raid: Krieger mit 40/80 HP = 50 %")
+T.eq(rows[1].detail, 100, "raid: Priester mit vollen HP = 100 %")
+T.eq(rows[2].detail, 50, "raid: Krieger mit halben HP = 50 %")
 T.eq(rows[4].detail, 12, "raid: Tote zeigen Restsekunden bis zur Freigabe")
 T.ok(rows[4].leeroy, "raid: Leeroy ist markiert")
 

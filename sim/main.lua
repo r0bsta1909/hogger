@@ -5,8 +5,12 @@
 -- + Anmarsch, 16 s); ohne Angabe kommt er aus model.walk_time(). Die
 -- Gesamtstrafe ist respawn_timer(N) + Laufweg (GDD 9.3 + 7.1).
 --
--- RICHTUNGSTEST (Standard-Gate seit Runde 14, ADR 004):
---              lua sim/main.lua --quick --jobs 10 [--out reports/x.md]
+-- RICHTUNGSTEST (Standard-Gate seit Runde 14, ADR 004; seit Runde 20 auf
+-- der Spielsimulation, --engine spiel):
+--              lua sim/main.lua --engine spiel --quick --jobs 10 [--out ...]
+--   16 Zellen (N x Profil, Krits-aus nur fuer typisch), 50 Laeufe je Zelle,
+--   ~7 min; deckt F1-F7 und das Turtle-Gate ab. 100 Laeufe (~14 min) auf Ansage.
+--   1D-Sim (bis zur Ausmusterung): lua sim/main.lua --quick --jobs 10
 --   24 Zellen bei festem Laufweg, deckt F1-F6 und das Turtle-Gate ab.
 -- VOLLE MATRIX (nur vor Releases oder auf Ansage):
 --              lua sim/main.lua --sweep --runs 1000 --jobs 10 [--out ...]
@@ -46,12 +50,16 @@ while i <= #arg do
   if a == "--sweep" then opts.mode = "sweep"; raw[#raw + 1] = a
   elseif a == "--quick" then opts.mode = "quick"; raw[#raw + 1] = a
   elseif a == "--engine" then i = i + 1; opts.engine = arg[i]; raw[#raw + 1] = "--engine"; raw[#raw + 1] = arg[i]
+  -- Rasterpunkte fuer die Kalibrierung (Runde 20): nur bestimmte Profile
+  -- und nur Krits-an-Zellen — ein Rasterpunkt kostet sonst das Sechsfache
+  elseif a == "--only" then i = i + 1; opts.only = arg[i]; raw[#raw + 1] = "--only"; raw[#raw + 1] = arg[i]
+  elseif a == "--crits-only" then opts.crits_only = true; raw[#raw + 1] = a
   elseif a == "--smoke" then
     -- Rauchtest fuer Zwischenschritte: eine typische Zelle, wenige Laeufe
     opts.mode = "cell"; opts.engine = "spiel"; opts.n = 10; opts.runs = 20
     opts.agent = "typisch"
   elseif a == "--n" then i = i + 1; opts.n = tonumber(arg[i]); raw[#raw + 1] = "--n"; raw[#raw + 1] = arg[i]
-  elseif a == "--runs" then i = i + 1; opts.runs = tonumber(arg[i]); raw[#raw + 1] = "--runs"; raw[#raw + 1] = arg[i]
+  elseif a == "--runs" then i = i + 1; opts.runs = tonumber(arg[i]); opts.runs_given = true; raw[#raw + 1] = "--runs"; raw[#raw + 1] = arg[i]
   elseif a == "--walk" or a == "--penalty" then
     i = i + 1; opts.walk = tonumber(arg[i]); raw[#raw + 1] = "--walk"; raw[#raw + 1] = arg[i]
   elseif a == "--crits" then i = i + 1; opts.crits = arg[i]; raw[#raw + 1] = "--crits"; raw[#raw + 1] = arg[i]
@@ -81,6 +89,12 @@ end
 -- waehrend die Wahrheit im Modell 14 war — Spot-Checks liefen daneben.
 opts.walk = opts.walk or model.walk_time()
 
+-- Richtungstest der Spielsim (Runde 20): 16 Zellen x 50 Laeufe ~ 7 min mit
+-- --jobs 10 (+/-14 pp je Quote — Richtung, kein Feinmass). 100 Laeufe
+-- (+/-10 pp) kosten gemessen 878 s und laufen nur auf Ansage (ADR 004).
+if opts.engine == "spiel" and opts.mode == "quick" and not opts.runs_given then
+  opts.runs = 50
+end
 assert(opts.engine == "1d" or opts.engine == "spiel",
   "--engine erwartet 1d oder spiel, bekam: " .. tostring(opts.engine))
 local SPIEL = opts.engine == "spiel"
@@ -197,9 +211,19 @@ do
     end
   end
   for _, c in ipairs(all_cells) do
-    if opts.mode == "sweep" or c.walk == QUICK_WALK then
-      cells_for_run[#cells_for_run + 1] = c
+    local wanted = opts.mode == "sweep" or c.walk == QUICK_WALK
+    -- Spielsim-Richtungstest (Runde 20): Krits-aus nur fuer den guten Raid
+    -- (F4 vergleicht seine beiden Welten). Kopflos und Turtle laufen immer
+    -- die vollen 16 Minuten; ihre Krits-aus-Zellen kosteten ein Drittel der
+    -- Laufzeit und trugen kein Kriterium. 16 Zellen x 100 Laeufe ~ 7 min.
+    if SPIEL and opts.mode == "quick" and not c.crits and c.agent ~= NAMES.good then
+      wanted = false
     end
+    if opts.only and not (("," .. opts.only .. ","):find("," .. c.agent .. ",", 1, true)) then
+      wanted = false
+    end
+    if opts.crits_only and not c.crits then wanted = false end
+    if wanted then cells_for_run[#cells_for_run + 1] = c end
   end
 end
 
@@ -446,7 +470,12 @@ w("| T | Turtle verliert per Zeitlimit (> 95 %%) | %s | %s |",
   f.turtle.ok and "BESTANDEN" or "**VERLETZT**", f.turtle.detail)
 
 local walks_shown = (opts.mode == "sweep") and WALKS or { best_walk }
+local function have(agent, n, wv, ck)
+  return cells[agent] and cells[agent][n] and cells[agent][n][wv]
+         and cells[agent][n][wv][ck]
+end
 for _, agent in ipairs(AGENTS) do
+  if cells[agent] then
   w("\n## Siegquoten %s (Krits an)\n", agent)
   local header = "| N \\ Laufweg |"
   local sep = "|---|"
@@ -458,9 +487,11 @@ for _, agent in ipairs(AGENTS) do
   for _, n in ipairs(NS) do
     local row = string.format("| %d |", n)
     for _, wv in ipairs(walks_shown) do
-      row = row .. string.format(" %s |", pctci(cells[agent][n][wv]["an"]))
+      local s = have(agent, n, wv, "an")
+      row = row .. string.format(" %s |", s and pctci(s) or "-")
     end
     w(row)
+  end
   end
 end
 
@@ -499,7 +530,8 @@ local class_totals, total = {}, 0
 for _, n in ipairs(NS) do
   for _, wv in ipairs(walks_shown) do
     for _, ck in ipairs({ "an", "aus" }) do
-      for cl, k in pairs(cells[NAMES.good][n][wv][ck].class_wins) do
+      local s = have(NAMES.good, n, wv, ck)
+      for cl, k in pairs(s and s.class_wins or {}) do
         class_totals[cl] = (class_totals[cl] or 0) + k
         total = total + k
       end

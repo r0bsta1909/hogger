@@ -306,6 +306,11 @@ local function player_damage_hogger(state, p, amount, kind, ev)
   if p.shout_until > state.time then
     amount = amount * (1 + model.p("warrior_shout_bonus"))
   end
+  -- Streuungsmodell der Balancing-Sim (GDD 17.2 Punkt 5b, Runde 20): der
+  -- Runner setzt je Bot einen Skill-Faktor (Gruppe x Spieler) auf den
+  -- verursachten Schaden. Menschen und Leeroy haben keinen (1,0); im Spiel
+  -- setzt ihn niemand.
+  amount = amount * (p.skill or 1)
   h.hp = h.hp - amount
   p.dmg_done = p.dmg_done + amount
   local sp = stat_p(state, p.id)
@@ -417,6 +422,7 @@ local function player_damage_npc(state, p, npc, amount, kind, ev)
   if p.shout_until > state.time then
     amount = amount * (1 + model.p("warrior_shout_bonus"))
   end
+  amount = amount * (p.skill or 1) -- Streuungsmodell, s. player_damage_hogger
   npc.hp = npc.hp - amount
   npc.rooted_until = 0 -- Schaden bricht die Gnarlwurzeln (Runde 13, #158)
   p.dmg_done = p.dmg_done + amount
