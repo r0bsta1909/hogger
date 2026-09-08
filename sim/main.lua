@@ -161,7 +161,8 @@ if opts.mode == "cell" then
   io.write(string.format("  Fress-Kanaele    %.2f/Lauf, unterbrochen %s\n",
     s.eat_channels / s.runs,
     pct(s.eat_interrupted / math.max(1, s.eat_channels))))
-  io.write(string.format("  Charges          %.1f/Lauf\n", s.charges / s.runs))
+  io.write(string.format("  Charges          %.1f/Lauf, ausgewichen %s\n", s.charges / s.runs,
+    pct(s.charges_dodged / math.max(1, s.charges))))
   io.write(string.format("  Abbrueche        %d von %d Laeufen (Kein-Kontakt)\n",
     s.resets, s.runs))
   if s.mean_life then
@@ -478,15 +479,16 @@ for _, agent in ipairs(AGENTS) do
 end
 
 w("\n## Kennzahlen %s (Krits an, Laufweg %d s)\n", NAMES.good, best_walk)
-w("| N | Siegquote | Median-Siegtry | Uptime | Tode/Lauf | Fress-Kanaele | unterbrochen | Charges |")
-w("|---|---|---|---|---|---|---|---|")
+w("| N | Siegquote | Median-Siegtry | Uptime | Tode/Lauf | Fress-Kanaele | unterbrochen | Charges | ausgewichen |")
+w("|---|---|---|---|---|---|---|---|---|")
 for _, n in ipairs(NS) do
   local s = cells[NAMES.good][n][best_walk]["an"]
-  w("| %d | %s | %s | %s | %.1f | %.2f | %s | %.1f |",
+  w("| %d | %s | %s | %s | %.1f | %.2f | %s | %.1f | %s |",
     n, pctci(s),
     s.median_win_duration and string.format("%.1f min", s.median_win_duration / 60) or "-",
     pct(s.mean_uptime), s.mean_deaths, s.eat_channels / s.runs,
-    pct(s.eat_interrupted / math.max(1, s.eat_channels)), s.charges / s.runs)
+    pct(s.eat_interrupted / math.max(1, s.eat_channels)), s.charges / s.runs,
+    pct((s.charges_dodged or 0) / math.max(1, s.charges)))
 end
 
 if SPIEL then

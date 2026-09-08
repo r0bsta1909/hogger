@@ -51,6 +51,7 @@ do
   add(120, "eat_interrupt", "hogger", "1", 1)           -- der Tritt kam
   add(150, "eat_complete", "hogger", nil, nil)          -- Schurke lebte: gezaehlt
   add(180, "charge", "hogger", "3", nil)
+  add(185, "charge", "hogger", "1", 0)                  -- ausgewichen (Runde 21)
   add(200, "death", "3", nil, 2, nil)                   -- Charge
   add(220, "death", "2", nil, 1, nil)                   -- Nahkampf, kurz nach Heilung? nein
   add(8 * 60 * TPS, "try_end", "host", "0", 1)
@@ -86,7 +87,8 @@ do
   T.eq(r.dmg_by["3"], 30, "logleser: Schaden je Spieler")
   T.eq(r.deaths_by["3"], 1, "logleser: Tode je Spieler")
   T.eq(r.class_of["1"], "rogue", "logleser: Klasse aus dem revive-Ereignis")
-  T.eq(r.sum.charges, 1, "logleser: Charges gezaehlt")
+  T.eq(r.sum.charges, 2, "logleser: Charges gezaehlt (getroffen und verfehlt)")
+  T.eq(r.sum.charges_dodged, 1, "logleser: ausgewichene Charges gezaehlt (val = 0)")
   T.eq(r.sum.heal_aggro, 1,
     "logleser: Tod kurz nach einer Heilung zaehlt als Heal-Aggro")
   T.eq(r.lines_bad, 0, "logleser: keine unlesbare Zeile im eigenen Format")

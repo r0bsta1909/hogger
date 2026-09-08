@@ -101,6 +101,10 @@ M.params = {
   hogger_charge_dmg      = p(25, 5, 60, 1, "9.2"),
   hogger_charge_knockback= p(120, 0, 300, 10, "9.2"),
   hogger_charge_windup   = p(0.8, 0.2, 2.0, 0.1, "9.2"),
+  -- Ausweichbreite (Runde 21, Rob-Entscheid): wer beim Aufprall weiter als
+  -- so viele px seitlich neben der Anlaufgeraden steht, wird verfehlt.
+  -- 0 = die Charge trifft immer (Stand bis Runde 20).
+  hogger_charge_dodge_px = p(40, 0, 150, 5, "9.2"),
 
   -- Fressen (GDD 9.2)
   eat_cd                 = p(20, 5, 60, 1, "9.2"),

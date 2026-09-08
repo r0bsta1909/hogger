@@ -30,7 +30,7 @@ function R.summarize(results)
     durations = {}, win_durations = {},
     uptime_sum = 0, deaths_sum = 0,
     eat_channels = 0, eat_interrupted = 0, eat_completed = 0,
-    charges = 0, crit_kills = 0, resets = 0,
+    charges = 0, charges_dodged = 0, crit_kills = 0, resets = 0,
     wins_without_interrupt = 0, runs_without_interrupt = 0,
     class_wins = {},
     -- Runde 20 (Spielsim): Lebensdauern, Fress-Heilung, Klassenwechsel,
@@ -56,6 +56,7 @@ function R.summarize(results)
     s.eat_interrupted = s.eat_interrupted + r.c.eat_interrupted
     s.eat_completed = s.eat_completed + r.c.eat_completed
     s.charges = s.charges + r.c.charges
+    s.charges_dodged = s.charges_dodged + (r.c.charges_dodged or 0)
     s.crit_kills = s.crit_kills + r.c.crit_kills
     s.resets = s.resets + (r.c.resets or 0) -- Kein-Kontakt-Abbrueche (Runde 10)
     if r.c.eat_interrupted == 0 then
