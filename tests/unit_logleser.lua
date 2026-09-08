@@ -91,6 +91,17 @@ do
     "logleser: Tod kurz nach einer Heilung zaehlt als Heal-Aggro")
   T.eq(r.lines_bad, 0, "logleser: keine unlesbare Zeile im eigenen Format")
 
+  -- Runde 20: Lebensdauern (revive -> death), Tritt-Latenz, Raidgroesse
+  -- aus den Kennungen, Fress-Heilung
+  T.eq(#r.lifetimes, 3, "logleser: drei beendete Leben (zwei Tode in Try 1, einer in Try 2 = Spieler 1 lebte seit Tick 0)")
+  T.near(r.trys[1].lifetimes[1], 200 / TPS, "logleser: Leben von Spieler 3 dauerte 200 Ticks")
+  -- Spieler 1 ist per Konvention Leeroy (host.lua und gamerun rufen
+  -- add_leeroy vor dem ersten add_player) und zaehlt nicht als Raid
+  T.eq(r.players_seen, 2, "logleser: zwei Spieler gesehen (Spieler 1 gilt als Leeroy)")
+  T.eq(r.trys[1].eat_start, 0, "logleser: altes Log ohne eat_start zaehlt 0 Kanalstarts")
+  local ls = logreport.life_stats(r.lifetimes)
+  T.ok(ls.mean > 0 and ls.count == 3, "logleser: life_stats rechnet Mittel und Anzahl")
+
   -- Die Runde-12-Frage: beide Kanaele gingen durch, waehrend der Schurke
   -- lebte — genau das soll der Bericht sichtbar machen.
   T.eq(r.sum.complete_with_rogue, 2,

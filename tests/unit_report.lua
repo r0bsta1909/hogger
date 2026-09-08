@@ -70,6 +70,49 @@ do
 end
 
 -- ---------------------------------------------------------------------------
+-- F7 (Runde 20): Sterben ist Teil, nicht alles. Nur die Spielsim misst
+-- Lebensdauern; Zellen ohne sind "nicht gemessen" und bestehen NICHT still.
+-- ---------------------------------------------------------------------------
+do
+  local ok_cells = make_cells({
+    [5] = { 0.75, 0.74 }, [10] = { 0.75, 0.74 },
+    [20] = { 0.75, 0.74 }, [40] = { 0.75, 0.74 },
+  })
+  local f = report.evaluate(ok_cells, PEN, NS)
+  T.ok(not f[7].ok, "F7: ohne Lebensdauern nicht bestanden (1D-Sim misst das nicht)")
+  T.ok(f[7].detail:find("nicht gemessen") ~= nil, "F7: 'nicht gemessen' steht im Detail")
+
+  for _, n in ipairs(NS) do
+    ok_cells.koordiniert[n][PEN].an.mean_life = 35
+    ok_cells.koordiniert[n][PEN].an.short_life_share = 0.15
+  end
+  f = report.evaluate(ok_cells, PEN, NS)
+  T.ok(f[7].ok, "F7: 35 s Mittel und 15 % kurze Leben bestehen")
+
+  ok_cells.koordiniert[20][PEN].an.mean_life = 22
+  f = report.evaluate(ok_cells, PEN, NS)
+  T.ok(not f[7].ok, "F7: 22 s Mittel bei einem N falsifiziert")
+
+  ok_cells.koordiniert[20][PEN].an.mean_life = 35
+  ok_cells.koordiniert[20][PEN].an.short_life_share = 0.29
+  f = report.evaluate(ok_cells, PEN, NS)
+  T.ok(not f[7].ok, "F7: 29 % kurze Leben (Robs Abend) falsifiziert")
+  T.eq(report.F7_MIN_LIFE, 30, "F7: Zielwert Lebensdauer 30 s (Rob-Entscheid)")
+  T.near(report.F7_MAX_SHORT, 0.20, "F7: Zielwert kurze Leben 20 % (Rob-Entscheid)")
+  -- Der Log-Leser rechnet mit denselben Zielwerten, ohne die Sim zu laden
+  local lr = require("tools.logreport")
+  T.eq(lr.F7_MIN_LIFE, report.F7_MIN_LIFE, "F7: Log-Leser und Sim teilen den Zielwert")
+  T.near(lr.F7_MAX_SHORT, report.F7_MAX_SHORT, "F7: Log-Leser und Sim teilen den Anteil")
+  T.eq(lr.SHORT_LIFE, report.SHORT_LIFE, "F7: dieselbe Kurz-Leben-Schwelle")
+
+  -- Die Spielsim-Namen laufen durch denselben Pruefer
+  ok_cells.koordiniert[20][PEN].an.short_life_share = 0.15
+  local spiel = { typisch = ok_cells.koordiniert, kopflos = ok_cells.unkoordiniert }
+  local g = report.evaluate(spiel, PEN, NS, report.NAMES_SPIEL)
+  T.ok(g[1].ok and g[7].ok, "names: typisch/kopflos werden wie koordiniert/unkoordiniert geprueft")
+end
+
+-- ---------------------------------------------------------------------------
 -- Vertrauensbereich (Runde 14, #175): jede Siegquote im Bericht traegt ihn
 -- mit sich, damit niemand Rauschen fuer ein Ergebnis haelt.
 -- ---------------------------------------------------------------------------

@@ -398,8 +398,9 @@ Mittlere DPS pro lebendem Spieler ≈ 3,5 (8-Klassen-Mix mit Jäger-Grundlast); 
 | F4 | Krits entscheiden nichts | Δ Siegquote (Krits an/aus) > 5 Prozentpunkte **im Mittel über alle Zellen** (Rob-Entscheid, Issue #6; Einzelzellen dürfen streuen, solange beide Krit-Welten im F1-Band bleiben) |
 | F5 | Try-Länge trifft das Fenster | Median-Siegtry < 6 min oder > 13 min |
 | F6 | Skalierung ist fair | Siegquoten-Spread zwischen N=5 und N=40 > 15 Prozentpunkte |
+| F7 | Sterben ist Teil, nicht alles (Runde 20, Rob-Entscheid) | Für den typischen Raid bei irgendeinem N: mittlere Lebensdauer nach der Wiederbelebung < 30 s **oder** mehr als 20 % der Leben enden unter 10 s. Robs Abend 2026-09-07: 21,6 s und 33 % — „wenn der Spieler sich nur wiederbelebt, um direkt wieder zu sterben, ist das langweilig". Nur die Spielsim misst das; die 1D-Sim kann es nicht und besteht deshalb nicht |
 
-Stellhebel: F1/F5 → HP-Koeffizienten (quad/slope/offset) und DPS-Zahlen; F2/F3 → Fress-Heilrate, Fress-CD und Kanal-Dauer (die Unterbrecher-Formel fiel in Runde 12, #140 — seitdem sind Tritt-Cooldown/-Energie und die Schurken-Zahl der koordinierten Zielkomposition (17.2) die Unterbrechungs-Hebel); F4 → Kritchance (nie den Multiplikator); F6 → HP-quad-Term, Cleave- und Add-Formel (die Respawn-Formel ist seit Runde 6 kein Hebel mehr — der Timer ist per Rob-Entscheid fest, #96). Jede Anpassung ins Tuning-Protokoll (17.9).
+Stellhebel: F7 → Cleave-Divisor und Hoggers Autohit-Schaden (das Sterben dosieren, nicht abschaffen), erst danach Rüstungs-HP; F1/F5 → HP-Koeffizienten (quad/slope/offset) und DPS-Zahlen; F2/F3 → Fress-Heilrate, Fress-CD und Kanal-Dauer (die Unterbrecher-Formel fiel in Runde 12, #140 — seitdem sind Tritt-Cooldown/-Energie und die Schurken-Zahl der koordinierten Zielkomposition (17.2) die Unterbrechungs-Hebel); F4 → Kritchance (nie den Multiplikator); F6 → HP-quad-Term, Cleave- und Add-Formel (die Respawn-Formel ist seit Runde 6 kein Hebel mehr — der Timer ist per Rob-Entscheid fest, #96). Jede Anpassung ins Tuning-Protokoll (17.9).
 
 ### 13.4 Playtest-Kriterien (Menschen, nur Gefühl — Übergabe nach 17.8)
 
