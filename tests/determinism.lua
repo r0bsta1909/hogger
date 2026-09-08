@@ -58,6 +58,24 @@ T.eq(g1, g2, "Determinismus: gamesim reproduzierbar (Seed 42, 120 s)")
 local g3 = gamesim_hash(43, 120 * 60)
 T.ok(g1 ~= g3, "Determinismus: gamesim anderer Seed -> anderer Lauf")
 
+-- Spielsim als Balancing-Sim (sim/gamerun.lua, Runde 20): ein ganzer Lauf
+-- bis zum Try-Ende, gleicher Seed -> gleicher Hash. Seit Runde 20 haengt
+-- der Balancing-Nachweis an dieser Kette, nicht mehr an sim/engine.lua.
+local gamerun = require("sim.gamerun")
+do
+  local a = gamerun.run_try({ n = 5, seed = 4711, crits = true, profile = "typisch", log = true })
+  local b = gamerun.run_try({ n = 5, seed = 4711, crits = true, profile = "typisch", log = true })
+  T.eq(a.log_hash, b.log_hash, "Determinismus: gamerun reproduzierbar (N=5, Seed 4711)")
+  T.eq(a.duration, b.duration, "Determinismus: gamerun gleiche Dauer")
+  local c = gamerun.run_try({ n = 5, seed = 4712, crits = true, profile = "typisch", log = true })
+  T.ok(a.log_hash ~= c.log_hash, "Determinismus: gamerun anderer Seed -> anderer Lauf")
+  -- Krits aus zieht denselben Zufallsstrom (crit_roll wuerfelt auch bei 0 %):
+  -- die Krit-Welten sind gepaart, und der Lauf bleibt reproduzierbar
+  local d = gamerun.run_try({ n = 5, seed = 4711, crits = false, profile = "typisch", log = true })
+  local e = gamerun.run_try({ n = 5, seed = 4711, crits = false, profile = "typisch", log = true })
+  T.eq(d.log_hash, e.log_hash, "Determinismus: gamerun ohne Krits reproduzierbar")
+end
+
 -- Rassenwurf ist eine reine Funktion desselben Wurfs
 local model = require("sim.model")
 local r = rng.new(99)

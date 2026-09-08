@@ -33,6 +33,13 @@ function R.summarize(results)
     charges = 0, crit_kills = 0, resets = 0,
     wins_without_interrupt = 0, runs_without_interrupt = 0,
     class_wins = {},
+    -- Runde 20 (Spielsim): Lebensdauern, Fress-Heilung, Klassenwechsel,
+    -- Tritt-Latenz — kompakt je Lauf (life = {sum, n, short}), damit die
+    -- Kindprozesse keine Listen mit Hunderten Zahlen serialisieren
+    life_sum = 0, life_n = 0, life_short = 0,
+    eat_heal = 0, class_changes = 0,
+    kick_sum = 0, kick_n = 0,
+    reasons = {},
   }
   for _, r in ipairs(results) do
     if r.win then
@@ -55,13 +62,48 @@ function R.summarize(results)
       s.runs_without_interrupt = s.runs_without_interrupt + 1
       if r.win then s.wins_without_interrupt = s.wins_without_interrupt + 1 end
     end
+    if r.life then
+      s.life_sum = s.life_sum + r.life.sum
+      s.life_n = s.life_n + r.life.n
+      s.life_short = s.life_short + r.life.short
+    end
+    if r.kick then
+      s.kick_sum = s.kick_sum + r.kick.sum
+      s.kick_n = s.kick_n + r.kick.n
+    end
+    s.eat_heal = s.eat_heal + (r.eat_heal or 0)
+    s.dmg_sum = (s.dmg_sum or 0) + (r.c.dmg_to_hogger or 0)
+    s.class_changes = s.class_changes + (r.class_changes or 0)
+    if r.reason then s.reasons[r.reason] = (s.reasons[r.reason] or 0) + 1 end
   end
   s.win_rate = s.wins / math.max(1, s.runs)
   s.median_duration = median(s.durations)
   s.median_win_duration = median(s.win_durations)
   s.mean_uptime = s.uptime_sum / math.max(1, s.runs)
   s.mean_deaths = s.deaths_sum / math.max(1, s.runs)
+  if s.life_n > 0 then
+    s.mean_life = s.life_sum / s.life_n
+    s.short_life_share = s.life_short / s.life_n
+  end
+  if s.kick_n > 0 then s.mean_kick_latency = s.kick_sum / s.kick_n end
   return s
+end
+
+-- Lebensdauer-Liste eines Laufs -> kompakte Kennzahl fuer summarize
+-- (Runde 20). short: Leben unter 10 s — "wiederbeleben, um sofort zu sterben"
+R.SHORT_LIFE = 10
+function R.compact_life(lifetimes)
+  local sum, short = 0, 0
+  for _, v in ipairs(lifetimes) do
+    sum = sum + v
+    if v < R.SHORT_LIFE then short = short + 1 end
+  end
+  return { sum = sum, n = #lifetimes, short = short }
+end
+function R.compact_list(list)
+  local sum = 0
+  for _, v in ipairs(list) do sum = sum + v end
+  return { sum = sum, n = #list }
 end
 
 -- Diagnose gegen das Attritionsmodell (GDD 13.1): mittlere Lebensdauer am
@@ -82,7 +124,14 @@ end
 
 -- F1-F6 (GDD 13.3) bei fixierter Todesstrafe.
 -- cells: cells[agent][n][penalty][crits_key] = summary  (crits_key "an"/"aus")
-function R.evaluate(cells, penalty, ns)
+-- names: welche Agenten die Rollen "gut" (F1/F4/F5/F6), "schlecht" (F2/F3)
+-- und "turtle" spielen. 1D-Sim: koordiniert/unkoordiniert/turtle;
+-- Spielsim (Runde 20): typisch/kopflos/turtle.
+R.NAMES_1D = { good = "koordiniert", bad = "unkoordiniert", turtle = "turtle" }
+R.NAMES_SPIEL = { good = "typisch", bad = "kopflos", turtle = "turtle" }
+function R.evaluate(cells, penalty, ns, names)
+  names = names or R.NAMES_1D
+  local GOOD, BAD, TURTLE = names.good, names.bad, names.turtle
   local f = {}
   local function cell(agent, n, crits_key)
     return cells[agent] and cells[agent][n] and cells[agent][n][penalty]
@@ -92,7 +141,7 @@ function R.evaluate(cells, penalty, ns)
   -- F1: koordiniert gewinnt zuverlaessig (60-90 % bei jedem N)
   local f1_ok, f1_detail = true, {}
   for _, n in ipairs(ns) do
-    local s = cell("koordiniert", n, "an")
+    local s = cell(GOOD, n, "an")
     local wr = s and s.win_rate or 0
     f1_detail[#f1_detail + 1] = string.format("N=%d: %.1f%%", n, wr * 100)
     if wr < 0.60 or wr > 0.90 then f1_ok = false end
@@ -102,7 +151,7 @@ function R.evaluate(cells, penalty, ns)
   -- F2: unkoordiniert verliert meist (<= 35 %)
   local f2_ok, f2_detail = true, {}
   for _, n in ipairs(ns) do
-    local s = cell("unkoordiniert", n, "an")
+    local s = cell(BAD, n, "an")
     local wr = s and s.win_rate or 0
     f2_detail[#f2_detail + 1] = string.format("N=%d: %.1f%%", n, wr * 100)
     if wr > 0.35 then f2_ok = false end
@@ -114,7 +163,7 @@ function R.evaluate(cells, penalty, ns)
   local f3_ok, f3_detail = true, {}
   for _, n in ipairs(ns) do
     if n >= 10 then
-      local s = cell("unkoordiniert", n, "an")
+      local s = cell(BAD, n, "an")
       local base = s and s.runs_without_interrupt or 0
       local rate = (base > 0) and (s.wins_without_interrupt / base) or 0
       f3_detail[#f3_detail + 1] = string.format("N=%d: %.1f%% (Basis %d)",
@@ -130,7 +179,7 @@ function R.evaluate(cells, penalty, ns)
   -- bleiben. Der alte Checker pruefte je Zelle und war strenger als das GDD.
   local f4_ok, f4_detail = true, {}
   local delta_sum, delta_cells = 0, 0
-  for _, agent in ipairs({ "koordiniert", "unkoordiniert" }) do
+  for _, agent in ipairs({ GOOD, BAD }) do
     for _, n in ipairs(ns) do
       local a = cell(agent, n, "an")
       local b = cell(agent, n, "aus")
@@ -140,7 +189,7 @@ function R.evaluate(cells, penalty, ns)
         delta_cells = delta_cells + 1
         f4_detail[#f4_detail + 1] = string.format("%s N=%d: %.1f pp",
           agent:sub(1, 2), n, delta * 100)
-        if agent == "koordiniert" then
+        if agent == GOOD then
           if a.win_rate < 0.60 or a.win_rate > 0.90
              or b.win_rate < 0.60 or b.win_rate > 0.90 then
             f4_ok = false
@@ -157,7 +206,7 @@ function R.evaluate(cells, penalty, ns)
   -- F5: Median-Siegtry im Fenster 6-13 min (koordiniert)
   local f5_ok, f5_detail = true, {}
   for _, n in ipairs(ns) do
-    local s = cell("koordiniert", n, "an")
+    local s = cell(GOOD, n, "an")
     local md = s and s.median_win_duration
     if md then
       f5_detail[#f5_detail + 1] = string.format("N=%d: %.1f min", n, md / 60)
@@ -175,13 +224,13 @@ function R.evaluate(cells, penalty, ns)
   -- bleibt als Zusatzinfo im Detail stehen.
   local lo, hi = 1, 0
   for _, n in ipairs(ns) do
-    local s = cell("koordiniert", n, "an")
+    local s = cell(GOOD, n, "an")
     local wr = s and s.win_rate or 0
     if wr < lo then lo = wr end
     if wr > hi then hi = wr end
   end
-  local s_first = cell("koordiniert", ns[1], "an")
-  local s_last = cell("koordiniert", ns[#ns], "an")
+  local s_first = cell(GOOD, ns[1], "an")
+  local s_last = cell(GOOD, ns[#ns], "an")
   local spread = math.abs((s_first and s_first.win_rate or 0)
                           - (s_last and s_last.win_rate or 0))
   f[6] = { ok = spread <= 0.15,
@@ -193,7 +242,7 @@ function R.evaluate(cells, penalty, ns)
   local turtle_ok, turtle_detail = true, {}
   for _, n in ipairs(ns) do
     for _, ck in ipairs({ "an", "aus" }) do
-      local s = cell("turtle", n, ck)
+      local s = cell(TURTLE, n, ck)
       if s then
         local loss_rate = 1 - s.win_rate
         if loss_rate <= 0.95 then turtle_ok = false end
