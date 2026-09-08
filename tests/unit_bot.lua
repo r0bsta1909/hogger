@@ -259,3 +259,54 @@ do
   local d = bot.decide(view, p.id)
   T.ok(type(d.mask) == "number", "snapshot-sicht: Bot entscheidet ohne Gehirn")
 end
+
+-- Rasterpunkte "typisch ohne X" (Runde 21, Player-Agency-Analyse): bot.SKIP
+-- ist ein reines Sim-Werkzeug — im Spiel leer — und muss genau die eine
+-- Faehigkeit/Entscheidung abschalten, nichts sonst.
+do
+  T.eq(next(bot.SKIP), nil, "SKIP: im Spiel leer")
+  -- ohne Tritt tritt der Kicker nie, auch nach der Reaktionszeit
+  local st, h = arena(2, "rogue")
+  local p = st.players[2]
+  h.eating = { phase = "channel", t_left = 8, corpse = 1, heal_tick = 0 }
+  bot.SKIP = { kick = true }
+  local kicked = false
+  for _ = 1, 60 * 3 do
+    st.tick = st.tick + 1; st.time = st.tick * model.TICK_DT
+    local dec = bot.decide(st, p.id)
+    if dec.kick then kicked = true end
+  end
+  T.ok(not kicked, "SKIP.kick: der Kicker tritt nie")
+  bot.SKIP = {}
+  p.brain = nil
+  for _ = 1, 60 * 3 do
+    st.tick = st.tick + 1; st.time = st.tick * model.TICK_DT
+    local dec = bot.decide(st, p.id)
+    if dec.kick then kicked = true end
+  end
+  T.ok(kicked, "SKIP leer: der Kicker tritt nach seiner Reaktionszeit")
+  h.eating = nil
+
+  -- ohne Bedarfswahl nimmt der Geist die feste Klasse pid mod 8
+  local st2 = arena(3, "mage")
+  local g = st2.players[3]
+  g.alive, g.ghost, g.class = false, true, "mage"
+  g.brain = nil
+  bot.SKIP = { needclass = true }
+  bot.decide(st2, g.id)
+  T.eq(g.brain.ghost_choice, world.CLASSES[((g.id - 1) % #world.CLASSES) + 1],
+       "SKIP.needclass: Klasse fest pid mod 8")
+  bot.SKIP = {}
+  g.brain = nil
+  bot.decide(st2, g.id)
+  T.eq(g.brain.ghost_choice, "rogue", "SKIP leer: ohne Schurken waehlt der Geist Schurke")
+
+  -- jeder Schluessel aus SKIP_KEYS ist bekannt und laeuft ohne Fehler durch
+  for _, key in ipairs(bot.SKIP_KEYS) do
+    bot.SKIP = { [key] = true }
+    local st3 = arena(1, "warrior")
+    local ok = pcall(bot.decide, st3, st3.players[2].id)
+    T.ok(ok, "SKIP." .. key .. ": Entscheidung laeuft")
+  end
+  bot.SKIP = {}
+end

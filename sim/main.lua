@@ -69,6 +69,20 @@ while i <= #arg do
     local k, n = tostring(arg[i]):match("^(%d+)/(%d+)$")
     if not k then io.write("--part erwartet k/n, bekam: ", tostring(arg[i]), "\n"); os.exit(2) end
     opts.part, opts.parts = tonumber(k), tonumber(n)
+  elseif a == "--skip" then
+    -- Rasterpunkt "typisch ohne X" (Runde 21): --skip shout,taunt — die
+    -- Bots lassen diese Faehigkeit/Entscheidung aus (Schluessel: bot.SKIP_KEYS)
+    i = i + 1
+    local bot = require("game.gamesim.bot")
+    opts.skip = opts.skip or {}
+    for key in tostring(arg[i]):gmatch("[%w_]+") do
+      local ok = false
+      for _, k in ipairs(bot.SKIP_KEYS) do if k == key then ok = true end end
+      assert(ok, "ungueltiges --skip: " .. key .. " (erlaubt: " .. table.concat(bot.SKIP_KEYS, ",") .. ")")
+      opts.skip[key] = true
+    end
+    note("SKIP " .. arg[i] .. "\n")
+    raw[#raw + 1] = "--skip"; raw[#raw + 1] = arg[i]
   elseif a == "--set" then
     -- Parameter-Experiment: --set hogger_hp_coeff=180 (Tuning-Protokoll 17.9)
     i = i + 1
@@ -104,7 +118,7 @@ opts.agent = opts.agent or NAMES.good
 -- Hunderte Zahlen je Lauf serialisieren muss.
 local function run_one(agent, n, walk, crits, seed)
   local r = gamerun.run_try({ n = n, crits = crits, profile = agent,
-                              seed = seed, log = false })
+                              seed = seed, log = false, skip = opts.skip })
   r.life = report.compact_life(r.lifetimes)
   r.kick = report.compact_list(r.kick_latencies)
   r.lifetimes, r.kick_latencies = nil, nil

@@ -32,6 +32,19 @@ M.DEFAULT_PROFILE = "typisch"
 -- der Bot seine Maske ohne die Faehigkeits-Bits (die sind Flanken).
 M.DECIDE_EVERY = 3
 
+-- Rasterpunkte "typisch ohne X" (Runde 21, Player-Agency-Analyse): die
+-- Balancing-Sim setzt hier Fähigkeiten oder Entscheidungen auf true, die
+-- das Profil typisch dann NICHT nutzt. Nur vom Runner gesetzt
+-- (sim/gamerun.lua, --skip), im Spiel immer leer. Schluessel:
+--   shout taunt seal loh raptor feign evis pws frostarmor imp roots kick
+--   reserve (Kicker haelt keine Energie zurueck)
+--   needclass (Klasse fest pid mod 8 statt nach Bedarf)
+--   npc (Mobs/Welpen werden nie Ziel)
+M.SKIP = {}
+M.SKIP_KEYS = { "shout", "taunt", "seal", "loh", "raptor", "feign", "evis",
+                "pws", "frostarmor", "imp", "roots", "kick", "reserve",
+                "needclass", "npc" }
+
 local HEALER = { paladin = true, priest = true, druid = true }
 local CASTER = { priest = true, mage = true, warlock = true, druid = true }
 local RANGED = { hunter = true, mage = true, warlock = true, priest = true, druid = true }
@@ -332,6 +345,8 @@ local function decide_typisch(state, p, brain)
       if turtle then
         local list = ROLE_CLASSES.healer
         cls = list[((pid - 1) % #list) + 1]
+      elseif M.SKIP.needclass then
+        cls = world.CLASSES[((pid - 1) % #world.CLASSES) + 1]
       else
         cls = M.choose_class(state, p)
       end
@@ -363,7 +378,8 @@ local function decide_typisch(state, p, brain)
   -- drei Welpen dauerhaft anknabbern.)
   local target_id = world.HOGGER_ID
   local ex, ey = h.x, h.y
-  local npc = (not turtle) and attacker_npc(state, p, model.p("cast_range")) or nil
+  local npc = (not turtle and not M.SKIP.npc)
+              and attacker_npc(state, p, model.p("cast_range")) or nil
   if npc then target_id, ex, ey = npc.id, npc.x, npc.y end
   local set_target = (p.target ~= target_id) and target_id or nil
 
@@ -427,20 +443,21 @@ local function decide_typisch(state, p, brain)
   local h_target = hogger_target_pid(state)
   local i_am_target = h_target == pid
 
+  local SKIP = M.SKIP
   if in_range and not hold then
     if cls == "warrior" then
       -- Schlachtruf, wenn er fehlt; Spott, wenn Hogger einen Stoffträger
       -- prügelt; sonst Heroischer Stoss
-      local shouting = (p.shout_until or 0) > now or p.shout
+      local shouting = (p.shout_until or 0) > now or p.shout or SKIP.shout
       local tp = h_target and state.players[h_target]
       if not shouting and on_tick then mask = mask + input.AB2
       elseif tp and tp.id ~= pid and CLOTH[tp.class or ""] and (p.taunt_cd or 0) <= 0
-             and d <= model.p("warrior_taunt_range") and half_tick then
+             and d <= model.p("warrior_taunt_range") and half_tick and not SKIP.taunt then
         mask = mask + input.AB3
       elseif on_tick then mask = mask + input.AB1 end
     elseif cls == "paladin" then
       -- Handauflegung auf den, der gleich stirbt (einmal pro Leben)
-      local dying = (not p.loh_used) and M.heal_target(state, p, 0.2) or nil
+      local dying = (not p.loh_used and not SKIP.loh) and M.heal_target(state, p, 0.2) or nil
       if dying and half_tick then
         heal_pid = nil
         -- Slot 3 zielt ueber p.target/Selbst-Fallback: auf sich selbst,
@@ -450,17 +467,20 @@ local function decide_typisch(state, p, brain)
         if dying.id == pid then mask = mask + input.AB3
         else heal_pid = dying.id end
       elseif not duty and low_hp and half_tick then mask = mask + input.AB1
-      elseif on_tick then mask = mask + input.AB2 end
+      elseif on_tick and not SKIP.seal then mask = mask + input.AB2 end
+      -- ohne Siegel bleibt nur der Autohit (kein Heiliges Licht ins Leere)
     elseif cls == "hunter" then
       -- Totstellen, wenn Hogger mich fuehrt und es eng wird
-      if i_am_target and p.hp < 0.4 * p.max_hp and (p.feign_cd or 0) <= 0 and on_tick then
+      if i_am_target and p.hp < 0.4 * p.max_hp and (p.feign_cd or 0) <= 0 and on_tick
+         and not SKIP.feign then
         mask = mask + input.AB2
-      elseif d <= melee_r and on_tick then mask = mask + input.AB1 end
+      elseif d <= melee_r and on_tick and not SKIP.raptor then mask = mask + input.AB1 end
     elseif cls == "rogue" then
-      local kicker = is_kicker(state, p)
+      local kicker = is_kicker(state, p) and not SKIP.reserve
       local reserve = kicker and (model.p("rogue_kick_energy") + model.p("rogue_sinister_energy"))
                              or 0
-      if (p.cp or 0) >= model.CP_MAX and half_tick and (p.resource or 0) >= reserve + 30 then
+      if (p.cp or 0) >= model.CP_MAX and half_tick and (p.resource or 0) >= reserve + 30
+         and not SKIP.evis then
         mask = mask + input.AB2
       elseif on_tick and (p.resource or 0) >= reserve then
         mask = mask + input.AB1
@@ -469,19 +489,20 @@ local function decide_typisch(state, p, brain)
       -- Schild auf sich selbst, wenn Hogger mich fuehrt (Slot 3 zielt ueber
       -- Selbst-Fallback); sonst Pein
       if (i_am_target or low_hp) and not p.shielded and (p.shield_hp or 0) <= 0
-         and now >= (p.weak_soul_until or 0) and half_tick then
+         and now >= (p.weak_soul_until or 0) and half_tick and not SKIP.pws then
         mask = mask + input.AB3
       elseif on_tick then mask = mask + input.AB1 end
     elseif cls == "mage" then
-      if not p.frost_armor and half_tick then mask = mask + input.AB2
+      if not p.frost_armor and half_tick and not SKIP.frostarmor then mask = mask + input.AB2
       elseif on_tick then mask = mask + input.AB1 end
     elseif cls == "warlock" then
       local has_imp = p.imp_id and state.npcs and state.npcs[p.imp_id] ~= nil
-      if not has_imp and half_tick then mask = mask + input.AB2
+      if not has_imp and half_tick and not SKIP.imp then mask = mask + input.AB2
       elseif on_tick then mask = mask + input.AB1 end
     elseif cls == "druid" then
       -- Wurzeln auf den Mob, der mich angreift; sonst Zorn
-      if npc and (p.roots_cd or 0) <= 0 and now >= (npc.rooted_until or 0) and half_tick then
+      if npc and (p.roots_cd or 0) <= 0 and now >= (npc.rooted_until or 0) and half_tick
+         and not SKIP.roots then
         mask = mask + input.AB3
       elseif on_tick then mask = mask + input.AB1 end
     end
@@ -493,7 +514,7 @@ local function decide_typisch(state, p, brain)
     if eating_channel(h) then
       brain.eat_seen_t = brain.eat_seen_t or now
       local dh = world.dist(p.x, p.y, h.x, h.y)
-      if now - brain.eat_seen_t >= brain.react and dh <= melee_r then
+      if now - brain.eat_seen_t >= brain.react and dh <= melee_r and not SKIP.kick then
         kick = true
       end
       -- Der Kicker laeuft zum Fressen hin, wenn er nicht drinsteht
