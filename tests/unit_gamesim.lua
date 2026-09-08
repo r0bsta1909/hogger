@@ -2104,6 +2104,41 @@ do -- Kein Rescale bei totem Hogger oder nach dem Sieg
   T.eq(world.rescale(st, {}), false, "rescale: nach dem Sieg passiert nichts")
 end
 
+do -- #215 (Runde 20): Der erste Try eines Auto-Host-Abends startete mit
+  -- n_scale = 1 — der Host war beim begin_try allein, alle Joins kamen
+  -- danach und zaehlten laut GDD 6 erst ab dem naechsten Try. Hogger hatte
+  -- 120 statt 28.800 HP. Vor dem Pull zaehlt jetzt jeder Join und Leave
+  -- sofort; ab dem ersten Kontakt gilt wieder die alte Regel.
+  local st = world.new(11)
+  world.add_leeroy(st)
+  world.add_player(st, "host", { quest_done = true })
+  world.begin_try(st, {})
+  T.eq(st.n_scale, 1, "#215: der Host ist beim Try-Start allein")
+  T.eq(st.hogger.max_hp, model.hogger_hp(1), "#215: Hogger startet als Zwerg")
+  for i = 1, 4 do
+    world.add_player(st, "gast" .. i, {})
+    local ev = {}
+    T.eq(world.rescale_prepull(st, ev), true,
+      "#215: Join vor dem Pull skaliert sofort (" .. i .. ")")
+  end
+  T.eq(st.n_scale, 5, "#215: n_scale zaehlt die Gaeste vor dem Pull")
+  T.eq(st.hogger.max_hp, model.hogger_hp(5), "#215: Hogger hat die HP fuer fuenf")
+  T.eq(st.hogger.hp, st.hogger.max_hp, "#215: und ist voll — niemand hat ihn beruehrt")
+  -- Leaver vor dem Pull zaehlt nicht mehr
+  st.players[3].disconnected = true
+  T.eq(world.rescale_prepull(st, {}), true, "#215: Leave vor dem Pull skaliert")
+  T.eq(st.n_scale, 4, "#215: n_scale ohne den Leaver")
+  st.players[3].disconnected = nil
+  T.eq(world.rescale_prepull(st, {}), true, "#215: Rueckkehr vor dem Pull skaliert")
+  -- Ab dem ersten Kontakt gilt GDD 6: Nachzuegler erst ab dem naechsten Try
+  st.hogger.engaged = true
+  world.add_player(st, "nachzuegler", {})
+  T.eq(world.rescale_prepull(st, {}), false, "#215: nach dem Pull kein Rescale")
+  T.eq(st.n_scale, 5, "#215: n_scale bleibt bis zum naechsten Try")
+  world.begin_try(st, {})
+  T.eq(st.n_scale, 6, "#215: der naechste Try zaehlt den Nachzuegler")
+end
+
 do -- Sieg schlaegt Abbruch
   local st, h = reset_world({ n = 1 })
   h.hp = 0

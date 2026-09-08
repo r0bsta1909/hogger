@@ -74,10 +74,13 @@ M.params = {
   -- Kein-Kontakt-Reset (Runde 10, #124): erreicht Hogger so lange weder ein
   -- lebendes Ziel NOCH nimmt er Spielerschaden, trabt er heim, heilt voll und
   -- der Try gilt als abgebrochen. Kiten ist damit erlaubt, solange man ihn
-  -- trifft. 30 s ist KEIN freier Wert: die Todesstrafe ist konstant 24 s
-  -- (GDD 6), der Nachschub muss es nach einem Wipe zurueckschaffen koennen.
-  -- Unter 25 s kippt die Regel zum "Wipe beendet den Try sofort".
-  hogger_no_contact_reset= p(30, 5, 120, 1, "9.1"),
+  -- trifft. 40 s ist KEIN freier Wert: die Todesstrafe ist konstant 26 s
+  -- (Bot) bzw. 31 s (Mensch ohne Freigabe-Klick, GDD 6/11), der Nachschub
+  -- muss es nach einem Wipe zurueckschaffen koennen. Runde 20: 30 -> 40 s
+  -- (Rob-Entscheid) — mit 30 s riss die Frist fuer Menschen, sobald der
+  -- 2-s-Wiederbelebungskanal mitgerechnet war. Unter death_penalty_human()
+  -- kippt die Regel zum "Wipe beendet den Try sofort" (Test in unit_model).
+  hogger_no_contact_reset= p(40, 5, 120, 1, "9.1"),
   hogger_slice_dmg       = p(15, 5, 30, 1, "9.2"),
   hogger_slice_bleed_dmg = p(5, 0, 15, 1, "9.2"),
   hogger_slice_bleed_interval = p(2.0, 0.5, 4.0, 0.5, "9.2"),
@@ -525,18 +528,29 @@ function M.max_mob_kills_per_try(n)
   return M.mob_slots(n) * (1 + respawns)
 end
 
--- Todesstrafe in Sekunden: Respawn-Timer + Geisterlauf + lebendiger Restanmarsch
--- (GDD 6/7.1; Zielkorridor 25-35 s, fixiert per M1-Sweep)
--- Laufweg-Anteil der Todesstrafe (Geisterweg + Anmarsch). N-unabhaengig und
--- seit Runde 6 (#96) per Rob-Entscheid fest — die Sim leitet ihren Standard
--- hier ab, statt eine zweite Zahl zu fuehren (Runde 14, #175).
+-- Todesstrafe in Sekunden: Respawn-Timer + Geisterlauf + Wiederbelebungs-
+-- kanal + lebendiger Restanmarsch (GDD 6/7.1).
+-- Laufweg-Anteil der Todesstrafe: Geisterweg 8 s + Kanal 2 s + Anmarsch 6 s
+-- = 16 s. N-unabhaengig und seit Runde 6 (#96) per Rob-Entscheid fest — die
+-- Sim leitet ihren Standard hier ab, statt eine zweite Zahl zu fuehren
+-- (Runde 14, #175). Runde 20: der 2-s-Kanal (revive_channel) fehlte hier
+-- bis dahin — die Sim rechnete 24 s, das Spiel brauchte 26.
 function M.walk_time()
   return M.p("graveyard_to_field_dist") / M.p("move_speed_ghost")
+       + M.p("revive_channel")
        + M.p("field_to_hill_dist") / M.p("move_speed_alive")
 end
 
+-- Todesstrafe eines Bots (Freigabe sofort): 10 + 16 = 26 s
 function M.death_penalty(n)
   return M.respawn_timer(n) + M.walk_time()
+end
+
+-- Todesstrafe eines Menschen, der den Freigabe-Knopf verschlaeft: die
+-- Nachfrist release_grace kommt obendrauf (GDD 11) — 31 s. DAS ist die Zahl,
+-- unter der hogger_no_contact_reset liegen darf, nicht die Bot-Zahl.
+function M.death_penalty_human(n)
+  return M.death_penalty(n) + M.p("release_grace")
 end
 
 -- ---------------------------------------------------------------------------

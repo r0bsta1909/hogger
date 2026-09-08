@@ -88,7 +88,7 @@ do
   -- Der Richtungstest faehrt einen festen Laufweg. Diese Zahl steht in
   -- sim/main.lua als QUICK_WALK und MUSS die Modellwahrheit sein — laeuft
   -- sie auseinander, misst der Standardtest eine andere Welt als das Spiel.
-  T.eq(model.walk_time(), 14, "walk_time: Laufweganteil der Todesstrafe ist 14 s")
+  T.eq(model.walk_time(), 16, "walk_time: Laufweganteil der Todesstrafe ist 16 s")
   T.near(model.death_penalty(5), model.respawn_timer(5) + model.walk_time(),
     "walk_time: Todesstrafe = Respawn-Timer + Laufweg")
   local src = assert(io.open("sim/main.lua")):read("*a")
