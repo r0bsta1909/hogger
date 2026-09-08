@@ -92,6 +92,11 @@ end
 -- Lebensdauer-Liste eines Laufs -> kompakte Kennzahl fuer summarize
 -- (Runde 20). short: Leben unter 10 s — "wiederbeleben, um sofort zu sterben"
 R.SHORT_LIFE = 10
+-- F7-Zielwerte (Runde 20, Rob-Entscheid "Mittel"): mittlere Lebensdauer
+-- >= 30 s, hoechstens 20 % der Leben unter 10 s. Startwerte; nach dem
+-- Faehigkeiten-Gespraech nachschaerfen.
+R.F7_MIN_LIFE = 30
+R.F7_MAX_SHORT = 0.20
 function R.compact_life(lifetimes)
   local sum, short = 0, 0
   for _, v in ipairs(lifetimes) do
@@ -237,6 +242,30 @@ function R.evaluate(cells, penalty, ns, names)
            detail = string.format(
              "Spread N=%d<->N=%d %.1f pp (alle N: %.1f-%.1f %%)",
              ns[1], ns[#ns], spread * 100, lo * 100, hi * 100) }
+
+  -- F7 (Runde 20, Rob-Entscheid): Sterben ist Teil, nicht alles. Fuer den
+  -- guten Raid bei jedem N: mittlere Lebensdauer nach der Wiederbelebung
+  -- >= F7_MIN_LIFE s UND hoechstens F7_MAX_SHORT der Leben unter SHORT_LIFE s.
+  -- Robs Abend (2026-09-07): 23,8 s und 29 % — "wiederbeleben, um sofort
+  -- wieder zu sterben, ist langweilig". Zellen ohne Lebensdauern (1D-Sim)
+  -- koennen das nicht messen und bestehen nicht still: sie werden benannt.
+  local f7_ok, f7_detail, f7_measured = true, {}, false
+  for _, n in ipairs(ns) do
+    local s = cell(GOOD, n, "an")
+    if s and s.mean_life then
+      f7_measured = true
+      f7_detail[#f7_detail + 1] = string.format("N=%d: %.1f s, %.0f%% < %d s",
+        n, s.mean_life, s.short_life_share * 100, R.SHORT_LIFE)
+      if s.mean_life < R.F7_MIN_LIFE or s.short_life_share > R.F7_MAX_SHORT then
+        f7_ok = false
+      end
+    else
+      f7_detail[#f7_detail + 1] = string.format("N=%d: nicht gemessen", n)
+    end
+  end
+  f[7] = { ok = f7_ok and f7_measured,
+           detail = (f7_measured and "" or "nur die Spielsim misst Lebensdauern · ")
+                    .. table.concat(f7_detail, " · ") }
 
   -- Turtle-Gate (GDD 17.2 Punkt 4): > 95 % Zeitlimit-Niederlagen in jeder Zelle
   local turtle_ok, turtle_detail = true, {}

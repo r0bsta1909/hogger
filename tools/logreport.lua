@@ -9,6 +9,11 @@
 local M = {}
 
 M.TICK = 1 / 60 -- Host-Tickrate (GDD 14): Ticks -> Sekunden
+-- F7-Zielwerte (Runde 20) — dieselben wie in sim/report.lua, ohne den
+-- Umweg ueber ein require: der Leser bleibt ein Werkzeug ohne Sim-Abhaengigkeit
+M.SHORT_LIFE = 10
+M.F7_MIN_LIFE = 30
+M.F7_MAX_SHORT = 0.20
 
 M.CAUSE_DE = {
   [1] = "Hogger-Nahkampf", [2] = "Charge", [3] = "Vicious Slice",
@@ -329,6 +334,18 @@ function M.hints(r)
   if dmg_all > 0 and r.sum.dmg_mobs / dmg_all > 0.10 then
     out[#out + 1] = "Mehr als ein Zehntel des Schadens ging an Mobs statt an Hogger: die Ambient-Mobs lenken zu stark ab."
   end
+  -- Runde 20: Fressen und Sterben
+  if r.sum.dmg_hogger > 0 and r.sum.eat_heal / r.sum.dmg_hogger > 0.5 then
+    out[#out + 1] = string.format(
+      "Das Fressen holt %.0f %% des Raidschadens zurueck: eat_heal_rate runter oder eat_channel_duration runter — mit menschlicher Tritt-Latenz kommt der Tritt nie frueh genug, um das allein zu loesen.",
+      r.sum.eat_heal / r.sum.dmg_hogger * 100)
+  end
+  local ls = M.life_stats(r.lifetimes, M.SHORT_LIFE)
+  if ls and (ls.mean < M.F7_MIN_LIFE or ls.short_share > M.F7_MAX_SHORT) then
+    out[#out + 1] = string.format(
+      "Man lebt im Mittel %.0f s und %.0f %% der Leben enden unter %d s (F7: >= %d s, <= %.0f %%): hogger_cleave_divisor hoch oder hogger_autohit_dmg runter — das Sterben soll Teil sein, nicht alles.",
+      ls.mean, ls.short_share * 100, M.SHORT_LIFE, M.F7_MIN_LIFE, M.F7_MAX_SHORT * 100)
+  end
   return out
 end
 
@@ -344,7 +361,8 @@ function M.render(r, quelle, defaults)
   w("# Abend-Auswertung — %s\n", quelle or "Log")
   w("%d Zeilen gelesen%s, %d Trys, Raidgroesse %s, Seed %s.\n",
     r.lines_total, r.lines_bad > 0 and (" (" .. r.lines_bad .. " unlesbar)") or "",
-    r.n_try, tostring(r.raid_n), tostring(r.seed))
+    r.n_try, tostring(r.raid_n) .. " (" .. tostring(r.players_seen or 0) .. " Spieler gesehen)",
+    tostring(r.seed))
   if r.n_try == 0 then
     w("\nKein vollstaendiger Try im Log — nichts zu rechnen.\n")
     return table.concat(out, "\n") .. "\n"
@@ -373,9 +391,31 @@ function M.render(r, quelle, defaults)
     r.sum.heal_aggro)
   w("| Charges je Try | %.1f | |", r.sum.charges / r.n_try)
   w("| Toedliche Krits | %d | |", r.sum.crit_kills)
-  if r.total_time > 0 and r.raid_n and r.raid_n > 0 then
+  -- Runde 20 (F7): wie lange lebt man nach der Wiederbelebung, und wie oft
+  -- stirbt man gleich wieder? Dazu, was das Fressen zurueckholt.
+  local ls = M.life_stats(r.lifetimes, M.SHORT_LIFE)
+  if ls then
+    w("| Lebensdauer nach der Wiederbelebung (Mittel) | %.1f s | >= %d s (F7) |",
+      ls.mean, M.F7_MIN_LIFE)
+    w("| Leben unter %d s | %s | <= %.0f %% (F7) |", M.SHORT_LIFE,
+      pct(ls.short_share), M.F7_MAX_SHORT * 100)
+  end
+  if r.sum.dmg_hogger > 0 then
+    w("| Fress-Heilung gegen Raidschaden | %.0f gegen %.0f (%s zurueckgeholt) | Fressen ist der Hebel (F3) |",
+      r.sum.eat_heal, r.sum.dmg_hogger, pct(r.sum.eat_heal / r.sum.dmg_hogger))
+  end
+  if #r.kick_latencies > 0 then
+    local ksum = 0
+    for _, v in ipairs(r.kick_latencies) do ksum = ksum + v end
+    w("| Tritt-Latenz (Mittel, nur getretene Kanaele) | %.1f s | je kuerzer, desto weniger heilt er |",
+      ksum / #r.kick_latencies)
+  end
+  -- Raidgroesse: die groessere der beiden Wahrheiten (try_start.val stand bei
+  -- #215-Logs auf 1, waehrend dreissig Leute spielten)
+  local raid_n = math.max(r.raid_n or 0, r.players_seen or 0)
+  if r.total_time > 0 and raid_n > 0 then
     w("| Schaden an Hogger je Sekunde und Spieler | %.2f | Modellannahme ~3,5 (GDD 13.1) |",
-      r.sum.dmg_hogger / r.total_time / r.raid_n)
+      r.sum.dmg_hogger / r.total_time / raid_n)
   end
 
   -- Trys nach Ursache (Runde 17): die Frage "an der Zeit oder am Wipe

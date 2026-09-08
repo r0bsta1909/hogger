@@ -77,6 +77,21 @@ Ist niemand da, der tritt, hilft kein Regler — das ist eine Ansage-Frage. **De
 ### Zu viel Zeit vergeht mit Laufen / der Tod fühlt sich zu hart an
 Die Todesstrafe ist **absichtlich konstant** (Respawn-Timer 10 s + 16 s Laufweg inklusive Wiederbelebungskanal = 26 s; wer den Freigabe-Knopf nicht drückt, zahlt 5 s mehr) und seit Runde 6 fest. Wenn du sie doch drehen willst: `respawn_base`, `respawn_factor`. Nebenwirkung: der Laufweg hängt an `graveyard_to_field_dist` und `field_to_hill_dist` — und die 40-Sekunden-Frist `hogger_no_contact_reset` muss länger bleiben als die Zeit, die ein kompletter Wipe zum Zurückkommen braucht (31 s), sonst trabt Hogger heim und der Try ist verloren.
 
+### Alle sterben in zehn Sekunden / man belebt sich nur wieder, um gleich wieder zu sterben
+Das ist seit Runde 20 messbar (F7): der Log-Leser nennt die mittlere Lebensdauer nach der Wiederbelebung (Ziel ≥ 30 s) und den Anteil der Leben unter 10 s (Ziel ≤ 20 %).
+| Regler | Richtung | Nebenwirkung |
+|---|---|---|
+| `hogger_cleave_divisor` | hoch | er trifft weniger Umstehende gleichzeitig — der Nahkampfklumpen überlebt länger |
+| `hogger_autohit_dmg` | runter (Schritt 1) | Stoff stirbt in 3 statt 2 Hits; macht ihn insgesamt weicher, also danach `hogger_hp_slope` prüfen |
+
+### Das Fressen holt alles zurück (der Log-Leser sagt „X % zurückgeholt")
+Auch wenn die Schurken treten: ein Mensch braucht 1 bis 3 Sekunden bis zum Tritt, und in dieser Zeit heilt Hogger bei 30 Spielern schon 300 bis 900 HP je Kanal. Robs Abend vom 7. September: 88 % des gesamten Raidschadens zurückgefressen bei 73 % getretenen Kanälen.
+| Regler | Richtung | Bedeutung |
+|---|---|---|
+| `eat_heal_rate` | runter (Schritt 0,001) | weniger Heilung je Sekunde Kanal — der ehrlichste Regler gegen die Latenz |
+| `eat_hp_threshold` | runter | er fängt erst später an zu fressen |
+| `eat_cd` | hoch | seltener |
+
 ### Die Mobs am Wegesrand lenken zu stark ab
 | Regler | Richtung |
 |---|---|

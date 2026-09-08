@@ -436,8 +436,10 @@ local names = {
   "F4 Krits entscheiden nichts (<= 5 pp)",
   "F5 Median-Siegtry 6-13 min",
   "F6 Skalierung fair (Spread <= 15 pp)",
+  string.format("F7 Sterben ist Teil, nicht alles (Lebensdauer >= %d s, <= %.0f %% unter %d s)",
+    report.F7_MIN_LIFE, report.F7_MAX_SHORT * 100, report.SHORT_LIFE),
 }
-for k = 1, 6 do
+for k = 1, 7 do
   w("| F%d | %s | %s | %s |", k, names[k], f[k].ok and "BESTANDEN" or "**VERLETZT**", f[k].detail)
 end
 w("| T | Turtle verliert per Zeitlimit (> 95 %%) | %s | %s |",
@@ -526,5 +528,6 @@ if opts.out then
   io.write("Bericht geschrieben: ", opts.out, "\n")
 end
 
-local all_ok = f[1].ok and f[2].ok and f[3].ok and f[4].ok and f[5].ok and f[6].ok and f.turtle.ok
+local all_ok = f[1].ok and f[2].ok and f[3].ok and f[4].ok and f[5].ok and f[6].ok
+               and f[7].ok and f.turtle.ok
 os.exit(all_ok and 0 or 1)
