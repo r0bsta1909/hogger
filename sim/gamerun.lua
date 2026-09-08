@@ -70,6 +70,8 @@ function G.run_try(cfg)
   local profile = cfg.profile or G.DEFAULT_PROFILE
   local crits = cfg.crits ~= false
   set_crits(crits)
+  -- Rasterpunkt "typisch ohne X" (bot.SKIP): nur fuer diesen Lauf
+  bot.SKIP = cfg.skip or {}
 
   local state = world.new(cfg.seed)
   world.add_leeroy(state)
@@ -108,6 +110,7 @@ function G.run_try(cfg)
     if ended then break end
   end
   set_crits(true)
+  bot.SKIP = {}
   assert(ended, "gamerun: kein try_end innerhalb der Frist (N=" .. cfg.n .. ")")
 
   local r = logreport.analyse_events(evs)
