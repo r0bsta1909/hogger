@@ -1,21 +1,19 @@
--- sim/main.lua — CLI der Headless-Sim (GDD 17.2).
--- Einzelzelle: lua sim/main.lua --n 10 --runs 1000 --crits on
---              [--walk 14] [--agent koordiniert] [--seed 1]
--- --walk ist der Laufweg-Anteil der Todesstrafe (Geist + Wiederbelebungskanal
--- + Anmarsch, 16 s); ohne Angabe kommt er aus model.walk_time(). Die
--- Gesamtstrafe ist respawn_timer(N) + Laufweg (GDD 9.3 + 7.1).
+-- sim/main.lua — CLI der Balancing-Sim (GDD 17.2). Seit Runde 20 (ADR 006)
+-- treibt sie die echte Spielsimulation game/gamesim ueber sim/gamerun.lua;
+-- das alte 1D-Modell ist ausgemustert.
+-- Einzelzelle: lua sim/main.lua --n 10 --runs 100 --crits on
+--              [--agent typisch|kopflos|turtle] [--seed 1] [--set k=v]
+-- Rauchtest:   lua sim/main.lua --smoke        (N=10 typisch, 20 Laeufe)
 --
--- RICHTUNGSTEST (Standard-Gate seit Runde 14, ADR 004; seit Runde 20 auf
--- der Spielsimulation, --engine spiel):
---              lua sim/main.lua --engine spiel --quick --jobs 10 [--out ...]
+-- RICHTUNGSTEST (Standard-Gate, ADR 004/006):
+--              lua sim/main.lua --quick --jobs 10 [--out reports/x.md]
 --   16 Zellen (N x Profil, Krits-aus nur fuer typisch), 50 Laeufe je Zelle,
---   ~7 min; deckt F1-F7 und das Turtle-Gate ab. 100 Laeufe (~14 min) auf Ansage.
---   1D-Sim (bis zur Ausmusterung): lua sim/main.lua --quick --jobs 10
---   24 Zellen bei festem Laufweg, deckt F1-F6 und das Turtle-Gate ab.
--- VOLLE MATRIX (nur vor Releases oder auf Ansage):
---              lua sim/main.lua --sweep --runs 1000 --jobs 10 [--out ...]
---   96 Zellen; die zusaetzlichen 72 variieren nur den Laufweg, der seit
---   Runde 6 (#96) fest ist — sie liefern die Belegmatrizen, kein Kriterium.
+--   ~7 min mit 10 Kernen, +/-14 pp je Quote; deckt F1-F7 und das Turtle-Gate.
+--   --runs 100 (+/-10 pp) kostet ~14 min und laeuft nur auf Ansage.
+-- VOLLE MATRIX (alle 24 Zellen inkl. Krits-aus fuer kopflos/turtle):
+--              lua sim/main.lua --sweep --runs 100 --jobs 10 [--out ...]
+-- RASTERPUNKT (Kalibrierung, nur Richtung):
+--              lua sim/main.lua --quick --only typisch --crits-only --runs 20 --jobs 4 --set k=v
 --
 -- --jobs N verteilt die Zellen auf N Kindprozesse (io.popen, plattformgleich)
 -- und fuegt deren Ergebnisse zusammen. --part k/n ist der Kindmodus: er
@@ -25,7 +23,6 @@
 
 package.path = "./?.lua;" .. package.path
 
-local engine = require("sim.engine")
 local gamerun = require("sim.gamerun")
 local report = require("sim.report")
 local model = require("sim.model")
@@ -37,11 +34,10 @@ local function note(s)
   io.stderr:flush()
 end
 
--- --engine spiel|1d (Runde 20): "spiel" treibt die echte Spielsimulation
--- (sim/gamerun.lua, Bots als Referenz-Raid), "1d" das alte Modell
--- (sim/engine.lua). Standard bis zur Ausmusterung der 1D-Sim: 1d.
+-- --engine spiel (Runde 20, ADR 006): die Spielsimulation ist die einzige
+-- Engine; die Option bleibt als Klartext-Abweisung fuer alte Aufrufe.
 local opts = { n = 10, runs = 100, walk = nil, crits = "on",
-               agent = nil, seed = 1, mode = "cell", engine = "1d",
+               agent = nil, seed = 1, mode = "cell", engine = "spiel",
                out = nil, date = "bericht", jobs = 1, part = nil, parts = nil }
 local raw = {}
 local i = 1
@@ -95,26 +91,24 @@ opts.walk = opts.walk or model.walk_time()
 if opts.engine == "spiel" and opts.mode == "quick" and not opts.runs_given then
   opts.runs = 50
 end
-assert(opts.engine == "1d" or opts.engine == "spiel",
-  "--engine erwartet 1d oder spiel, bekam: " .. tostring(opts.engine))
-local SPIEL = opts.engine == "spiel"
-local NAMES = SPIEL and report.NAMES_SPIEL or report.NAMES_1D
+if opts.engine ~= "spiel" then
+  io.write("--engine ", tostring(opts.engine), ": die 1D-Sim ist seit Runde 20 ausgemustert (ADR 006); es gibt nur noch die Spielsimulation.\n")
+  os.exit(2)
+end
+local SPIEL = true
+local NAMES = report.NAMES_SPIEL
 opts.agent = opts.agent or NAMES.good
 
 -- Ein Lauf. Die Spielsim liefert Listen (Lebensdauern, Tritt-Latenzen);
 -- die werden hier zu Kennzahlen verdichtet, damit ein Kindprozess keine
 -- Hunderte Zahlen je Lauf serialisieren muss.
 local function run_one(agent, n, walk, crits, seed)
-  if SPIEL then
-    local r = gamerun.run_try({ n = n, crits = crits, profile = agent,
-                                seed = seed, log = false })
-    r.life = report.compact_life(r.lifetimes)
-    r.kick = report.compact_list(r.kick_latencies)
-    r.lifetimes, r.kick_latencies = nil, nil
-    return r
-  end
-  return engine.run_try({ n = n, walk = walk, crits = crits, agent = agent,
-                          seed = seed, log = false })
+  local r = gamerun.run_try({ n = n, crits = crits, profile = agent,
+                              seed = seed, log = false })
+  r.life = report.compact_life(r.lifetimes)
+  r.kick = report.compact_list(r.kick_latencies)
+  r.lifetimes, r.kick_latencies = nil, nil
+  return r
 end
 
 local function summarize_cell(results, n)
@@ -191,10 +185,10 @@ local NS = { 5, 10, 20, 40 }
 -- als vor Runde 20 — Vergleiche mit aelteren Berichten nur mit Vorbehalt.
 local QUICK_WALK = 16 -- = model.walk_time(), per Test festgenagelt
 -- Die Spielsim hat keine Laufweg-Achse: der Weg ist echte Geometrie
--- (game/data/map.lua). Ihre Matrix ist N x Krits x Profil.
-local WALKS = SPIEL and { QUICK_WALK } or { 12, 16, 20, 24 }
-local AGENTS = SPIEL and { "kopflos", "typisch", "turtle" }
-                     or { "unkoordiniert", "koordiniert", "turtle" }
+-- (game/data/map.lua). Ihre Matrix ist N x Krits x Profil; der Laufweg
+-- steht nur noch als Schluessel im Zellenbaum und im Berichtskopf.
+local WALKS = { QUICK_WALK }
+local AGENTS = { "kopflos", "typisch", "turtle" }
 
 local all_cells, cells_for_run = {}, {}
 do
@@ -396,22 +390,6 @@ for _, c in ipairs(cells_for_run) do
 end
 
 local best_walk = QUICK_WALK
-if opts.mode == "sweep" then
-  -- Laufweg fixieren: kleinster Wert, bei dem F1 UND F5 fuer alle N halten;
-  -- gibt es keinen, der mit den wenigsten Verletzungen. (Historische
-  -- Absicherung — der Wert ist seit Runde 6 per Rob-Entscheid fest.)
-  local best_score = -1
-  for _, walk in ipairs(WALKS) do
-    local score = 0
-    for _, n in ipairs(NS) do
-      local s = cells["koordiniert"][n][walk]["an"]
-      if s.win_rate >= 0.60 and s.win_rate <= 0.90 then score = score + 1 end
-      local md = s.median_win_duration
-      if md and md >= 6 * 60 and md <= 13 * 60 then score = score + 1 end
-    end
-    if score > best_score then best_score, best_walk = score, walk end
-  end
-end
 
 local f = report.evaluate(cells, best_walk, NS, NAMES)
 
@@ -432,19 +410,9 @@ local function pctci(s)
     report.ci95(s.win_rate, s.runs) * 100)
 end
 
-if SPIEL then
-  w("# Richtungstest — Spielsimulation (%s)\n", opts.date)
-  w("%d Laeufe je Zelle, %d Zellen: N x Krits x Bot-Profil (typisch = der Raid, gegen den balanciert wird; kopflos = Gegenprobe; turtle = Anti-Stall-Gate). Die Spielsim game/gamesim laeuft headless in reinem LuaJIT (sim/gamerun.lua, Runde 20); der Laufweg ist echte Kartengeometrie, kein Parameter.\n",
-    opts.runs, #cells_for_run)
-elseif opts.mode == "quick" then
-  w("# Richtungstest — Headless-Sim (%s)\n", opts.date)
-  w("%d Laeufe je Zelle, %d Zellen: N x Krits x Agent bei festem Laufweg %d s (= model.walk_time(), seit Runde 6 per Rob-Entscheid fest, #96). Deckt F1-F6 und das Turtle-Gate ab; die volle Matrix variiert zusaetzlich den Laufweg und liefert nur Belegmatrizen.\n",
-    opts.runs, #cells_for_run, best_walk)
-else
-  w("# M1-Validierungsbericht — Headless-Sim (%s)\n", opts.date)
-  w("%d Laeufe je Zelle, Matrix: N x Laufweg x Krits x Agent (GDD 17.2).\n", opts.runs)
-  w("**Fixierter Laufweg: %d s** (kleinster Wert mit maximaler F1+F5-Erfuellung).\n", best_walk)
-end
+w("# %s — Spielsimulation (%s)\n", opts.mode == "sweep" and "Vollmatrix" or "Richtungstest", opts.date)
+w("%d Laeufe je Zelle, %d Zellen: N x Krits x Bot-Profil (typisch = der Raid, gegen den balanciert wird; kopflos = Gegenprobe; turtle = Anti-Stall-Gate). Die Spielsim game/gamesim laeuft headless in reinem LuaJIT (sim/gamerun.lua, ADR 006); der Laufweg ist echte Kartengeometrie, kein Parameter.\n",
+  opts.runs, #cells_for_run)
 w("Gesamt-Todesstrafe = Respawn-Timer(N) + Laufweg: N=5 -> %.0f s, N=40 -> %.0f s.\n",
   model.respawn_timer(5) + best_walk, model.respawn_timer(40) + best_walk)
 w("Alle Siegquoten mit 95-%%-Vertrauensbereich (+/- pp); bei %d Laeufen sind das rund %.1f pp bei einer Quote um 75 %%.\n",
