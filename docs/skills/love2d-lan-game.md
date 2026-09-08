@@ -474,6 +474,21 @@ Sonderfall, der bei jeder weiteren Socket-Szene neu gebaut werden müsste.
   wie „60–90 %" ist erst mit Streuung eine messbare Größe: je Agent ein Skill-Faktor, je Lauf ein
   gemeinsamer Koordinationsfaktor, beide deterministisch aus dem geloggten Seed. Die Streuung ist
   Sim-Modellparameter, nicht Spielverhalten — die Sim bleibt reproduzierbar.
+- **[gemessen] Eine Sim, deren Agenten besser spielen als die Bots, gegen die Menschen gemessen
+  werden, misst ein anderes Spiel.** Das schnelle 1D-Modell meldete 80 % Siege, das Spiel mit
+  30 Bots null — nicht wegen der Zahlen (die waren geteilt), sondern wegen des Verhaltens: ein
+  Dienst-Schurke mit 0,5 s Reaktion, 60 % Charge-Ausweichen, das es im Spiel mechanisch nicht gab,
+  Caster, die nie einen Schritt machten. Verhalten steht in keiner Zahlentabelle. Ausweg, der
+  dann gebaut wurde: die Balancing-Sim treibt die **echte Spielsimulation** headless (ein voller
+  16-Minuten-Try in 1–7 s reinem LuaJIT), gespielt von denselben Bots, die im Spiel als
+  Debug-Bots laufen — mit einem ehrlichen Profil („typischer Raid": Reaktionszeit 1–2 s, hält
+  Reichweite, bricht keine eigenen Casts) und einem kopflosen als Gegenprobe. Zwei Sims mit einer
+  Zahlentabelle sind nur so lange richtig, wie das Verhalten trivial ist.
+- **[gemessen] Der erste Wert eines Lehmer-Generators ist linear im Seed.** Wer je Lauf einen
+  Nebenstrom aus „Seed + Laufnummer" seedet, bekommt im ersten Wert eine Treppe (Gruppenfaktor
+  0,81 / 0,84 / 0,87 / … je Lauf) — sechs benachbarte Läufe verlieren alle, hundert sehen zufällig
+  aus. Ein Hash ähnlicher Strings hilft nicht (ähnliche Hashes). Den Seed nichtlinear mischen
+  (Quadrieren modulo, exakt in Doubles) und die Treppe per Test festnageln.
 - **[gemessen] Eine Testpyramide ohne Zeichentest hat ein Loch in der Mitte — und zwar genau dort, wo
   der Spieler steht.** Die love-freien Stufen (Unit, Determinismus) rufen den Renderer nie auf, der
   headless-Integrationstest läuft mit abgeschaltetem Grafikmodul, und Screenshot-Gegenproben treffen

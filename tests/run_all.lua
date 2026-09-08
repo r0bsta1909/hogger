@@ -58,7 +58,7 @@ for i = 1, #arg do
 end
 
 local stages = {
-  unit = { "tests.unit_model", "tests.unit_rng", "tests.unit_engine",
+  unit = { "tests.unit_model", "tests.unit_rng",
            "tests.unit_gamesim", "tests.unit_quest", "tests.unit_killcam",
            "tests.unit_statboard", "tests.unit_assets", "tests.unit_netguard",
            "tests.unit_fx", "tests.unit_admin",

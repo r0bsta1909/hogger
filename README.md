@@ -12,5 +12,5 @@ und das ganze Spiel ist eine bildschirmfüllende WoW-Minimap. Privates Spaßproj
 · Solo mit Bots: `love game --bots 4` · Steuerung: WASD/Pfeile, Leertaste springen, 1/2 Fähigkeiten,
 Klick/Tab Ziel, Mausrad/+/- Zoom, F10 Tuning-Panel (Host)
 
-Sim: `lua sim/main.lua --n 10 --runs 1000` · Tests: `lua tests/run_all.lua` ·
+Sim (die Spielsimulation selbst, ADR 006): `lua sim/main.lua --quick --jobs 10` · Tests: `lua tests/run_all.lua` ·
 Integration: `love game --headless --test`
