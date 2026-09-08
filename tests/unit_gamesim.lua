@@ -2225,3 +2225,128 @@ do
   step.step(st7, {})
   T.ok(h7.slow_until <= st7.time, "frost: ausgewichen -> kein Slow (die Wahl des Magiers)")
 end
+
+-- Bedrohungsschwellen und Zielgedaechtnis (Runde 21, #198), die Charge
+-- frisst Bedrohung (#199), der Spott gibt Bedrohung.
+do
+  local function threat_world()
+    local st = world.new(198)
+    world.add_player(st, "a", { quest_done = true })
+    world.add_player(st, "b", { quest_done = true })
+    world.begin_try(st, {})
+    local h = st.hogger
+    h.state, h.engaged = "combat", true
+    for _, p in ipairs(st.players) do
+      p.alive, p.ghost, p.class = true, false, "warrior"
+      p.max_hp = model.hp_for_class("warrior"); p.hp = p.max_hp
+      p.x, p.y = h.x + 20, h.y -- beide im Nahkampf
+    end
+    return st, h, st.players[1], st.players[2]
+  end
+  local swap_m, swap_r = model.p("hogger_threat_swap_melee"), model.p("hogger_threat_swap_ranged")
+
+  -- Nahkampf: 105 % reicht nicht, 111 % kippt
+  local st, h, a, b = threat_world()
+  h.threat[a.id], h.threat[b.id] = 100, 1
+  step.step(st, {})
+  T.eq(h.target_id, a.id, "schwelle: erstes Ziel ist die hoechste Bedrohung")
+  h.threat[b.id] = 100 * swap_m - 1
+  step.step(st, {})
+  T.eq(h.target_id, a.id, "schwelle: knapp unter der Nahkampf-Schwelle bleibt das Ziel")
+  h.threat[b.id] = 100 * swap_m + 1
+  step.step(st, {})
+  T.eq(h.target_id, b.id, "schwelle: ueber der Nahkampf-Schwelle kippt das Ziel")
+
+  -- Distanz: 125 % reicht nicht, 131 % kippt
+  local st2, h2, a2, b2 = threat_world()
+  b2.x = h2.x + 200 -- Herausforderer auf Distanz
+  h2.threat[a2.id], h2.threat[b2.id] = 100, 1
+  step.step(st2, {})
+  h2.threat[b2.id] = 100 * swap_r - 1
+  step.step(st2, {})
+  T.eq(h2.target_id, a2.id, "schwelle: knapp unter der Distanz-Schwelle bleibt das Ziel")
+  h2.threat[b2.id] = 100 * swap_r + 1
+  step.step(st2, {})
+  T.eq(h2.target_id, b2.id, "schwelle: ueber der Distanz-Schwelle kippt das Ziel")
+
+  -- Tod des Ziels: sofort neu waehlen
+  local st3, h3, a3, b3 = threat_world()
+  h3.threat[a3.id], h3.threat[b3.id] = 100, 50
+  step.step(st3, {})
+  a3.hp = 0
+  step.step(st3, { }) -- der Tod wird im Tick verbucht
+  a3.alive = false; h3.threat[a3.id] = nil
+  step.step(st3, {})
+  T.eq(h3.target_id, b3.id, "schwelle: nach dem Tod des Ziels sofort der Naechste")
+
+  -- Faktor 1,0 = ein Punkt kippt (Stand bis Runde 20)
+  local st4, h4, a4, b4 = threat_world()
+  local sm, sr = model.params.hogger_threat_swap_melee.wert, model.params.hogger_threat_swap_ranged.wert
+  model.params.hogger_threat_swap_melee.wert = 1.0
+  model.params.hogger_threat_swap_ranged.wert = 1.0
+  h4.threat[a4.id], h4.threat[b4.id] = 100, 1
+  step.step(st4, {})
+  h4.threat[b4.id] = 101
+  step.step(st4, {})
+  T.eq(h4.target_id, b4.id, "schwelle: Faktor 1 -> ein Punkt kippt")
+  model.params.hogger_threat_swap_melee.wert = sm
+  model.params.hogger_threat_swap_ranged.wert = sr
+
+  -- Spott gibt Bedrohung: Spitze + 1
+  local st5, h5, war, tank = threat_world()
+  h5.threat[tank.id], h5.threat[war.id] = 500, 1
+  war.target = world.HOGGER_ID
+  war.facing = input.facing_towards(war.x, war.y, h5.x, h5.y)
+  step.step(st5, { [war.id] = { mask = input.AB3, facing = war.facing } })
+  -- 501 plus den Autohit desselben Ticks (der Faehigkeitsdruck schaltet ihn an)
+  T.ok(h5.threat[war.id] >= 501 and h5.threat[war.id] < 520,
+    "spott: setzt den Krieger auf Spitzenbedrohung + 1 (" .. h5.threat[war.id] .. ")")
+  for _ = 1, math.ceil(model.p("warrior_taunt_duration") / model.TICK_DT) + 2 do
+    step.step(st5, {})
+  end
+  T.eq(h5.taunt, nil, "spott: Zwang abgelaufen")
+  T.eq(h5.target_id, war.id, "spott: Hogger bleibt beim Krieger, bis jemand die Schwelle reisst")
+
+  -- Die Charge frisst Bedrohung — nur beim Treffer
+  local function charge_world2(dodge)
+    local st6 = world.new(199)
+    world.add_player(st6, "z", { quest_done = true })
+    world.begin_try(st6, {})
+    local h6, p6 = st6.hogger, st6.players[1]
+    h6.state, h6.engaged = "combat", true
+    p6.alive, p6.ghost, p6.class = true, false, "hunter"
+    p6.max_hp = model.hp_for_class("hunter"); p6.hp = p6.max_hp
+    p6.x, p6.y = h6.x + 200, h6.y
+    h6.threat[p6.id] = 200
+    h6.charge = { target = p6.id, t_left = model.TICK_DT / 2,
+                  ox = h6.x, oy = h6.y, tx = p6.x, ty = p6.y }
+    if dodge then p6.y = p6.y + 100 end
+    step.step(st6, {})
+    return h6.threat[p6.id]
+  end
+  T.near(charge_world2(false), 200 * (1 - model.p("hogger_charge_threat_loss")),
+    "charge: der Getroffene verliert Bedrohung (#199)")
+  T.near(charge_world2(true), 200, "charge: der Ausweicher verliert nichts")
+end
+
+-- Echo-Zeile beim Verfehlen (Runde 21, Rob-Wortlaut, Zeile 40)
+do
+  local announcer = require("game.gamesim.announcer")
+  local lines = require("game.gamesim.lines")
+  T.ok(lines[40] ~= nil and lines[40]:find("DANEBEN") ~= nil, "echo: Zeile 40 ist die Ausweich-Zeile")
+  local st = world.new(40)
+  world.add_player(st, "z", { quest_done = true })
+  world.begin_try(st, {})
+  st.time = 100
+  local ev = { { ev = "charge", src = "hogger", dst = 1, val = 0 } }
+  announcer.process(st, ev)
+  local said
+  for _, e in ipairs(ev) do if e.ev == "leeroy_line" then said = e.dst end end
+  T.eq(said, 40, "echo: verfehlte Charge -> Zeile 40")
+  local ev2 = { { ev = "charge", src = "hogger", dst = 1, val = 1 } }
+  st.time = 200
+  announcer.process(st, ev2)
+  local said2
+  for _, e in ipairs(ev2) do if e.ev == "leeroy_line" then said2 = e.dst end end
+  T.eq(said2, nil, "echo: getroffene Charge -> keine Zeile")
+end

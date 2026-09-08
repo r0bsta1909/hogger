@@ -338,10 +338,17 @@ function W.snapshot_body(state)
   -- Ziel des Ziels (GDD 4.3): hoechste Bedrohung als Anzeige-Naeherung
   local htarget = 255
   do
-    local best = -1
-    for _, p in ipairs(state.players) do
-      local th = h.threat and h.threat[p.id]
-      if p.alive and th and th > best then best, htarget = th, p.id end
+    -- Runde 21 (#198): Hogger hat ein echtes Zielgedaechtnis — das geht
+    -- ins Netz; die Bedrohungs-Naeherung bleibt nur als Rueckfall
+    local tp = h.target_id and state.players[h.target_id]
+    if tp and tp.alive then
+      htarget = tp.id
+    else
+      local best = -1
+      for _, p in ipairs(state.players) do
+        local th = h.threat and h.threat[p.id]
+        if p.alive and th and th > best then best, htarget = th, p.id end
+      end
     end
   end
   -- slow_rest (Runde 8, #107): Restsekunden des Magier-Frost-Slows an

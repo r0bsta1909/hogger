@@ -58,4 +58,6 @@ return {
   [37] = "Er ist weg. Wir standen wohl zu weit hinten.",
   [38] = "Zeit ist um. Er lebt noch. Wir leider auch.",
   [39] = "Von einer Uhr besiegt. Das ist ein neuer Tiefpunkt.",
+  -- 40: die Charge verfehlt (Runde 21, Rob-Wortlaut) — der verdiente Moment
+  [40] = "DANEBEN! Der Gnoll trifft nur Luft!",
 }

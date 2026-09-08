@@ -123,6 +123,7 @@ end
 local function hogger_target_pid(state)
   local h = state.hogger
   if h.target then return h.target end
+  if h.target_id and state.players[h.target_id] then return h.target_id end
   if not h.threat then return nil end
   local best, bid = 0, nil
   for _, q in ipairs(state.players) do
