@@ -554,6 +554,15 @@ local ABILITIES = {
         if etype == "hogger" then
           state.hogger.taunt = { pid = p.id,
             until_t = state.time + model.p("warrior_taunt_duration") }
+          -- Runde 21 (#198, Vanilla): der Spott setzt den Krieger auf die
+          -- Spitzenbedrohung + 1 — nach dem Zwang bleibt Hogger bei ihm,
+          -- bis jemand die Schwelle reisst. Vorher gab er keine Bedrohung.
+          local h = state.hogger
+          local top = 0
+          for id, th in pairs(h.threat) do
+            if id ~= p.id and th > top then top = th end
+          end
+          h.threat[p.id] = math.max(h.threat[p.id] or 0, top + 1)
           events.push(ev, state.tick, "taunt", p.id, "hogger", nil, nil)
         else
           enemy.state = "combat"
@@ -1358,6 +1367,7 @@ local function pick_hogger_target(state)
     if state.time < h.taunt.until_t then
       local tp = state.players[h.taunt.pid]
       if tp and tp.alive and not tp.stealth then
+        h.target_id = tp.id
         return tp, world.dist(tp.x, tp.y, h.x, h.y) <= model.p("melee_range")
       end
       h.taunt = nil
@@ -1379,7 +1389,32 @@ local function pick_hogger_target(state)
     if p.alive and not p.stealth then consider(p) end
   end
   each_npc(state, consider)
-  return best_melee or best_any, best_melee ~= nil
+  local cand = best_melee or best_any
+  -- Bedrohungsschwellen (Runde 21, #198, Vanilla): Hogger behaelt sein
+  -- aktuelles Ziel, bis der Herausforderer im Nahkampf 110 % bzw. auf
+  -- Distanz 130 % seiner Bedrohung hat. Bis Runde 20 kippte ein Punkt
+  -- Vorsprung das Ziel 60x je Sekunde — der Bedrohungsbogen zeigte eine
+  -- Zahl, die niemand steuern konnte, und der Spott war eine Geste.
+  local cur = h.target_id and (state.players[h.target_id] or state.npcs[h.target_id])
+  local cur_th = cur and h.threat[cur.id] or 0
+  if cur and cur_th > 0 and (cur.kind or (cur.alive and not cur.stealth)) then
+    -- Herausforderer: erst der Staerkste im Nahkampf (110 %), dann der
+    -- Staerkste ueberhaupt (nach seiner Distanz) — wer die Schwelle nicht
+    -- reisst, laesst Hogger bei seinem Ziel
+    local function beats(e)
+      if not e or e == cur then return false end
+      local d = world.dist(e.x, e.y, h.x, h.y)
+      local need = cur_th * model.p(d <= melee_r and "hogger_threat_swap_melee"
+                                                   or "hogger_threat_swap_ranged")
+      return (h.threat[e.id] or 0) >= need
+    end
+    if beats(best_melee) then cand = best_melee
+    elseif beats(best_any) then cand = best_any
+    else cand = cur end
+  end
+  h.target_id = cand and cand.id or nil
+  if not cand then return nil, false end
+  return cand, world.dist(cand.x, cand.y, h.x, h.y) <= melee_r
 end
 
 local function hogger_damage_npc(state, npc, amount, ev)
@@ -1489,6 +1524,7 @@ local function hogger_reset(state, cause)
   h.state = "reset"
   h.eating = nil
   h.charge = nil
+  h.target_id = nil
   h.reset_cause = cause -- S.step wertet den Try aus
 end
 
@@ -1600,6 +1636,12 @@ local function hogger_tick(state, ev)
         if target.cast then break_cast(target) end
         events.push(ev, state.tick, "charge", "hogger", target.id, 1, nil)
         hogger_damage_player(state, target, model.p("hogger_charge_dmg"), "charge", ev)
+        -- Die Charge frisst Bedrohung (Runde 21, #199): der Getroffene
+        -- verliert einen Anteil, die Aggro rotiert. Ausweichen ist die
+        -- Belohnung — der Ausweicher verliert nichts.
+        if h.threat[target.id] then
+          h.threat[target.id] = h.threat[target.id] * (1 - model.p("hogger_charge_threat_loss"))
+        end
       end
       h.charge = nil
       h.next_auto = math.max(h.next_auto, 0.5)

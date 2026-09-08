@@ -88,6 +88,12 @@ return {
   -- Bedrohung (9.4) ---------------------------------------------------------
   threat_per_damage = { "Bedrohung je Punkt ausgeteiltem Schaden.",
     "hoeher = Schadensspitzen ziehen Aggro" },
+  hogger_threat_swap_melee = { "Bedrohungsfaktor, ab dem ein Nahkaempfer das Ziel uebernimmt.",
+    "hoeher = Hogger klebt laenger an seinem Ziel" },
+  hogger_threat_swap_ranged = { "Bedrohungsfaktor, ab dem ein Fernkaempfer das Ziel uebernimmt.",
+    "hoeher = Fernkaempfer ziehen seltener Aggro" },
+  hogger_charge_threat_loss = { "Anteil der Bedrohung, den ein von der Charge Getroffener verliert.",
+    "hoeher = die Charge laesst die Aggro staerker rotieren" },
   threat_per_heal = { "Bedrohung je Punkt Heilung.",
     "hoeher = Heiler ziehen frueher Aggro" },
 

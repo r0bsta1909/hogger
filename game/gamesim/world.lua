@@ -213,6 +213,7 @@ local function reset_hogger(state)
                             -- (Unterbrechung nur per Tritt, Runde 12 #140)
     charge = nil,           -- { target, t_left } (Anlauf/Telegraph)
     taunt = nil,            -- { pid, until_t } — Spott-Zwang (Runde 12, #141)
+    target_id = nil,        -- aktuelles Ziel (Runde 21, #198: Zielgedaechtnis)
     slow_until = 0,
     engaged = false,        -- Try angefangen? (Runde 10, #124)
     no_contact_t = 0,       -- Kein-Kontakt-Uhr (Runde 9, #117)

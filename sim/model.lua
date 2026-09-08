@@ -64,7 +64,9 @@ M.params = {
   -- Historie: Offset 950 -> 850 in Runde 5 (#86, Zauberstab-Aus); Runde 6
   -- (#96) fixer Respawn -> quad-Term neu, slope/offset nachkalibriert.
   -- F1-F6-Belege: Sweeps in GDD 17.9.
-  hogger_hp_offset       = p(600, 0, 3000, 50, "9.3"),
+  -- Runde 21 (#198/#199): 600 -> 150 — mit Zielgedaechtnis gewann N=5 zu
+  -- 98 %; der Sockel ist der Hebel fuer kleine N (GDD 13.3)
+  hogger_hp_offset       = p(150, 0, 3000, 50, "9.3"),
   -- Runde 20: 30 -> 20 (F7-Hebel). Mit 30 starb Stoff in zwei Schlaegen,
   -- die mittlere Lebensdauer lag bei 15-25 s und ein Drittel der Leben
   -- endete unter 10 s ("wiederbeleben, um sofort zu sterben"). Mit 20 und
@@ -168,6 +170,15 @@ M.params = {
   -- Bedrohung (GDD 9.4)
   threat_per_damage      = p(1.0, 0.1, 3.0, 0.05, "9.4"),
   threat_per_heal        = p(0.75, 0.1, 3.0, 0.05, "9.4"),
+  -- Bedrohungsschwellen (Runde 21, #198, Vanilla): Hogger behaelt sein Ziel,
+  -- bis ein Herausforderer im Nahkampf 110 % bzw. ausserhalb 130 % der
+  -- Bedrohung des aktuellen Ziels hat. 1,0/1,0 = ein Punkt kippt (Stand
+  -- bis Runde 20).
+  hogger_threat_swap_melee  = p(1.10, 1.0, 2.0, 0.05, "9.4"),
+  hogger_threat_swap_ranged = p(1.30, 1.0, 2.0, 0.05, "9.4"),
+  -- Die Charge frisst Bedrohung (Runde 21, #199, Knock-Away-Vorbild): wer
+  -- getroffen wird, verliert diesen Anteil. Wer ausweicht, verliert nichts.
+  hogger_charge_threat_loss = p(0.5, 0, 1.0, 0.05, "9.2"),
 
   -- Klassen-Faehigkeiten (GDD 8.2)
   warrior_heroic_dmg     = p(6, 1, 20, 1, "8.2"),

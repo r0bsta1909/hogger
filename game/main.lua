@@ -559,6 +559,30 @@ function love.update(dt)
   process_cosmetics(view)
   app.view = view
 
+  -- Aggro-Ansagen (Runde 21, #198): seit Hogger ein Zielgedaechtnis hat,
+  -- sind sie ehrlich — vorher kippte das Ziel 60x je Sekunde. Beide nur
+  -- fuer den Betroffenen, im Ton des Echos; einmal je Wechsel bzw. je
+  -- Ueberschreiten, mit Hysterese, damit nichts flackert.
+  if view and view.hogger and view.me then
+    local me = view.players[view.me]
+    local tgt = view.hogger.target
+    if tgt == view.me and app.hogger_target_seen ~= view.me and me and me.alive then
+      app.render:announce("Echo: ER WILL JETZT DICH!", 2.5)
+    end
+    app.hogger_target_seen = tgt
+    local frac = me and me.threat_frac or 0
+    if me and me.alive and tgt ~= view.me then
+      if frac >= 0.9 and not app.threat_warned then
+        app.threat_warned = true
+        app.render:announce("Echo: Du ziehst gleich Aggro!", 2.5)
+      elseif frac < 0.7 then
+        app.threat_warned = false
+      end
+    else
+      app.threat_warned = false
+    end
+  end
+
   -- Wenn die Enrage-Welle EINEN SELBST erreicht, soll man es spueren
   -- (Runde 18). Der Ring ist in 0,14 s durch den Sichtkreis — ohne diesen
   -- Schlag waere der eigene Tod nur eine Zahl, die verschwindet. Genau

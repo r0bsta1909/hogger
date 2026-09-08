@@ -57,6 +57,12 @@ function A.process(state, ev)
     elseif e.ev == "charge" then
       ann.last_charge_pid = e.dst
       ann.last_charge_t = state.time
+      -- Runde 21: verfehlt (val = 0) — das Echo feiert es, gedrosselt wie
+      -- die Todeskommentare. Kein pick(): der Zufallsstrom bleibt stehen.
+      if (e.val or 1) == 0 and gate_open then
+        gate_open = false
+        say(state, ev, 40)
+      end
     elseif e.ev == "ding" then
       say(state, ev, 29)
     elseif e.ev == "try_end" then
