@@ -1,9 +1,9 @@
 -- sim/main.lua — CLI der Headless-Sim (GDD 17.2).
 -- Einzelzelle: lua sim/main.lua --n 10 --runs 1000 --crits on
 --              [--walk 14] [--agent koordiniert] [--seed 1]
--- --walk ist der Laufweg-Anteil der Todesstrafe (Geist + Anmarsch); ohne
--- Angabe kommt er aus model.walk_time(). Die Gesamtstrafe ist
--- respawn_timer(N) + Laufweg (GDD 9.3 + 7.1).
+-- --walk ist der Laufweg-Anteil der Todesstrafe (Geist + Wiederbelebungskanal
+-- + Anmarsch, 16 s); ohne Angabe kommt er aus model.walk_time(). Die
+-- Gesamtstrafe ist respawn_timer(N) + Laufweg (GDD 9.3 + 7.1).
 --
 -- RICHTUNGSTEST (Standard-Gate seit Runde 14, ADR 004):
 --              lua sim/main.lua --quick --jobs 10 [--out reports/x.md]
@@ -124,9 +124,13 @@ end
 -- Matrix — damit sind die Seeds identisch und beide Laeufe vergleichbar.
 -- ---------------------------------------------------------------------------
 local NS = { 5, 10, 20, 40 }
-local WALKS = { 10, 14, 18, 22 }
+-- Runde 20: Laufweg-Achse 10/14/18/22 -> 12/16/20/24, weil model.walk_time()
+-- jetzt den 2-s-Wiederbelebungskanal mitrechnet (16 s statt 14). Die
+-- Zellindizes und damit die Seeds bleiben; die Welten sind trotzdem andere
+-- als vor Runde 20 — Vergleiche mit aelteren Berichten nur mit Vorbehalt.
+local WALKS = { 12, 16, 20, 24 }
 local AGENTS = { "unkoordiniert", "koordiniert", "turtle" }
-local QUICK_WALK = 14 -- = model.walk_time(), per Test festgenagelt
+local QUICK_WALK = 16 -- = model.walk_time(), per Test festgenagelt
 
 local all_cells, cells_for_run = {}, {}
 do

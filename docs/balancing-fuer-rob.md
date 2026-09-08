@@ -75,7 +75,7 @@ Ist niemand da, der tritt, hilft kein Regler — das ist eine Ansage-Frage. **De
 | `threat_per_heal` | runter, wenn Heiler dauernd Aggro ziehen und sterben |
 
 ### Zu viel Zeit vergeht mit Laufen / der Tod fühlt sich zu hart an
-Die Todesstrafe ist **absichtlich konstant** (Respawn-Timer + 14 s Laufweg) und seit Runde 6 fest. Wenn du sie doch drehen willst: `respawn_base`, `respawn_factor`. Nebenwirkung: der Laufweg hängt an `graveyard_to_field_dist` und `field_to_hill_dist` — und die 30-Sekunden-Frist `hogger_no_contact_reset` muss länger bleiben als die Zeit, die ein kompletter Wipe zum Zurückkommen braucht, sonst trabt Hogger heim und der Try ist verloren.
+Die Todesstrafe ist **absichtlich konstant** (Respawn-Timer 10 s + 16 s Laufweg inklusive Wiederbelebungskanal = 26 s; wer den Freigabe-Knopf nicht drückt, zahlt 5 s mehr) und seit Runde 6 fest. Wenn du sie doch drehen willst: `respawn_base`, `respawn_factor`. Nebenwirkung: der Laufweg hängt an `graveyard_to_field_dist` und `field_to_hill_dist` — und die 40-Sekunden-Frist `hogger_no_contact_reset` muss länger bleiben als die Zeit, die ein kompletter Wipe zum Zurückkommen braucht (31 s), sonst trabt Hogger heim und der Try ist verloren.
 
 ### Die Mobs am Wegesrand lenken zu stark ab
 | Regler | Richtung |

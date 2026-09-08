@@ -228,11 +228,11 @@ function M.count_n(state)
   return math.max(1, n)
 end
 
--- Laufzeit-Skalierung (Runde 9, #118): NUR fuer die F12-Debug-Bots. Echte
--- Joins zaehlen weiter erst ab dem naechsten Try (GDD 6). Hoggers HP-ANTEIL
--- bleibt erhalten, Adds werden nur aufgestockt (erschlagene Welpen kommen
--- nicht zurueck, GDD 9.2). Cleave, Unterbrecher, Fressrate und Mob-Slots
--- folgen automatisch ueber n_scale.
+-- Laufzeit-Skalierung (Runde 9, #118): fuer die F12-Debug-Bots immer, fuer
+-- echte Joins/Leaves nur VOR dem Pull (M.rescale_prepull, Runde 20 #215).
+-- Hoggers HP-ANTEIL bleibt erhalten, Adds werden nur aufgestockt
+-- (erschlagene Welpen kommen nicht zurueck, GDD 9.2). Cleave, Unterbrecher,
+-- Fressrate und Mob-Slots folgen automatisch ueber n_scale.
 function M.rescale(state, evlist)
   local h = state.hogger
   -- Nach dem Sieg oder bei totem Hogger nichts tun: ein hp-Update wuerde
@@ -264,6 +264,20 @@ function M.rescale(state, evlist)
     events.push(evlist, state.tick, "param_change", "host", "n_scale", n, nil)
   end
   return true
+end
+
+-- Skalierung vor dem Pull (Runde 20, #215): Solange Hogger im laufenden Try
+-- noch niemanden angegriffen hat, zaehlt jeder Join und Leave sofort — der
+-- Try hat ja noch nicht begonnen, nur die Uhr laeuft. Bis dahin lief der
+-- erste Try eines Auto-Host-Abends mit n_scale = 1 (der Host war beim
+-- begin_try allein): Hogger hatte 120 statt 28.800 HP, und wer ihn vor dem
+-- Phantom-Wipe erreichte, brach den Fluch nach einer Minute. Ab dem ersten
+-- Kontakt gilt wieder GDD 6: Nachzuegler zaehlen ab dem naechsten Try.
+-- Kein zweiter begin_try, also verschiebt sich kein Try-Seed.
+function M.rescale_prepull(state, evlist)
+  local h = state.hogger
+  if not h or h.engaged then return false end
+  return M.rescale(state, evlist)
 end
 
 -- Try-Start: N zaehlen, Hogger zuruecksetzen, Seed ableiten, Parameter loggen

@@ -161,6 +161,9 @@ function H:_handle(peer, data)
     self.clients[peer] = { pid = pid, queue = {}, last_mask = 0,
                            ack = 0, next_ctick = nil, facing = 0 }
     self.by_pid[pid] = self.clients[peer]
+    -- Vor dem Pull zaehlt der Join sofort (Runde 20, #215); danach erst ab
+    -- dem naechsten Try (GDD 6)
+    self:_rescale_prepull()
     self:_peer_send(peer, wire.welcome(pid, rejoin, model.params), CH_RELIABLE, "reliable")
     self:_broadcast(wire.roster(self.state.players), CH_RELIABLE, "reliable")
   elseif c and msg == wire.MSG.RENAME then
@@ -323,10 +326,17 @@ function H:_next_bot_name()
   return nm
 end
 
+-- Skalierung vor dem Pull (Runde 20, #215): Joins und Leaves zaehlen sofort,
+-- solange Hogger im laufenden Try noch niemanden angegriffen hat. Das Log
+-- bekommt wie bei den Debug-Bots ein param_change n_scale.
+function H:_rescale_prepull()
+  local ev = {}
+  if world.rescale_prepull(self.state, ev) then self:_after_step(ev) end
+end
+
 -- Laufzeit-Bots (Runde 8, #109, F12 [B/G/J]): n Bots joinen mitten im
 -- Spiel wie echte Nachzuegler — world.add_player spawnt sie als Geist am
--- Friedhof, der Bot-Input-Pfad in H:update greift automatisch. n_scale und
--- Hogger-HP zaehlen wie bei echten Joins erst ab dem naechsten Try-Start.
+-- Friedhof, der Bot-Input-Pfad in H:update greift automatisch.
 function H:add_bots(n)
   for _ = 1, n do
     local pid = world.add_player(self.state, self:_next_bot_name(),
@@ -390,6 +400,7 @@ function H:update(dt, local_input)
         if p then p.disconnected = true end
         self.by_pid[c.pid] = nil
         self.clients[event.peer] = nil
+        self:_rescale_prepull() -- Leaver vor dem Pull zaehlen nicht mehr (#215)
       end
     end
     ok, event = self.guard:call(self.host.service, self.host, 0)

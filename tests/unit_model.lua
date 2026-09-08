@@ -198,10 +198,19 @@ do
 end
 
 -- GDD 6: Todesstrafe ist seit Runde 6 KONSTANT (Rob-Entscheid #96):
--- fester Respawn-Timer 10 s + Laufweg 14 s = 24 s, egal wie viele spielen
+-- fester Respawn-Timer 10 s + Laufweg 16 s (Geist 8 + Kanal 2 + Anmarsch 6)
+-- = 26 s, egal wie viele spielen. Runde 20: der Wiederbelebungskanal
+-- gehoert dazu — die Sim rechnete bis dahin 24 s, das Spiel brauchte 26.
+T.near(M.walk_time(), 16, "6 Laufweg = Geist + Kanal + Anmarsch = 16 s")
 for _, n in ipairs({ 5, 10, 20, 40 }) do
-  T.near(M.death_penalty(n), 24,
-    string.format("6 Todesstrafe konstant 24 s (N=%d)", n))
+  T.near(M.death_penalty(n), 26,
+    string.format("6 Todesstrafe konstant 26 s (N=%d)", n))
+  T.near(M.death_penalty_human(n), 26 + M.p("release_grace"),
+    string.format("11 Mensch ohne Freigabe-Klick: + Nachfrist (N=%d)", n))
+  -- Die Kein-Kontakt-Frist muss den langsamsten Nachschub abwarten: sonst
+  -- beendet jeder Wipe den Try sofort (GDD 6, Runde 10 und Runde 20)
+  T.ok(M.p("hogger_no_contact_reset") > M.death_penalty_human(n),
+    string.format("9.1 Kein-Kontakt-Frist liegt ueber der Todesstrafe eines Menschen (N=%d)", n))
 end
 
 -- GDD 17.6: Parametertabelle strukturell vollstaendig ----------------------
