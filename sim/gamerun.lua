@@ -143,6 +143,7 @@ function G.run_try(cfg)
       eat_interrupted = t.eat_interrupt,
       eat_completed = t.eat_complete,
       charges = t.charges,
+      charges_dodged = t.charges_dodged,
       crit_kills = t.crit_kills,
       resets = t.reset and 1 or 0,
       dmg_to_hogger = t.dmg_hogger,

@@ -40,10 +40,11 @@ M.DECIDE_EVERY = 3
 --   reserve (Kicker haelt keine Energie zurueck)
 --   needclass (Klasse fest pid mod 8 statt nach Bedarf)
 --   npc (Mobs/Welpen werden nie Ziel)
+--   dodge (niemand weicht der Charge aus — Stand bis Runde 20)
 M.SKIP = {}
 M.SKIP_KEYS = { "shout", "taunt", "seal", "loh", "raptor", "feign", "evis",
                 "pws", "frostarmor", "imp", "roots", "kick", "reserve",
-                "needclass", "npc" }
+                "needclass", "npc", "dodge" }
 
 local HEALER = { paladin = true, priest = true, druid = true }
 local CASTER = { priest = true, mage = true, warlock = true, druid = true }
@@ -97,6 +98,11 @@ function M.new_brain(seed, pid, profile)
     profile = profile or M.DEFAULT_PROFILE,
     rng = rng,
     react = 1.0 + rng:next(),  -- Reaktionszeit 1-2 s (typischer Mensch)
+    -- Charge-Reaktion (Runde 21): die blinkende Linie zeigt auf MICH — das
+    -- sieht man schneller als einen Fresskanal. 0,2-0,8 s; ausweichen
+    -- gelingt, wenn Reaktion + 40 px Weg (0,29 s) unter dem 0,8-s-Anlauf
+    -- bleiben — also etwa die Haelfte der Bots. kopflos weicht nie aus.
+    charge_react = 0.2 + 0.6 * rng:next(),
     eat_seen_t = nil,          -- wann dieser Bot den Fresskanal bemerkt hat
     last_tick = -1,
     cached = nil,
@@ -369,6 +375,27 @@ local function decide_typisch(state, p, brain)
   end
 
   local h = state.hogger
+
+  -- Charge-Ausweiche (Runde 21, Rob-Entscheid): zeigt die Ziellinie auf
+  -- mich, laufe ich nach meiner Reaktionszeit quer zur Linie Hogger -> ich
+  -- (Seite nach pid, deterministisch). Das bricht einen eigenen Cast — die
+  -- Charge braeche ihn ohnehin. Der Magier mit Frostruestung bleibt stehen
+  -- und faengt sie: der Slow ist sein Zug (GDD 8.2).
+  if h.charge and h.charge.target == pid and not M.SKIP.dodge and not turtle then
+    brain.charge_seen_t = brain.charge_seen_t or now
+    local catch = p.class == "mage" and p.frost_armor
+    if not catch and now - brain.charge_seen_t >= brain.charge_react then
+      local dx, dy = p.x - h.x, p.y - h.y
+      local len = math.max(1, math.sqrt(dx * dx + dy * dy))
+      local side = (pid % 2 == 0) and 1 or -1
+      local tx = p.x + (-dy / len) * 80 * side
+      local ty = p.y + (dx / len) * 80 * side
+      return { mask = move_mask_towards(p.x, p.y, tx, ty, 4),
+               facing = input.facing_towards(p.x, p.y, h.x, h.y) }
+    end
+  else
+    brain.charge_seen_t = nil
+  end
   local cls = p.class
   local duty = M.healer_duty(p)
   local melee_r = model.p("melee_range")

@@ -2150,3 +2150,78 @@ do -- Sieg schlaegt Abbruch
   T.eq(st.phase, "won", "reset: der Sieg gewinnt gegen den Abbruch")
   T.eq(st.try_nr, try0, "reset: der Siegtry wird nicht neu gestartet")
 end
+
+-- Charge ausweichbar (Runde 21, Rob-Entscheid): wer beim Aufprall weiter als
+-- hogger_charge_dodge_px seitlich neben der Anlaufgeraden steht, wird
+-- verfehlt. Entlang der Geraden weglaufen hilft nicht.
+do
+  local function charge_world(class)
+    local st = world.new(21)
+    world.add_player(st, "z", { quest_done = true })
+    world.begin_try(st, {})
+    local h, p = st.hogger, st.players[1]
+    h.state, h.engaged = "combat", true
+    p.alive, p.ghost, p.class = true, false, class or "hunter"
+    p.max_hp = model.hp_for_class(p.class); p.hp = p.max_hp
+    p.x, p.y = h.x + 200, h.y
+    h.threat[p.id] = 5
+    h.charge = { target = p.id, t_left = model.TICK_DT / 2,
+                 ox = h.x, oy = h.y, tx = p.x, ty = p.y }
+    return st, h, p
+  end
+  local function charge_event(evs)
+    for _, e in ipairs(evs) do if e.ev == "charge" then return e end end
+  end
+
+  -- seitlich raus: verfehlt
+  local st, h, p = charge_world()
+  local tx, ty = h.charge.tx, h.charge.ty
+  p.y = p.y + model.p("hogger_charge_dodge_px") + 10
+  p.cast = { slot = 1, t_left = 1, total = 2 }
+  local evs = step.step(st, {})
+  local e = charge_event(evs)
+  T.ok(e ~= nil, "charge: Ereignis auch beim Verfehlen")
+  T.eq(e and e.val, 0, "charge: val = 0 heisst verfehlt")
+  T.eq(p.hp, p.max_hp, "charge: ausgewichen -> kein Schaden")
+  T.ok(p.cast ~= nil, "charge: ausgewichen -> der Cast laeuft weiter")
+  T.near(h.x, tx, "charge: Hogger landet auf der alten Zielposition (x)")
+  T.near(h.y, ty, "charge: Hogger landet auf der alten Zielposition (y)")
+  T.eq(h.charge, nil, "charge: Anlauf ist vorbei")
+
+  -- knapp innerhalb der Breite: getroffen
+  local st2, h2, p2 = charge_world()
+  p2.y = p2.y + model.p("hogger_charge_dodge_px") - 5
+  local evs2 = step.step(st2, {})
+  T.eq(charge_event(evs2).val, 1, "charge: innerhalb der Breite -> getroffen (val = 1)")
+  T.ok(p2.hp < p2.max_hp, "charge: getroffen -> Schaden")
+
+  -- entlang der Geraden weglaufen: getroffen
+  local st3, _, p3 = charge_world()
+  p3.x = p3.x + 60
+  T.eq(charge_event(step.step(st3, {})).val, 1, "charge: entlang der Linie weglaufen hilft nicht")
+
+  -- Breite 0: die Charge trifft immer (Stand bis Runde 20)
+  local st4, _, p4 = charge_world()
+  local saved = model.params.hogger_charge_dodge_px.wert
+  model.params.hogger_charge_dodge_px.wert = 0
+  p4.y = p4.y + 200
+  T.eq(charge_event(step.step(st4, {})).val, 1, "charge: Breite 0 -> trifft immer")
+  model.params.hogger_charge_dodge_px.wert = saved
+
+  -- Charge ohne Geometrie (alte Zustaende, Tests): trifft wie bisher
+  local st5, h5, p5 = charge_world()
+  h5.charge = { target = p5.id, t_left = model.TICK_DT / 2 }
+  p5.y = p5.y + 200
+  T.eq(charge_event(step.step(st5, {})).val, 1, "charge: ohne Anlaufgerade -> trifft")
+
+  -- Frostruestung loest auch bei der Charge aus (Runde 21)
+  local st6, h6, p6 = charge_world("mage")
+  p6.frost_armor = true
+  step.step(st6, {})
+  T.ok(h6.slow_until > st6.time, "frost: die Charge auf den Magier verlangsamt Hogger")
+  local st7, h7, p7 = charge_world("mage")
+  p7.frost_armor = true
+  p7.y = p7.y + 100
+  step.step(st7, {})
+  T.ok(h7.slow_until <= st7.time, "frost: ausgewichen -> kein Slow (die Wahl des Magiers)")
+end

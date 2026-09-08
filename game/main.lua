@@ -365,6 +365,14 @@ local function process_cosmetics(view)
       app.render:add_shake(18) -- der "WAS?!"-Moment (GDD 9.2)
     elseif e.ev == "charge" then
       audio.play("snd_hogger_charge") -- Boss-Lesbarkeit (GDD 12 Nr. 10)
+      -- Runde 21: val = 0 heisst verfehlt — der Ausweicher sieht es
+      if tonumber(e.val) == 0 then
+        local t = view.players[tonumber(e.dst)]
+        if t then
+          local tx, ty = t.x, t.y
+          app.floating:add("Daneben!", tx, ty, { 1, 0.9, 0.5 }, 2)
+        end
+      end
     elseif e.ev == "enrage" then
       -- Hogger wurde langweilig (Runde 18, GDD 6). Die Welle selbst zeichnet
       -- der Renderer aus der Sim-Uhr; hier haengen nur Stimme und Ton dran.

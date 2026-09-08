@@ -84,7 +84,7 @@ local function new_try(nr, n, tick)
     dmg_hogger = 0, dmg_mobs = 0, dmg_taken = 0, heal = 0,
     eat_start = 0, eat_heal = 0,
     eat_interrupt = 0, eat_complete = 0, complete_with_rogue = 0,
-    charges = 0, crit_kills = 0, heal_aggro = 0, class_changes = 0,
+    charges = 0, charges_dodged = 0, crit_kills = 0, heal_aggro = 0, class_changes = 0,
     interrupts_by = {}, dmg_by = {}, deaths_by = {}, last_heal_t = {},
     -- Runde 20: Lebensdauer je Leben (Wiederbelebung -> Tod, Sekunden) —
     -- die Messgroesse hinter F7 ("wiederbeleben, um sofort zu sterben")
@@ -209,6 +209,8 @@ function M.analyse_events(next_event)
         end
       elseif e.ev == "charge" then
         cur.charges = cur.charges + 1
+        -- Runde 21: val = 0 heisst verfehlt (ausgewichen), sonst getroffen
+        if tonumber(e.val) == 0 then cur.charges_dodged = cur.charges_dodged + 1 end
       elseif e.ev == "crit_kill" then
         cur.crit_kills = cur.crit_kills + 1
       elseif e.ev == "hogger_reset" then
@@ -237,7 +239,7 @@ function M.analyse_events(next_event)
   local sum = { deaths = 0, eat_start = 0, eat_heal = 0,
                 eat_interrupt = 0, eat_complete = 0,
                 complete_with_rogue = 0, dmg_hogger = 0, dmg_mobs = 0,
-                charges = 0, heal_aggro = 0, crit_kills = 0,
+                charges = 0, charges_dodged = 0, heal_aggro = 0, crit_kills = 0,
                 class_changes = 0 }
   local lifetimes, kick_latencies = {}, {}
   local causes, dmg_by, int_by, deaths_by = {}, {}, {}, {}
@@ -389,7 +391,9 @@ function M.render(r, quelle, defaults)
     r.sum.deaths / r.n_try)
   w("| davon kurz nach einer Heilung | %d | Heilung zieht Aggro (GDD 9.4) |",
     r.sum.heal_aggro)
-  w("| Charges je Try | %.1f | |", r.sum.charges / r.n_try)
+  w("| Charges je Try | %.1f | davon ausgewichen: %s (Runde 21: die Ziellinie im Anlauf verlassen) |",
+    r.sum.charges / r.n_try,
+    r.sum.charges > 0 and pct(r.sum.charges_dodged / r.sum.charges) or "-")
   w("| Toedliche Krits | %d | |", r.sum.crit_kills)
   -- Runde 20 (F7): wie lange lebt man nach der Wiederbelebung, und wie oft
   -- stirbt man gleich wieder? Dazu, was das Fressen zurueckholt.

@@ -283,7 +283,9 @@ local function hogger_damage_player(state, p, amount, kind, ev)
     p.resource = math.min(model.p("rage_max"), p.resource + model.p("rage_per_hit_taken"))
   end
   -- Frostruestung: Treffer auf den Magier verlangsamt Hogger (GDD 8.2)
-  if p.frost_armor and kind == "autohit" then
+  -- Runde 21 (Rob-Entscheid): auch die Charge loest sie aus — der Magier
+  -- kann sie absichtlich fangen statt auszuweichen (GDD 8.2)
+  if p.frost_armor and (kind == "autohit" or kind == "charge") then
     state.hogger.slow_until = state.time + model.p("mage_frostarmor_slow_duration")
   end
   events.push(ev, state.tick, "damage", "hogger", p.id, amount, crit, kind)
@@ -1565,18 +1567,40 @@ local function hogger_tick(state, ev)
       h.charge = nil
     elseif h.charge.t_left <= 0 then
       local ox, oy = h.x, h.y
-      h.x, h.y = target.x, target.y
-      -- Knockback: vom Anlaufvektor weg (GDD 9.2), kein Krit
-      local d = math.max(1, world.dist(ox, oy, target.x, target.y))
-      local kx = (target.x - ox) / d * model.p("hogger_charge_knockback")
-      local ky = (target.y - oy) / d * model.p("hogger_charge_knockback")
-      target.x, target.y = map.clamp(target.x + kx, target.y + ky)
-      if target.cast then break_cast(target) end
       if state.stats then
         state.stats.hogger.charges = state.stats.hogger.charges + 1
       end
-      events.push(ev, state.tick, "charge", "hogger", target.id, nil, nil)
-      hogger_damage_player(state, target, model.p("hogger_charge_dmg"), "charge", ev)
+      -- Ausweichen (Runde 21, Rob-Entscheid): die Anlaufgerade steht mit
+      -- dem Beginn fest (Hogger -> Zielposition beim Anlauf). Wer beim
+      -- Aufprall weiter als hogger_charge_dodge_px seitlich daneben steht,
+      -- wird verfehlt: Hogger landet auf der alten Zielposition, kein
+      -- Schaden, kein Rueckstoss, kein Cast-Abbruch. Entlang der Geraden
+      -- weglaufen hilft nicht — er rennt genau da lang.
+      local c = h.charge
+      local dodged = false
+      if c.tx and model.p("hogger_charge_dodge_px") > 0 then
+        local lx, ly = c.tx - c.ox, c.ty - c.oy
+        local len = math.sqrt(lx * lx + ly * ly)
+        if len > 1 then
+          local off = math.abs((target.x - c.ox) * ly - (target.y - c.oy) * lx) / len
+          dodged = off > model.p("hogger_charge_dodge_px")
+        end
+      end
+      if dodged then
+        h.x, h.y = map.clamp(c.tx, c.ty)
+        -- val = 0: verfehlt (GDD 17.3); der Log-Leser zaehlt beides
+        events.push(ev, state.tick, "charge", "hogger", target.id, 0, nil)
+      else
+        h.x, h.y = target.x, target.y
+        -- Knockback: vom Anlaufvektor weg (GDD 9.2), kein Krit
+        local d = math.max(1, world.dist(ox, oy, target.x, target.y))
+        local kx = (target.x - ox) / d * model.p("hogger_charge_knockback")
+        local ky = (target.y - oy) / d * model.p("hogger_charge_knockback")
+        target.x, target.y = map.clamp(target.x + kx, target.y + ky)
+        if target.cast then break_cast(target) end
+        events.push(ev, state.tick, "charge", "hogger", target.id, 1, nil)
+        hogger_damage_player(state, target, model.p("hogger_charge_dmg"), "charge", ev)
+      end
       h.charge = nil
       h.next_auto = math.max(h.next_auto, 0.5)
     end
@@ -1640,7 +1664,10 @@ local function hogger_tick(state, ev)
     end
     if far then
       h.charge_cd = model.p("hogger_charge_cd")
-      h.charge = { target = far.id, t_left = model.p("hogger_charge_windup") }
+      -- Anlaufgerade merken (Runde 21): Start- und Zielposition beim
+      -- Anlauf sind die Linie, die man zum Ausweichen verlassen muss
+      h.charge = { target = far.id, t_left = model.p("hogger_charge_windup"),
+                   ox = h.x, oy = h.y, tx = far.x, ty = far.y }
       return
     end
   end

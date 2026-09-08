@@ -310,3 +310,70 @@ do
   end
   bot.SKIP = {}
 end
+
+-- Charge-Ausweiche (Runde 21): typisch laeuft nach seiner Charge-Reaktion
+-- quer zur Linie; kopflos nie; der Magier mit Frostruestung faengt sie.
+do
+  local st, h = arena(2, "hunter")
+  local p = st.players[2]
+  p.x, p.y = h.x + 200, h.y
+  local b = bot.new_brain(7, p.id, "typisch")
+  T.ok(b.charge_react >= 0.2 and b.charge_react <= 0.8, "brain: Charge-Reaktion 0,2-0,8 s")
+  h.charge = { target = p.id, t_left = 0.8, ox = h.x, oy = h.y, tx = p.x, ty = p.y }
+  local moved_y = false
+  local t0 = st.time
+  for _ = 1, 60 do
+    st.tick = st.tick + 1; st.time = st.tick * model.TICK_DT
+    local dec = bot.decide(st, p.id)
+    if has(dec.mask, input.UP) or has(dec.mask, input.DOWN) then
+      moved_y = true
+      T.ok(st.time - t0 >= p.brain.charge_react - model.TICK_DT * 4,
+        "typisch: weicht erst nach seiner Charge-Reaktion aus")
+      break
+    end
+    T.ok(not (has(dec.mask, input.LEFT) or has(dec.mask, input.RIGHT)),
+      "typisch: vor der Reaktion kein Weglaufen entlang der Linie")
+  end
+  T.ok(moved_y, "typisch: weicht quer zur Ziellinie aus")
+
+  -- kopflos weicht nie aus
+  local st2, h2 = arena(2, "hunter", "kopflos")
+  local q = st2.players[2]
+  q.x, q.y = h2.x + 200, h2.y
+  h2.charge = { target = q.id, t_left = 0.8, ox = h2.x, oy = h2.y, tx = q.x, ty = q.y }
+  local moved = false
+  for _ = 1, 60 do
+    st2.tick = st2.tick + 1; st2.time = st2.tick * model.TICK_DT
+    local dec = bot.decide(st2, q.id)
+    if has(dec.mask, input.UP) or has(dec.mask, input.DOWN) then moved = true end
+  end
+  T.ok(not moved, "kopflos: weicht der Charge nie aus")
+
+  -- Magier mit Frostruestung bleibt stehen und faengt sie
+  local st3, h3 = arena(1, "mage")
+  local m = st3.players[2]
+  m.x, m.y, m.frost_armor = h3.x + 190, h3.y, true
+  h3.charge = { target = m.id, t_left = 0.8, ox = h3.x, oy = h3.y, tx = m.x, ty = m.y }
+  local mmoved = false
+  for _ = 1, 60 do
+    st3.tick = st3.tick + 1; st3.time = st3.tick * model.TICK_DT
+    local dec = bot.decide(st3, m.id)
+    if dec.mask % 16 > 0 then mmoved = true end
+  end
+  T.ok(not mmoved, "typisch: der Magier mit Frostruestung faengt die Charge")
+
+  -- SKIP.dodge: niemand weicht aus
+  bot.SKIP = { dodge = true }
+  local st4, h4 = arena(2, "hunter")
+  local r = st4.players[2]
+  r.x, r.y = h4.x + 200, h4.y
+  h4.charge = { target = r.id, t_left = 0.8, ox = h4.x, oy = h4.y, tx = r.x, ty = r.y }
+  local smoved = false
+  for _ = 1, 60 do
+    st4.tick = st4.tick + 1; st4.time = st4.tick * model.TICK_DT
+    local dec = bot.decide(st4, r.id)
+    if has(dec.mask, input.UP) or has(dec.mask, input.DOWN) then smoved = true end
+  end
+  bot.SKIP = {}
+  T.ok(not smoved, "SKIP.dodge: typisch weicht nicht aus")
+end

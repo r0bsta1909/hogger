@@ -657,3 +657,16 @@ Bautag verbrauchte 98 % eines Monatskontingents.
 - Kostenloser Ausweg, falls das Budget trotzdem klemmt: Ein **öffentliches** Repo hat unbegrenzte
   Minuten. Für ein Hobbyprojekt ohne Geheimnisse ist das der billigste Hebel von allen — vor dem
   Umschalten einmal nach Zugangsdaten im Verlauf greifen, danach ist es öffentlich.
+
+- **Ein Telegraph ohne Ausweg ist keine Mechanik.** Hoggers Charge hatte 0,8 s blinkende
+  Ziellinie und war unausweichbar (er sprang auf die Zielposition) — Spieler „reagierten"
+  darauf, ohne dass es etwas änderte. Die Regel gehört an die Geometrie des Anlaufs (Gerade
+  steht beim Beginn fest, seitlicher Versatz beim Aufprall entscheidet), nicht an eine Taste;
+  und die Bots müssen sie spielen können (eigene Reaktionszeit je Gehirn), sonst misst die Sim
+  einen anderen Raid. Gemessen: balancing-neutral (Siegquote gleich, Lebensdauer +3 s).
+- **Miss, was Entscheidungen wert sind, bevor du neue erfindest.** Ein Rasterpunkt „Bots
+  ohne Fähigkeit X" je Fähigkeit (2 min) zeigte: eine Entscheidung trug den Ausgang (der
+  Tritt: 75 → 2,5 %), die größte fiel außerhalb des Kampfes (Klassenwahl, ±40 pp je Zelle),
+  alles andere lag im Rauschen — und zwei Basisläufe mit verschiedenen Seeds lagen 12,5 pp
+  auseinander. Ohne den zweiten Basislauf hätte man die −14 pp einer Pflege-Fähigkeit für
+  ein Ergebnis gehalten.

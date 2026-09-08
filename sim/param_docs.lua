@@ -36,6 +36,8 @@ return {
     "hoeher = das Ziel fliegt weiter" },
   hogger_charge_windup = { "Anlaufzeit mit blinkender Ziellinie vor der Charge.",
     "hoeher = mehr Zeit zum Ausweichen" },
+  hogger_charge_dodge_px = { "Seitlicher Abstand zur Ziellinie, ab dem die Charge verfehlt.",
+    "hoeher = Ausweichen wird schwerer" },
   hogger_slice_dmg = { "Sofortschaden des Vicious Slice.",
     "hoeher = der Anriss trifft haerter" },
   hogger_slice_cd = { "Abklingzeit des Vicious Slice.",
