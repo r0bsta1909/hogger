@@ -167,6 +167,9 @@ function M.add_player(state, name, opts)
     -- Quest des Echos (GDD Kap. 5): 0 = offen, 1 = aufgedrueckt, 2 = angenommen.
     -- Unter 2 kann sich der Spieler nur um die eigene Achse drehen.
     quest = (opts and opts.quest_done) and 2 or 0,
+    -- Bot-Profil (Runde 20, GDD 17.2): typisch | kopflos | turtle. Nur fuer
+    -- Spieler, die ein Bot steuert; Menschen haben keins.
+    profile = opts and opts.profile or nil,
   }
   return id
 end

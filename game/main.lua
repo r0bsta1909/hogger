@@ -498,7 +498,17 @@ function love.update(dt)
   local inp, angle = local_input_frame()
   app.facing_angle = angle
   if app.auto and app.mode == "host" then
-    inp = require("game.gamesim.bot").decide(app.net.state, app.net.local_pid)
+    -- Der lokale Spieler als Bot (--auto): Tritt, Heilung und Zielwahl
+    -- gehen wie beim Menschen ueber die Host-Pfade (Runde 20 — vorher
+    -- wurden sie verworfen, ein --auto-Schurke trat nie)
+    local st = app.net.state
+    local me = st.players[app.net.local_pid]
+    if me and not me.profile then me.profile = "typisch" end
+    inp = require("game.gamesim.bot").decide(st, app.net.local_pid)
+    if inp.kick then app.net:kick() end
+    if inp.heal then app.net:heal_request(inp.heal) end
+    if inp.target then app.net:set_local_target(inp.target) end
+    if inp.engage then app.net:engage() end
   end
   if (app.panel and app.panel.visible) or app.debug.visible
      or (app.boot and app.boot:active() and app.boot:covers_screen())

@@ -50,9 +50,12 @@ function H.new(opts)
   self.bot_name_i = 1
   self.bot_pids = {}
   self.bot_next = 1 -- botN-Fallback-Zaehler (Runde 8, #109)
+  -- Bot-Profil (Runde 20): Debug- und Laufzeit-Bots spielen "typisch" —
+  -- derselbe Referenz-Raid wie in der Balancing-Sim (sim/gamerun.lua)
+  self.bot_profile = opts.bot_profile or "typisch"
   for _ = 1, (opts.bots or 0) do
     self.bot_pids[#self.bot_pids + 1] = world.add_player(self.state,
-      self:_next_bot_name(), { quest_done = true })
+      self:_next_bot_name(), { quest_done = true, profile = self.bot_profile })
   end
   local ev = {}
   world.begin_try(self.state, ev)
@@ -340,7 +343,7 @@ end
 function H:add_bots(n)
   for _ = 1, n do
     local pid = world.add_player(self.state, self:_next_bot_name(),
-      { quest_done = true })
+      { quest_done = true, profile = self.bot_profile })
     self.bot_pids[#self.bot_pids + 1] = pid
   end
   -- Debug-Bots skalieren SOFORT mit (Runde 9, #118): Hoggers Max-HP waechst,
@@ -433,6 +436,14 @@ function H:update(dt, local_input)
             self:_after_step(hev)
           end
         end
+        -- Zielwahl der Bots (Runde 20): ein Mob, der sie angreift, wird
+        -- Ziel — derselbe Pfad wie der Klick (SET_TARGET)
+        if dec.target then
+          local tev = {}
+          world.set_target(self.state, pid, dec.target, tev)
+          self:_log_events(tev)
+        end
+        if dec.engage then step.engage(self.state, pid) end -- Rechtsklick
         -- Debug-Bots druecken ihren Knopf selbst (GDD Kap. 11); die Sim
         -- laesst die Freigabe ohnehin erst nach Ablauf des Timers zu
         step.release_spirit(self.state, pid)
