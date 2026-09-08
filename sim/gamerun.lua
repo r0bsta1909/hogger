@@ -42,6 +42,7 @@ function G.tick(state, evsink)
       if dec.kick then step.kick(state, p.id, evsink) end
       if dec.heal then step.heal_request(state, p.id, dec.heal, evsink) end
       if dec.target then world.set_target(state, p.id, dec.target, evsink) end
+      if dec.engage then step.engage(state, p.id) end
       -- Bots druecken "Geist freilassen" sofort (wie host.lua) — nur wenn
       -- sie tot und noch kein Geist sind, sonst reine Kosten je Tick
       if not p.alive and not p.ghost then step.release_spirit(state, p.id) end
