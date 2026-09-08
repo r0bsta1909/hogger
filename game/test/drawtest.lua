@@ -120,8 +120,15 @@ function T.run()
 
     for _, ort in ipairs(maus_orte) do
       versuch(class .. " / " .. ort[1], function()
+        -- Runde 21: eigener Treffer-Blitz und die Zeile "letzte Aktion"
+        render:add_hit_flash(view.hogger.x, view.hogger.y, { 1, 1, 1 }, true)
+        render:add_hit_flash(view.me_x or 0, view.me_y or 0, { 0.5, 1, 0.5 }, false)
         render:draw(view, { facing_angle = 0.5, cooldowns = { 0.3, 0, 0.8, 0.1 },
-                            mouse = ort[2] })
+                            mouse = ort[2],
+                            last_action = { text = "Feuerball 11!", crit = true, age = 0.4 } })
+        render:draw(view, { facing_angle = 0.5, cooldowns = { 0.3, 0, 0.8, 0.1 },
+                            mouse = ort[2],
+                            last_action = { text = "Heiliges Licht +25", heal = true, age = 1.9 } })
       end)
     end
 

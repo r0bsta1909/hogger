@@ -226,6 +226,17 @@ function R:add_attack_fx(src_class, attack, art, sx, sy, tx, ty)
                             sx = sx, sy = sy, tx = tx, ty = ty }
 end
 
+-- Treffer-Blitz am Ziel (Runde 21): NUR bei der eigenen Wirkung — ein
+-- kurzer heller Kreis, der am Ziel aufleuchtet und verglueht. Das ist der
+-- Moment "das war ich", unabhaengig vom Zahlen-Gulasch im Klumpen.
+function R:add_hit_flash(tx, ty, col, big)
+  self.fx = self.fx or {}
+  if #self.fx > 60 then return end
+  self.fx[#self.fx + 1] = { form = "hitflash", col = col or { 1, 1, 1 },
+                            t = big and 0.3 or 0.18, total = big and 0.3 or 0.18,
+                            sx = tx, sy = ty, tx = tx, ty = ty, big = big }
+end
+
 function R:add_heal_fx(tx, ty)
   self.fx = self.fx or {}
   if #self.fx > 60 then return end
@@ -1087,6 +1098,16 @@ function R:draw_fx(to_screen, scale)
       love.graphics.setLineWidth(2)
       love.graphics.circle("line", tx, ty - k * 18, 10 * (1 - k * 0.5))
       love.graphics.setLineWidth(1)
+    elseif f.form == "hitflash" then
+      -- eigener Treffer (Runde 21): Fuellung blitzt auf und verglueht, ein
+      -- Ring laeuft nach aussen
+      local r0 = (f.big and 30 or 20) * scale
+      love.graphics.setColor(c[1], c[2], c[3], 0.55 * (1 - k))
+      love.graphics.circle("fill", tx, ty, r0 * (1 - k * 0.4))
+      love.graphics.setColor(c[1], c[2], c[3], 0.9 * (1 - k))
+      love.graphics.setLineWidth(f.big and 3 or 2)
+      love.graphics.circle("line", tx, ty, r0 + k * 26 * scale)
+      love.graphics.setLineWidth(1)
     end
   end
 end
@@ -1885,6 +1906,20 @@ function R:draw(view, ui)
         love.graphics.setColor(0.85, 0.8, 0.7, 1)
         love.graphics.print("> " .. names[view.hogger.target],
           L.frames.tot.x + 6, L.frames.tot.y + 2)
+      end
+      -- Letzte eigene Aktion (Runde 21): "Feuerball 11", "Heiliges Licht
+      -- +25" — die eine Stelle, an der nur MEINE Wirkung steht, egal wie
+      -- voll der Klumpen ist. Zwei Sekunden, dann verblasst sie.
+      local la = ui.last_action
+      if la and la.age < 2.2 then
+        local ly = L.frames.tot.y + ((t == 0 and view.hogger.target and names[view.hogger.target]) and 22 or 0)
+        local a = math.min(1, (2.2 - la.age) / 0.6)
+        love.graphics.setColor(0.07, 0.07, 0.09, 0.85 * a)
+        love.graphics.rectangle("fill", L.frames.tot.x, ly, 214, 20, 3, 3)
+        if la.heal then love.graphics.setColor(0.55, 1, 0.55, a)
+        elseif la.crit then love.graphics.setColor(1, 0.85, 0.2, a)
+        else love.graphics.setColor(1, 1, 1, a) end
+        love.graphics.print(la.text, L.frames.tot.x + 6, ly + 2)
       end
       -- Ziel-Auren unter der Zieltafel (Runde 8, #107): die Auren des
       -- ZIELS, nicht mehr die eigenen. Hogger zeigt hier seinen
