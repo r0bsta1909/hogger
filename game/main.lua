@@ -294,10 +294,32 @@ local function process_cosmetics(view)
       else
         color, prio = { 0.72, 0.72, 0.66 }, 1
       end
-      app.floating:add(tostring(math.floor((e.val or 0) + 0.5))
-        .. (e.crit and "!" or ""), tx, ty, color, prio)
-      -- Geschoss/Schlag zwischen Quelle und Ziel (Issue #30)
       local src_p = view.players[tonumber(e.src)]
+      -- Runde 21: die eigene Wirkung hat eine Signatur (Umriss, Aufspringen,
+      -- Faehigkeiten groesser als Autohits), fremde Zahlen sind klein und
+      -- blass — Rob: "damit ich das Gefuehl habe, DAS HABE ICH GEMACHT"
+      local big = e.art == "ability"
+      app.floating:add(tostring(math.floor((e.val or 0) + 0.5))
+        .. (e.crit and "!" or ""), tx, ty, color, prio,
+        outgoing and { own = true, big = big or e.crit } or nil)
+      if outgoing then
+        -- Treffer-Blitz am Ziel (nur bei MEINEM Treffer) und die Zeile
+        -- "letzte Aktion" im Zielfenster
+        app.render:add_hit_flash(tx, ty, e.crit and { 1, 0.85, 0.2 } or { 1, 1, 1 },
+          big or e.crit)
+        local aname
+        if big then
+          aname = app.last_ability_name or "Faehigkeit"
+        elseif src_p and src_p.class and model.classes[src_p.class].attack == "shot"
+               and e.art == "autohit" then
+          aname = "Autoschuss"
+        else
+          aname = "Nahkampf"
+        end
+        app.last_action = { text = aname .. " " .. tostring(math.floor((e.val or 0) + 0.5))
+                              .. (e.crit and "!" or ""), t = app.uptime, crit = e.crit }
+      end
+      -- Geschoss/Schlag zwischen Quelle und Ziel (Issue #30)
       app.render:add_attack_fx(src_p and src_p.class,
         src_p and src_p.class and model.classes[src_p.class].attack or nil,
         e.art, sx, sy, tx, ty)
@@ -338,9 +360,20 @@ local function process_cosmetics(view)
       end
     elseif e.ev == "heal" then
       local tx, ty = entity_pos(e.dst)
-      app.floating:add("+" .. tostring(math.floor((e.val or 0) + 0.5)),
-        tx, ty, { 0.3, 0.95, 0.3 }, tonumber(e.dst) == view.me and 2 or 1)
+      -- Runde 21: MEINE Heilung ist meine Wirkung (bis dahin sah eigene
+      -- Heilung aus wie jede andere — der Code prueft nur den Empfaenger)
+      local mine = tonumber(e.src) == view.me
+      local amount = tostring(math.floor((e.val or 0) + 0.5))
+      app.floating:add("+" .. amount,
+        tx, ty, mine and { 0.55, 1, 0.55 } or { 0.3, 0.95, 0.3 },
+        (mine or tonumber(e.dst) == view.me) and 2 or 1,
+        mine and { own = true, big = true } or nil)
       app.render:add_heal_fx(tx, ty)
+      if mine then
+        app.render:add_hit_flash(tx, ty, { 0.5, 1, 0.5 }, true)
+        app.last_action = { text = (app.last_ability_name or "Heilung") .. " +" .. amount,
+                            t = app.uptime, heal = true }
+      end
       if tonumber(e.dst) == view.me then app.last_healed_t = app.uptime end
     elseif e.ev == "death" then
       local dp = view.players[tonumber(e.src)]
@@ -898,6 +931,10 @@ function love.draw()
       cooldowns = cds,
       out_of_range = oor,
       mouse = { love.mouse.getPosition() },
+      -- letzte eigene Aktion fuers Zielfenster (Runde 21)
+      last_action = app.last_action and {
+        text = app.last_action.text, heal = app.last_action.heal,
+        crit = app.last_action.crit, age = app.uptime - app.last_action.t } or nil,
     })
     app.floating:draw(to_screen)
     if app.quest then app.quest:draw(app.view, bw, bh, to_screen) end
@@ -968,6 +1005,7 @@ local function trigger_ability(slot, via_click)
     app.render:error(err)
     return true
   end
+  app.last_ability_name = spec.name_de -- fuer die Zeile "letzte Aktion" (Runde 21)
   if slot == 4 then
     -- Schurken-Tritt (Runde 12, #140): kein Masken-Bit, eigene Wire-Msg
     if app.mode == "host" then app.net:kick()
@@ -1258,6 +1296,7 @@ function love.mousepressed(mx, my, button)
           if err then
             app.render:error(err)
           else
+            app.last_ability_name = spec.name_de
             if app.mode == "host" then app.net:heal_request(row.pid)
             else app.net:send_heal(row.pid) end
             local cd = spec.cd and model.p(spec.cd) or model.p("gcd")
