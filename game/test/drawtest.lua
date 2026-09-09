@@ -114,6 +114,45 @@ function T.run()
     { "ueber dem Zoom-Minus", { L.zoom.minus.x, L.zoom.minus.y } },
   }
 
+  -- Klumpen (Runde 21, B1): zwoelf Nahkaempfer und drei Welpen um Hogger,
+  -- das eigene Ziel einmal ein Welpe, einmal Hogger (verlangsamt, mit
+  -- Ziel-Aure UND Aktionszeile — die Zeile lag in v0.21.1 unter der
+  -- Auren-Kachel), einmal ein Spieler
+  do
+    local st2 = baue_welt()
+    for i = 1, 12 do
+      world.add_player(st2, "klump" .. i, { quest_done = true })
+    end
+    local adds = {}
+    for i = 1, 3 do
+      adds[i] = world.add_npc(st2, "add", st2.hogger.x + 25 * i - 50, st2.hogger.y + 30, 12)
+    end
+    for _, p in ipairs(st2.players) do
+      if not p.is_leeroy then
+        p.alive, p.ghost, p.dead_until = true, false, 0
+        p.class = p.class or "warrior"
+        p.race = p.race or model.classes[p.class].races[1]
+        p.max_hp = model.hp_for_class(p.class); p.hp = p.max_hp
+        local a = p.id * 0.7
+        p.x, p.y = st2.hogger.x + math.cos(a) * 30, st2.hogger.y + math.sin(a) * 30
+        st2.hogger.threat[p.id] = p.id
+      end
+    end
+    st2.hogger.slow_until = st2.time + 2
+    local me = st2.players[1]
+    local ziele = { { "Welpe", adds[1].id }, { "Hogger", world.HOGGER_ID },
+                    { "Spieler", st2.players[2].id } }
+    for _, z in ipairs(ziele) do
+      me.target = z[2]
+      local view = sicht(st2, me.id)
+      versuch("Klumpen / Ziel " .. z[1], function()
+        render:add_hit_flash(st2.hogger.x, st2.hogger.y, { 1, 1, 1 }, true)
+        render:draw(view, { facing_angle = 0.3, cooldowns = { 0, 0, 0, 0 },
+                            last_action = { text = "Heroischer Stoss 6", age = 0.2 } })
+      end)
+    end
+  end
+
   for klasse_i, class in ipairs(model.CLASS_IDS) do
     local pid = klasse_i
     local view = sicht(st, pid)

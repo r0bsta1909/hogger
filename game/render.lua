@@ -1375,16 +1375,12 @@ function R:draw(view, ui)
     end
   end
 
-  -- Hoggers Icon UNTER den Spielern (Runde 7): das 113-px-Icon verdeckte
-  -- sonst den Nahkampf-Klumpen; Balken, Fresskanal-Text, Charge-Telegraph
-  -- und seit Runde 13 (#154) der Boss-Ring bleiben weiter oben (GDD 4.1)
+  -- Hoggers Icon lag von Runde 7 bis Runde 21 UNTER den Spielern (Heiler
+  -- fanden im Klumpen kein Klickziel). Seit der Heil-Leiste (Runde 7,
+  -- #103) ist der Grund weg, und Rob: "Adds und Hogger sind nicht mehr zu
+  -- erkennen, sollten es aber sein" — der Feind liegt jetzt OBEN (Runde 21,
+  -- Vorschlag B1), siehe den Block nach den Spielern.
   local hg = view.hogger
-  if hg.state ~= "reset" then
-    local x, y = to_screen(hg.x, hg.y)
-    -- Nach dem Fluchbruch bleibt er als erloschenes Icon liegen (#132):
-    -- der Kreis, in dem alle stehen, braucht seine Mitte
-    assets.draw("icon_hogger", x, y, scale * 2, (hg.hp or 0) > 0 and 1 or 0.4)
-  end
 
   -- Geister zuerst (gedimmt), dann Lebende (GDD 4.1)
   local draw_pids = R.sorted_pids(view.players)
@@ -1434,14 +1430,14 @@ function R:draw(view, ui)
     end
   end
 
-  -- Boss-Ring (Runde 13, #154): Hoggers Icon liegt seit Runde 7 UNTER den
-  -- Spielern — der goldene Umriss liegt OBEN und haelt Position und
-  -- Ausdehnung im Klumpen immer lesbar, ohne einen Nahkaempfer zu
-  -- verdecken. Sein Radius (Manifest 48 x scale) ist zugleich die
-  -- Rechtsklick-Flaeche (R.pick_target). Im Fresskanal pulsiert er; nach
-  -- dem Fluchbruch bleibt er gedimmt als Mitte des Schlusskreises liegen.
+  -- Hogger OBEN (Runde 21, B1): Icon ueber den lebenden Spielern, darauf
+  -- der Boss-Ring (Runde 13, #154), dessen Radius (Manifest 48 x scale)
+  -- zugleich die Rechtsklick-Flaeche ist (R.pick_target). Im Fresskanal
+  -- pulsiert er; nach dem Fluchbruch bleibt er gedimmt als Mitte des
+  -- Schlusskreises liegen (#132: der Kreis braucht seine Mitte).
   if hg.state ~= "reset" then
     local x, y = to_screen(hg.x, hg.y)
+    assets.draw("icon_hogger", x, y, scale * 2, (hg.hp or 0) > 0 and 1 or 0.4)
     local a = (hg.hp or 0) > 0 and 0.9 or 0.35
     if hg.eat and hg.eat.phase == "channel" then
       a = 0.55 + 0.4 * math.sin(love.timer.getTime() * 6)
@@ -1480,6 +1476,15 @@ function R:draw(view, ui)
           model.p("warlock_pact_radius") * scale)
       end
       assets.draw("icon_" .. npc.kind, x, y, scale * 1.8)
+      if npc.kind ~= "imp" then
+        -- Feind-Ring (Runde 21, B1): roter Umriss, damit Welpen und Mobs
+        -- im Klumpen als Gegner lesbar bleiben
+        love.graphics.setColor(ENEMY_COL[1], ENEMY_COL[2], ENEMY_COL[3], 0.9)
+        love.graphics.setLineWidth(2)
+        love.graphics.circle("line", x, y,
+          assets.size("icon_" .. npc.kind) / 2 * 1.8 * scale + 3)
+        love.graphics.setLineWidth(1)
+      end
       if npc.rooted then
         -- Gnarlwurzeln (Runde 13, #158; sichtbar erst seit Runde 14, #167):
         -- der Ring lag mit Radius 14 UNTER dem Mob-Icon, dessen Platzhalter
@@ -1517,9 +1522,33 @@ function R:draw(view, ui)
     end
   end
 
+  -- Das eigene Ziel zuletzt (Runde 21, B1): ein weisser Ring obenauf —
+  -- egal ob Spieler, Add oder Hogger, das Ziel ist im Klumpen immer zu
+  -- finden. Der Ring ersetzt nichts, er markiert nur.
+  do
+    local me_p = view.players[view.me]
+    local t = me_p and me_p.target
+    local tx, ty, tr
+    if t == world.HOGGER_ID and hg.state ~= "reset" then
+      tx, ty = to_screen(hg.x, hg.y); tr = 48 * scale + 4
+    elseif t and view.players[t] and view.players[t].alive then
+      local q = view.players[t]
+      tx, ty = to_screen(q.x, q.y); tr = 16 * 1.8 * scale + 4
+    elseif t and view.npcs and view.npcs[t] then
+      local npc = view.npcs[t]
+      tx, ty = to_screen(npc.x, npc.y)
+      tr = assets.size("icon_" .. npc.kind) / 2 * 1.8 * scale + 6
+    end
+    if tx then
+      love.graphics.setColor(1, 1, 1, 0.9)
+      love.graphics.setLineWidth(2)
+      love.graphics.circle("line", tx, ty, tr)
+      love.graphics.setLineWidth(1)
+    end
+  end
+
   -- Hoggers Balken, Fresszaehler und Charge-Telegraph — bewusst NACH den
-  -- Spielern, damit sie im Klumpen sichtbar bleiben; das Icon selbst liegt
-  -- seit Runde 7 unter den Spielern (GDD 4.1)
+  -- Spielern, damit sie im Klumpen sichtbar bleiben (GDD 4.1)
   do
     local x, y = to_screen(hg.x, hg.y)
     -- Charge-Telegraph: blinkende Ziellinie (GDD 9.2)
@@ -1907,20 +1936,6 @@ function R:draw(view, ui)
         love.graphics.print("> " .. names[view.hogger.target],
           L.frames.tot.x + 6, L.frames.tot.y + 2)
       end
-      -- Letzte eigene Aktion (Runde 21): "Feuerball 11", "Heiliges Licht
-      -- +25" — die eine Stelle, an der nur MEINE Wirkung steht, egal wie
-      -- voll der Klumpen ist. Zwei Sekunden, dann verblasst sie.
-      local la = ui.last_action
-      if la and la.age < 2.2 then
-        local ly = L.frames.tot.y + ((t == 0 and view.hogger.target and names[view.hogger.target]) and 22 or 0)
-        local a = math.min(1, (2.2 - la.age) / 0.6)
-        love.graphics.setColor(0.07, 0.07, 0.09, 0.85 * a)
-        love.graphics.rectangle("fill", L.frames.tot.x, ly, 214, 20, 3, 3)
-        if la.heal then love.graphics.setColor(0.55, 1, 0.55, a)
-        elseif la.crit then love.graphics.setColor(1, 0.85, 0.2, a)
-        else love.graphics.setColor(1, 1, 1, a) end
-        love.graphics.print(la.text, L.frames.tot.x + 6, ly + 2)
-      end
       -- Ziel-Auren unter der Zieltafel (Runde 8, #107): die Auren des
       -- ZIELS, nicht mehr die eigenen. Hogger zeigt hier seinen
       -- Frost-Slow (Magier-Frostruestung); Mobs seit Runde 14 (#167) die
@@ -1937,6 +1952,26 @@ function R:draw(view, ui)
       end
       aura_tip = draw_auras(tauras, L.frames.buffs.x, L.frames.buffs.y, ui)
         or aura_tip
+      -- Letzte eigene Aktion (Runde 21): "Feuerball 11", "Heiliges Licht
+      -- +25" — die eine Stelle, an der nur MEINE Wirkung steht, egal wie
+      -- voll der Klumpen ist. UNTER den Ziel-Auren (die erste Fassung lag
+      -- dazwischen und wurde von der Auren-Kachel verdeckt). Zwei
+      -- Sekunden, dann verblasst sie.
+      local la = ui.last_action
+      if la and la.age < 2.2 then
+        local ly = L.frames.buffs.y + (#tauras > 0 and 34 or 0)
+        local a = math.min(1, (2.2 - la.age) / 0.6)
+        love.graphics.setColor(0.07, 0.07, 0.09, 0.85 * a)
+        love.graphics.rectangle("fill", L.frames.tot.x, ly, 214, 24, 3, 3)
+        local col = la.heal and { 0.55, 1, 0.55 } or la.crit and { 1, 0.85, 0.2 } or { 1, 1, 1 }
+        local px, py, s = L.frames.tot.x + 6, ly + 2, 1.3
+        love.graphics.setColor(0.02, 0.02, 0.02, a)
+        for _, o in ipairs({ { 1.5, 0 }, { -1.5, 0 }, { 0, 1.5 }, { 0, -1.5 } }) do
+          love.graphics.print(la.text, px + o[1], py + o[2], 0, s, s)
+        end
+        love.graphics.setColor(col[1], col[2], col[3], a)
+        love.graphics.print(la.text, px, py, 0, s, s)
+      end
     end
   end
 
