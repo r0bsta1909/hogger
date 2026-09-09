@@ -367,7 +367,7 @@ local function process_cosmetics(view)
       app.floating:add("+" .. amount,
         tx, ty, mine and { 0.55, 1, 0.55 } or { 0.3, 0.95, 0.3 },
         (mine or tonumber(e.dst) == view.me) and 2 or 1,
-        mine and { own = true, big = true } or nil)
+        mine and { own = true, heal = true } or nil)
       app.render:add_heal_fx(tx, ty)
       if mine then
         app.render:add_hit_flash(tx, ty, { 0.5, 1, 0.5 }, true)

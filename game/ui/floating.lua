@@ -13,12 +13,17 @@ local F = {}
 F.__index = F
 
 -- Signatur-Groessen (Faktor auf die Schrift)
-F.SCALE_OWN_BIG   = 1.9   -- eigene Faehigkeit / eigene Heilung: springt auf ...
-F.SCALE_OWN_REST  = 1.35  -- ... und landet hier; eigener Autohit startet hier
-F.SCALE_OWN_AUTO  = 1.2
+-- Rob nach v0.21.1: "die eigenen Zahlen muessen noch deutlicher und
+-- groesser sein" — Schaden ja, Heilung nicht (der gruene Ring reicht).
+F.SCALE_OWN_BIG   = 2.6   -- eigene Faehigkeit: springt auf ...
+F.SCALE_OWN_REST  = 1.9   -- ... und landet hier
+F.SCALE_OWN_AUTO  = 1.5   -- eigener Autohit
+F.SCALE_CRIT_OWN  = 3.0   -- eigener Krit; fremde/erlittene Krits bleiben 2,0
+F.SCALE_OWN_HEAL  = 1.5   -- eigene Heilung: wie bisher, nur mit Umriss
 F.SCALE_OTHER     = 0.85  -- fremde Zahlen
 F.ALPHA_OTHER     = 0.55
 F.POP_T           = 0.15  -- Dauer des Aufspringens in Sekunden
+F.OUTLINE         = 2     -- Umriss in px
 
 function F.new()
   return setmetatable({ items = {}, pool = {} }, F)
@@ -42,6 +47,7 @@ function F:add(text, wx, wy, color, prio, opts)
   it.text, it.wx, it.wy, it.color, it.prio = text, wx, wy, color, prio or 1
   it.own = opts and opts.own or false
   it.big = opts and opts.big or false
+  it.heal = opts and opts.heal or false
   it.t = model.p("floating_text_duration")
   it.total = it.t
   self.items[#self.items + 1] = it
@@ -52,7 +58,8 @@ end
 -- eigene Faehigkeiten springen von SCALE_OWN_BIG auf SCALE_OWN_REST,
 -- Krits bleiben gross, fremde Zahlen klein.
 function F.scale_of(it)
-  if it.prio >= 3 then return 2.0 end
+  if it.own and it.heal then return F.SCALE_OWN_HEAL end
+  if it.prio >= 3 then return it.own and F.SCALE_CRIT_OWN or 2.0 end
   if it.own then
     if it.big then
       local age = it.total - it.t
@@ -91,7 +98,9 @@ function F:draw(to_screen)
       -- dunkler Umriss: vier Versatz-Kopien, damit die eigene Zahl auch
       -- auf hellem Icon-Gulasch steht
       love.graphics.setColor(0.05, 0.04, 0.03, a)
-      for _, o in ipairs({ { 1.5, 0 }, { -1.5, 0 }, { 0, 1.5 }, { 0, -1.5 } }) do
+      local d = F.OUTLINE
+      for _, o in ipairs({ { d, 0 }, { -d, 0 }, { 0, d }, { 0, -d },
+                           { d, d }, { -d, -d }, { d, -d }, { -d, d } }) do
         love.graphics.print(it.text, px + o[1], py + o[2], 0, scale, scale)
       end
     end

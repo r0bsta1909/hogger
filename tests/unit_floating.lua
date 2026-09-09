@@ -12,6 +12,8 @@ local auto = f:add("2", 0, 0, { 1, 1, 1 }, 2, { own = true })
 local other = f:add("6", 0, 0, { 0.7, 0.7, 0.7 }, 1)
 local hit_me = f:add("20", 0, 0, { 1, 0.3, 0.3 }, 2)
 local crit = f:add("22!", 0, 0, { 1, 0.85, 0.2 }, 3, { own = true, big = true })
+local crit_other = f:add("22!", 0, 0, { 1, 0.85, 0.2 }, 3)
+local heal = f:add("+25", 0, 0, { 0.55, 1, 0.55 }, 2, { own = true, heal = true })
 
 T.ok(own.own and own.big, "floating: eigene Faehigkeit traegt die Signatur")
 T.ok(not other.own, "floating: fremde Zahl ohne Signatur")
@@ -23,7 +25,12 @@ T.ok(F.scale_of(auto) < F.scale_of(own), "floating: bewusste Taste sticht heraus
 T.near(F.scale_of(other), F.SCALE_OTHER, "floating: fremde Zahl klein")
 T.ok(F.scale_of(other) < F.scale_of(auto), "floating: fremd kleiner als eigener Autohit")
 T.near(F.scale_of(hit_me), 1.5, "floating: erlittener Schaden wie bisher 1,5-fach")
-T.near(F.scale_of(crit), 2.0, "floating: Krit bleibt am groessten")
+T.near(F.scale_of(crit), F.SCALE_CRIT_OWN, "floating: eigener Krit am groessten")
+T.ok(F.scale_of(crit) > F.scale_of(own), "floating: eigener Krit groesser als eigene Faehigkeit")
+T.near(F.scale_of(crit_other), 2.0, "floating: fremder/erlittener Krit bleibt 2,0")
+T.near(F.scale_of(heal), F.SCALE_OWN_HEAL, "floating: eigene Heilung bleibt bei 1,5 (der gruene Ring reicht)")
+T.ok(F.scale_of(heal) <= F.scale_of(auto), "floating: Heilung nicht groesser als eigener Autohit-Schaden")
+T.ok(F.SCALE_OWN_BIG >= 2.5 and F.SCALE_OWN_REST >= 1.8, "floating: eigener Schaden deutlich groesser (Rob, v0.21.1)")
 
 -- Budget: fremde Zahlen werden von eigenen verdraengt, nie umgekehrt
 local g = F.new()
