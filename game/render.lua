@@ -80,7 +80,7 @@ end
 -- die Funktion exportiert und gegen step.effective_max_hp testgesichert.
 local function client_max_hp(p)
   local base = p.class and model.hp_for_class(p.class) or 0
-  if p.pact then base = base * (1 + model.p("warlock_pact_hp_pct")) end
+  if p.pact then base = math.floor(base * (1 + model.p("warlock_pact_hp_pct")) + 0.5) end
   return base
 end
 R.client_max_hp = client_max_hp
@@ -237,6 +237,16 @@ function R:add_hit_flash(tx, ty, col, big)
                             sx = tx, sy = ty, tx = tx, ty = ty, big = big }
 end
 
+-- Frostnova (Runde 22, Rob): ein eisblauer Ring strahlt vom Magier bis zur
+-- Reichweite aus (Weltradius, skaliert beim Zeichnen) und verglueht.
+function R:add_nova_fx(x, y, radius)
+  self.fx = self.fx or {}
+  if #self.fx > 60 then return end
+  self.fx[#self.fx + 1] = { form = "nova", col = { 0.65, 0.85, 1.0 },
+                            t = 0.6, total = 0.6, sx = x, sy = y, tx = x, ty = y,
+                            radius = radius }
+end
+
 function R:add_heal_fx(tx, ty)
   self.fx = self.fx or {}
   if #self.fx > 60 then return end
@@ -374,6 +384,11 @@ end
 -- Abgeschaltete Faehigkeiten (F10) haben keinen Sitzplatz.
 R.BUTTON_R = 23
 R.CAST_RING_R = 22 -- Zauber-Ring um den eigenen Pfeil (Runde 21)
+-- Slot des Lebensentzugs (Runde 22) fuer den Strahl — aus dem Modell, nicht geraten
+R.DRAIN_SLOT = nil
+for slot, def in ipairs(model.classes.warlock.abilities) do
+  if def.id == "drain_life" then R.DRAIN_SLOT = slot end
+end
 
 function R.ability_slots(L, class)
   local out = {}
@@ -1114,6 +1129,19 @@ function R:draw_fx(to_screen, scale)
       love.graphics.setLineWidth(2)
       love.graphics.circle("line", tx, ty - k * 18, 10 * (1 - k * 0.5))
       love.graphics.setLineWidth(1)
+    elseif f.form == "nova" then
+      -- Ring waechst in der ersten Haelfte bis zur Reichweite, danach
+      -- verglueht die Fuellung; ein zweiter, hellerer Ring folgt
+      local rw = (f.radius or 120) * scale
+      local grow = math.min(1, k / 0.5)
+      love.graphics.setColor(c[1], c[2], c[3], 0.18 * (1 - k))
+      love.graphics.circle("fill", tx, ty, rw * grow)
+      love.graphics.setColor(c[1], c[2], c[3], 0.95 * (1 - k))
+      love.graphics.setLineWidth(4)
+      love.graphics.circle("line", tx, ty, rw * grow)
+      love.graphics.setLineWidth(2)
+      love.graphics.circle("line", tx, ty, rw * math.max(0, grow - 0.2))
+      love.graphics.setLineWidth(1)
     elseif f.form == "hitflash" then
       -- eigener Treffer (Runde 21): Fuellung blitzt auf und verglueht, ein
       -- Ring laeuft nach aussen
@@ -1574,6 +1602,34 @@ function R:draw(view, ui)
       love.graphics.setLineWidth(2)
       love.graphics.circle("line", tx, ty, tr)
       love.graphics.setLineWidth(1)
+    end
+  end
+
+  -- Lebensentzug (Runde 22, Rob): ein gruener Strahl vom Hexer zum Ziel,
+  -- der pulsiert, solange kanalisiert wird. Der Snapshot traegt je Spieler
+  -- den Cast-Slot und das Ziel — mehr braucht der Strahl nicht.
+  do
+    local pulse = 0.55 + 0.45 * math.sin((self.ui_t or 0) * 9)
+    for _, pid in ipairs(R.sorted_pids(view.players)) do
+      local q = view.players[pid]
+      if q.alive and q.class == "warlock" and (q.cast_slot or 0) == R.DRAIN_SLOT then
+        local qx, qy
+        if pid == view.me then qx, qy = to_screen(view.me_x, view.me_y)
+        else qx, qy = to_screen(q.x, q.y) end
+        local t = q.target
+        local tx, ty
+        if t == world.HOGGER_ID and hg.state ~= "reset" then tx, ty = to_screen(hg.x, hg.y)
+        elseif t and view.npcs and view.npcs[t] then tx, ty = to_screen(view.npcs[t].x, view.npcs[t].y) end
+        if tx then
+          love.graphics.setColor(0.35, 0.95, 0.45, 0.35 * pulse)
+          love.graphics.setLineWidth(9)
+          love.graphics.line(qx, qy, tx, ty)
+          love.graphics.setColor(0.6, 1.0, 0.6, 0.9 * pulse)
+          love.graphics.setLineWidth(3)
+          love.graphics.line(qx, qy, tx, ty)
+          love.graphics.setLineWidth(1)
+        end
+      end
     end
   end
 

@@ -428,8 +428,18 @@ local function process_cosmetics(view)
       -- Gnarlwurzeln (Runde 14, #167): der Druide muss SEHEN, dass sie
       -- sassen — vorher gab es dafuer kein einziges Signal
       local tx, ty = entity_pos(e.dst)
-      app.floating:add("Verwurzelt!", tx, ty, { 0.45, 0.9, 0.35 }, 2)
+      if e.art == "nova" then
+        -- Frostnova (Runde 22): eisblau, nicht das Gruen der Gnarlwurzeln
+        app.floating:add((e.val or 0) > 0 and "Eingefroren!" or "Widerstanden!",
+          tx, ty, { 0.65, 0.85, 1 }, 2)
+      else
+        app.floating:add("Verwurzelt!", tx, ty, { 0.45, 0.9, 0.35 }, 2)
+      end
       audio.play("snd_impact_frost")
+    elseif e.ev == "nova" then
+      -- der blaue Ring, der vom Magier bis zur Reichweite ausstrahlt
+      local sx, sy = entity_pos(e.src)
+      app.render:add_nova_fx(sx, sy, e.val or 120)
     elseif e.ev == "feign" then
       -- Totstellen (Runde 14, #168): der Jaeger sieht jetzt, dass er liegt
       local tx, ty = entity_pos(e.src)
@@ -491,13 +501,13 @@ local function process_cosmetics(view)
           -- Sprechblase am rennenden Leeroy — die Raidansagen gehoeren
           -- ausschliesslich dem Echo
           app.render:bubble(text, 3, "leeroy")
+        elseif lid >= 31 then
+          -- Der Schluss-Monolog NUR als Sprechblase an der verschmolzenen
+          -- Figur (Endsequenz, GDD 11 / #132; Runde 22, Rob: "die Ansage am
+          -- Ende kommt doppelt"). 3,5 s statt der 3 s Zeilenabstand.
+          app.render:bubble(text, 3.5)
         else
           app.render:announce("Echo: " .. text, 4)
-          -- Der letzte Monolog haengt zusaetzlich als Sprechblase an der
-          -- verschmolzenen Figur (Endsequenz, GDD 11 / #132). 3,5 s statt der
-          -- 3 s Zeilenabstand: die letzte Blase steht damit bis zum Abgang und
-          -- wird von ihm abgeschnitten, statt vorher still zu verpuffen.
-          if lid >= 31 then app.render:bubble(text, 3.5) end
         end
       end
       if lid == 1 then
@@ -796,7 +806,9 @@ function love.update(dt)
   if view and (view.won_stage or 0) >= 4 then
     if not app.sysmsg_done then
       app.sysmsg_done = 0
-      app.render.sysmsg = require("game.data.names").LEEROY_LEFT
+      -- Runde 22 (Rob: "kann man gar nicht lesen"): als Banner statt als
+      -- Goldzeile mitten im Klumpen
+      app.render:announce(require("game.data.names").LEEROY_LEFT, 4)
       app.render.bubble_t = 0 -- die Blase bricht mitten im Satz ab
     end
     app.sysmsg_done = app.sysmsg_done + dt

@@ -15,12 +15,12 @@ local table93 = {
   -- (Rob-Entscheid Runde 6, #96). Die Unterbrecher-Spalte fiel mit
   -- Runde 12 (#140): unterbrechen kann nur noch der Schurken-Tritt.
   -- Runde 20 (Kalibrierung auf den typischen Raid, GDD 17.9): HP =
-  -- 6 N^2 + 640 N - 150 (Runde 21), Fress-Heilung 8 % je Kanal (0,010 x 8 s),
+  -- 5 N^2 + 630 N - 100 (Runde 22), Fress-Heilung 8 % je Kanal (0,010 x 8 s),
   -- Cleave = ceil(N/8)
-  { 5,   3200,  256,   1, 0, 10 },
-  { 10,  6850,  548,   2, 1, 10 },
-  { 20, 15050,  1204,  3, 2, 10 },
-  { 40, 35050,  2804,  5, 5, 10 },
+  { 5,   3175,  254,   1, 0, 10 },
+  { 10,  6700,  536,   2, 1, 10 },
+  { 20, 14500,  1160,  3, 2, 10 },
+  { 40, 33100,  2648,  5, 5, 10 },
 }
 for _, row in ipairs(table93) do
   local n = row[1]
@@ -34,12 +34,12 @@ T.eq(M.eat_interrupters, nil,
   "9.3 Unterbrecher-Formel gestrichen (Runde 12, #140: nur der Tritt)")
 
 -- GDD 9.3: HP-Untergrenze 120 x N unterhalb der Design-Spanne --------------
-T.eq(M.hogger_hp(1), 496, "9.3 Formel bei N=1 (Sockel 150: die Untergrenze 120 x N bindet nicht mehr)")
+T.eq(M.hogger_hp(1), 535, "9.3 Formel bei N=1 (Sockel 100: die Untergrenze 120 x N bindet nicht mehr)")
 do local save = M.params.hogger_hp_offset.wert; M.params.hogger_hp_offset.wert = 3000
   T.eq(M.hogger_hp(1), 120, "9.3 HP-Untergrenze 120 x N faengt einen zu grossen Sockel ab")
   M.params.hogger_hp_offset.wert = save end
-T.eq(M.hogger_hp(2), 1154, "9.3 Formel greift ab N=2 (Sockel 150, Runde 21)")
-T.eq(M.hogger_hp(4), 2506, "9.3 Formel bei N=4 (quad 6, slope 640, Sockel 150)")
+T.eq(M.hogger_hp(2), 1180, "9.3 Formel greift ab N=2 (Sockel 100, Runde 22)")
+T.eq(M.hogger_hp(4), 2500, "9.3 Formel bei N=4 (quad 5, slope 630, Sockel 100)")
 
 -- GDD 7.2: Mob-Slots -------------------------------------------------------
 T.eq(M.mob_slots(5), 5, "7.2 Mob-Slots N=5")

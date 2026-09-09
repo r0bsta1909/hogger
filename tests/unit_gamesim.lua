@@ -1884,8 +1884,8 @@ do
   step.step(st, {})
   T.ok(kr.pact and hx.pact, "pact: alle im Umkreis stehen im Blutpakt")
   T.near(step.effective_max_hp(kr),
-    kr.max_hp * (1 + model.p("warlock_pact_hp_pct")),
-    "pact: der Deckel steigt um den Prozentsatz")
+    math.floor(kr.max_hp * (1 + model.p("warlock_pact_hp_pct")) + 0.5),
+    "pact: der Deckel steigt um den Prozentsatz, ganzzahlig (Runde 22)")
   T.eq(kr.hp, kr.max_hp, "pact: KEIN Gratis-Heil beim Betreten")
 
   -- Heilung darf jetzt ueber das Basis-Maximum
@@ -2454,4 +2454,104 @@ do
   for _ = 1, ticks(70) do step.step(st8, {}) end
   T.eq(adds_alive(st8), model.adds(st8.n_scale), "nachschub: add_respawn 0 = aus")
   model.params.add_respawn.wert = saved
+end
+
+-- Runde 22, Nachlese (Rob nach v0.22.0): Nova-Ereignis und -Widerstand,
+-- Nachschub um Hogger mit sofortigem Ziel, ganzzahlige Blutpakt-HP
+do
+  local function ticks(sec) return math.ceil(sec / model.TICK_DT) end
+
+  -- Nova: eigenes Ereignis mit Radius, Wurzeln mit art "nova"
+  local st = world.new(31)
+  world.add_player(st, "m", { quest_done = true })
+  world.begin_try(st, {})
+  local h, mg = st.hogger, st.players[1]
+  h.state, h.engaged = "combat", true
+  mg.alive, mg.ghost, mg.class = true, false, "mage"
+  mg.max_hp = model.hp_for_class("mage"); mg.hp = mg.max_hp
+  mg.resource = 100
+  mg.x, mg.y = h.x + 300, h.y
+  mg.facing = input.facing_towards(mg.x, mg.y, h.x, h.y)
+  local add = world.add_npc(st, "add", mg.x + 40, mg.y, model.p("add_hp"))
+  add.state, add.spawn_x, add.spawn_y = "idle", add.x, add.y
+  local evs = step.step(st, { [mg.id] = { mask = input.AB3, facing = mg.facing } })
+  local nova, root_art = nil, nil
+  for _, e in ipairs(evs) do
+    if e.ev == "nova" then nova = e end
+    if e.ev == "root" then root_art = e.art end
+  end
+  T.ok(nova ~= nil and nova.src == mg.id, "nova: eigenes Ereignis vom Magier")
+  T.near(nova and nova.val or 0, model.p("mage_nova_radius"), "nova: val = Reichweite")
+  T.eq(root_art, "nova", "nova: die Wurzel traegt art nova (Client: Eingefroren statt Verwurzelt)")
+  T.eq(model.p("mage_nova_resist"), 0, "nova: Widerstand im Standard aus (kein dritter Zufallszug)")
+
+  -- Widerstand > 0: wuerfelt, manche bleiben frei — deterministisch je Seed
+  local saved = model.params.mage_nova_resist.wert
+  model.params.mage_nova_resist.wert = 0.5
+  local frei, fest = 0, 0
+  for seed = 1, 6 do
+    local s2 = world.new(100 + seed)
+    world.add_player(s2, "m", { quest_done = true })
+    world.begin_try(s2, {})
+    local h2, m2 = s2.hogger, s2.players[1]
+    h2.state, h2.engaged = "combat", true
+    m2.alive, m2.ghost, m2.class = true, false, "mage"
+    m2.max_hp = model.hp_for_class("mage"); m2.hp = m2.max_hp
+    m2.resource = 100
+    m2.x, m2.y = h2.x + 300, h2.y
+    m2.facing = input.facing_towards(m2.x, m2.y, h2.x, h2.y)
+    for i = 1, 4 do
+      local a = world.add_npc(s2, "add", m2.x + 20 * i, m2.y, model.p("add_hp"))
+      a.state, a.spawn_x, a.spawn_y = "idle", a.x, a.y
+    end
+    for _, e in ipairs(step.step(s2, { [m2.id] = { mask = input.AB3, facing = m2.facing } })) do
+      if e.ev == "root" and e.art == "nova" then
+        if (e.val or 0) > 0 then fest = fest + 1 else frei = frei + 1 end
+      end
+    end
+  end
+  model.params.mage_nova_resist.wert = saved
+  T.ok(frei > 0 and fest > 0, "nova: mit Widerstand 50 % bleiben manche frei (" .. frei .. "/" .. (frei + fest) .. ")")
+
+  -- Nachschub: um Hogger herum, sofort im Kampf mit einem lebenden Spieler
+  local st7 = world.new(32)
+  for i = 1, 8 do world.add_player(st7, "p" .. i, { quest_done = true }) end
+  world.begin_try(st7, {})
+  local h7 = st7.hogger
+  h7.state, h7.engaged = "combat", true
+  h7.x, h7.y = h7.x + 500, h7.y + 200 -- Hogger steht weit weg vom Huegel
+  local t7 = st7.players[1]
+  t7.alive, t7.ghost, t7.class = true, false, "warrior"
+  t7.max_hp, t7.hp = 100000, 100000
+  t7.x, t7.y = h7.x + 20, h7.y
+  h7.threat[t7.id] = 1000
+  local before = {}
+  for id = world.NPC_ID_BASE, 250 do if st7.npcs[id] then before[id] = true end end
+  for _ = 1, ticks(model.p("add_respawn") + 0.5) do step.step(st7, {}) end
+  local neu = nil
+  for id = world.NPC_ID_BASE, 250 do
+    local npc = st7.npcs[id]
+    if npc and npc.kind == "add" and not before[id] then neu = npc end
+  end
+  T.ok(neu ~= nil, "nachschub: ein neuer Welpe ist da")
+  T.ok(neu and world.dist(neu.spawn_x, neu.spawn_y, h7.x, h7.y) <= model.p("add_wave_radius") + 1,
+    "nachschub: er erscheint um Hogger herum, nicht am Huegel")
+  T.ok(neu and neu.target_pid == t7.id and neu.state == "combat",
+    "nachschub: er greift sofort einen lebenden Spieler an")
+  -- Wellengroesse einstellbar
+  local ws = model.params.add_wave_size.wert
+  model.params.add_wave_size.wert = 3
+  for _ = 1, ticks(model.p("add_respawn") + 0.5) do step.step(st7, {}) end
+  local n_adds = 0
+  for id = world.NPC_ID_BASE, 250 do
+    local npc = st7.npcs[id]
+    if npc and npc.kind == "add" then n_adds = n_adds + 1 end
+  end
+  model.params.add_wave_size.wert = ws
+  T.ok(n_adds >= 3, "nachschub: add_wave_size 3 bringt drei Welpen (" .. n_adds .. ")")
+
+  -- Blutpakt: ganzzahlige Maximal-HP (Rob: 72/71)
+  local p = { max_hp = 65, pact = true }
+  T.eq(step.effective_max_hp(p) % 1, 0, "pact: Maximal-HP ganzzahlig")
+  T.eq(step.effective_max_hp(p), 72, "pact: 65 x 1,1 = 71,5 -> 72")
 end

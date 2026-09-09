@@ -147,6 +147,11 @@ function T.run()
       local view = sicht(st2, me.id)
       versuch("Klumpen / Ziel " .. z[1], function()
         render:add_hit_flash(st2.hogger.x, st2.hogger.y, { 1, 1, 1 }, true)
+        -- Runde 22: Nova-Ring und Lebensentzug-Strahl
+        render:add_nova_fx(me.x, me.y, model.p("mage_nova_radius"))
+        for _, q in pairs(view.players) do
+          if q.class == "warlock" then q.cast_slot = render.DRAIN_SLOT; q.target = world.HOGGER_ID end
+        end
         render:draw(view, { facing_angle = 0.3, cooldowns = { 0, 0, 0, 0 },
                             last_action = { text = "Heroischer Stoss 6", age = 0.2 } })
       end)

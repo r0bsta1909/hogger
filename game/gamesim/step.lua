@@ -337,7 +337,9 @@ end
 -- Snapshot-Flag und den synchronen Params.
 function S.effective_max_hp(p)
   if p.pact then
-    return p.max_hp * (1 + model.p("warlock_pact_hp_pct"))
+    -- ganzzahlig (Runde 22, Rob: "72/71"): 65 x 1,1 = 71,5 stand als 72 HP
+    -- neben einem Maximum von 71
+    return math.floor(p.max_hp * (1 + model.p("warlock_pact_hp_pct")) + 0.5)
   end
   return p.max_hp
 end
@@ -688,12 +690,21 @@ local ABILITIES = {
       target = "self",
       effect = function(state, p, _, ev)
         local r, dur = model.p("mage_nova_radius"), model.p("mage_nova_duration")
+        local resist = model.p("mage_nova_resist")
+        -- das Ereignis fuer den blauen Ring am Client (val = Radius)
+        events.push(ev, state.tick, "nova", p.id, nil, r, nil)
         for id = world.NPC_ID_BASE, 250 do
           local npc = state.npcs[id]
           if npc and npc.kind ~= "imp" and world.dist(p.x, p.y, npc.x, npc.y) <= r then
-            npc.rooted_until = state.time + dur
-            npc.nova_until = state.time + dur
-            events.push(ev, state.tick, "root", p.id, npc.id, dur, nil)
+            -- Widerstand (Rob, F10, Standard 0): nur bei > 0 wird gewuerfelt,
+            -- damit der Zufallsstrom im Standard unveraendert bleibt (13.2)
+            if resist > 0 and state.rng:roll(resist) then
+              events.push(ev, state.tick, "root", p.id, npc.id, 0, nil, "nova")
+            else
+              npc.rooted_until = state.time + dur
+              npc.nova_until = state.time + dur
+              events.push(ev, state.tick, "root", p.id, npc.id, dur, nil, "nova")
+            end
           end
         end
       end },
@@ -2059,17 +2070,32 @@ function S.step(state, inputs)
       if state.time >= state.add_next_t then
         state.add_next_t = state.time + every
         local base = model.adds(math.max(1, state.n_scale))
-        local cap = base * model.p("add_cap_factor")
+        local wave = model.p("add_wave_size") > 0 and model.p("add_wave_size") or base
+        local cap = math.max(wave, base) * model.p("add_cap_factor")
         local lebend = 0
         each_npc(state, function(npc) if npc.kind == "add" then lebend = lebend + 1 end end)
-        local want = math.min(base, cap - lebend)
+        local want = math.min(wave, cap - lebend)
         if want > 0 then
-          local addpos = map.add_positions(base)
+          -- Rob: die Welpen kommen zum Raid — sie erscheinen im Kreis um
+          -- Hogger und greifen sofort einen "zufaelligen" lebenden Spieler
+          -- an (deterministisch aus Tick und Kennung, kein Zufallszug, 13.2)
+          local lebende = {}
+          for _, q in ipairs(state.players) do
+            if q.alive and not q.is_leeroy and not unseen(state, q) then lebende[#lebende + 1] = q end
+          end
+          local rr = model.p("add_wave_radius")
           for i = 1, want do
-            local pos = addpos[i]
-            local npc = world.add_npc(state, "add", pos.x, pos.y, model.p("add_hp"))
-            npc.state = "idle"
-            npc.spawn_x, npc.spawn_y = pos.x, pos.y
+            local a = (state.tick % 360) / 360 * 2 * math.pi + (i - 1) * 2 * math.pi / want
+            local x, y = map.clamp(h.x + math.cos(a) * rr, h.y + math.sin(a) * rr)
+            local npc = world.add_npc(state, "add", x, y, model.p("add_hp"))
+            npc.spawn_x, npc.spawn_y = x, y
+            if #lebende > 0 then
+              local q = lebende[((state.tick + npc.id) % #lebende) + 1]
+              npc.state = "combat"
+              npc.target_pid = q.id
+            else
+              npc.state = "idle"
+            end
             events.push(ev, state.tick, "spawn", npc.id, "add", nil, nil)
           end
         end

@@ -53,20 +53,22 @@ M.params = {
   -- offset 1600 -> 600. Grosse Raids brauchen den steileren quad-Term
   -- (Cleave-Divisor 8 statt 6 nimmt ihnen weniger ab), kleine den hoeheren
   -- Sockel — der alte Sockel machte N=5 zum Zwerg-Kampf.
-  hogger_hp_quad         = p(6.0, 0, 20, 0.5, "9.3"),
+  -- Runde 22 Nachlese: quad 6 -> 5, slope 640 -> 630, Sockel 150 -> 100, add_dmg
+  -- 10 -> 8 — der Welpen-Nachschub um Hogger drueckte N=10-40 auf 50-60 %
+  hogger_hp_quad         = p(5.0, 0, 20, 0.5, "9.3"),
   -- slope 560 -> 620 in Runde 13 (#155-#159): die fuenf neuen Klassen-
   -- Faehigkeiten (Handauflegung, Schild, Totstellen, Wurzeln, Blutpakt)
   -- hoben koordinierte Siege auf 98/95/87 % — der Aufschlag holt F1
   -- zurueck ins Band (Grid + Endsweep in GDD 17.9)
   -- Runde 17: 620 -> 640, Ausgleich fuer die auf 16 min verlaengerte Frist
   -- (mehr Zeit = mehr Siege; der Hebel fuer F1 ist laut GDD 13.3 die HP-Kurve)
-  hogger_hp_slope        = p(640, 100, 800, 10, "9.3"),
+  hogger_hp_slope        = p(630, 100, 800, 10, "9.3"),
   -- Historie: Offset 950 -> 850 in Runde 5 (#86, Zauberstab-Aus); Runde 6
   -- (#96) fixer Respawn -> quad-Term neu, slope/offset nachkalibriert.
   -- F1-F6-Belege: Sweeps in GDD 17.9.
   -- Runde 21 (#198/#199): 600 -> 150 — mit Zielgedaechtnis gewann N=5 zu
   -- 98 %; der Sockel ist der Hebel fuer kleine N (GDD 13.3)
-  hogger_hp_offset       = p(150, 0, 3000, 50, "9.3"),
+  hogger_hp_offset       = p(100, 0, 3000, 50, "9.3"),
   -- Runde 20: 30 -> 20 (F7-Hebel). Mit 30 starb Stoff in zwei Schlaegen,
   -- die mittlere Lebensdauer lag bei 15-25 s und ein Drittel der Leben
   -- endete unter 10 s ("wiederbeleben, um sofort zu sterben"). Mit 20 und
@@ -243,12 +245,15 @@ M.params = {
   mage_nova_duration     = p(6, 1, 15, 0.5, "8.2"),
   mage_nova_cd           = p(25, 5, 60, 1, "8.2"),
   mage_nova_mana         = p(30, 0, 100, 5, "8.2"),
+  -- Widerstand gegen die Nova (Rob): Anteil der Ziele, die widerstehen —
+  -- 0 = aus (Standard: kein dritter Zufallszug neben Krit und Beute)
+  mage_nova_resist       = p(0, 0, 0.5, 0.05, "8.2"),
   warlock_bolt_cast      = p(2.0, 0.5, 5.0, 0.1, "8.2"),
   warlock_bolt_dmg       = p(8, 1, 30, 1, "8.2"),
   warlock_bolt_mana      = p(25, 5, 100, 5, "8.2"),
   -- Lebensentzug (Runde 22, Rob): Kanal, Schaden je Sekunde an Hogger,
   -- heilt den Hexer um denselben Betrag — wann rette ich mich selbst?
-  warlock_drain_cast     = p(3.0, 1.0, 6.0, 0.5, "8.2"),
+  warlock_drain_cast     = p(10.0, 1.0, 20.0, 0.5, "8.2"),  -- Rob: Standard 10 s
   warlock_drain_dps      = p(3, 1, 10, 1, "8.2"),
   warlock_drain_cd       = p(15, 2, 60, 1, "8.2"),
   warlock_drain_mana     = p(20, 0, 100, 5, "8.2"),
@@ -328,12 +333,15 @@ M.params = {
   -- Adds: Gnoll-Welpen (GDD 9.2 / 9.3)
   add_divisor            = p(8, 2, 20, 1, "9.3"),
   add_hp                 = p(20, 5, 60, 5, "9.2"),
-  add_dmg                = p(10, 1, 30, 1, "9.2"),
+  add_dmg                = p(8, 1, 30, 1, "9.2"),
   add_attack_interval    = p(2.0, 0.5, 4.0, 0.5, "9.2"),
   -- Welpen-Nachschub (Runde 22, Rob): alle add_respawn s floor(N/8) neue
   -- Welpen, solange weniger als add_cap_factor x floor(N/8) leben; 0 = aus
   add_respawn            = p(60, 0, 300, 5, "9.2"),
   add_cap_factor         = p(2, 1, 4, 1, "9.2"),
+  -- Groesse einer Nachschub-Welle: 0 = floor(N/8), sonst feste Zahl (Rob)
+  add_wave_size          = p(0, 0, 12, 1, "9.2"),
+  add_wave_radius        = p(90, 40, 250, 10, "9.2"),
 
   -- Leeroy (GDD 10)
   leeroy_announcer_throttle = p(10, 2, 60, 1, "10"),
