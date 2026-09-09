@@ -324,6 +324,7 @@ local function process_cosmetics(view)
         src_p and src_p.class and model.classes[src_p.class].attack or nil,
         e.art, sx, sy, tx, ty)
       if incoming then app.render:add_hurt_flash(e.crit and 1.0 or 0.45) end
+      if incoming and e.art == "shock" then app.render:add_shake(10) end -- Rundumschlag
       -- Krit-Inszenierung (GDD 11): gross und gelb, Screenshake beide Seiten
       if e.crit and incoming then app.render:add_shake(12)
       elseif e.crit and outgoing then app.render:add_shake(6) end
@@ -396,6 +397,10 @@ local function process_cosmetics(view)
       end
     elseif e.ev == "crit_kill" and tonumber(e.dst) == view.me then
       app.render:add_shake(18) -- der "WAS?!"-Moment (GDD 9.2)
+    elseif e.ev == "shockwave" then
+      -- Rundumschlag (Runde 22): Roar beim Telegraph, Schlag beim Stoss
+      audio.play("snd_hogger_charge")
+      if (e.val or 0) >= 0 then app.render:add_shake(6) end
     elseif e.ev == "charge" then
       audio.play("snd_hogger_charge") -- Boss-Lesbarkeit (GDD 12 Nr. 10)
       -- Runde 21: val = 0 heisst verfehlt — der Ausweicher sieht es

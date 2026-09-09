@@ -2555,3 +2555,117 @@ do
   T.eq(step.effective_max_hp(p) % 1, 0, "pact: Maximal-HP ganzzahlig")
   T.eq(step.effective_max_hp(p), 72, "pact: 65 x 1,1 = 71,5 -> 72")
 end
+
+-- Rundumschlag (Runde 22, Rob: "wenig Bewegung") und die HP-Obergrenze
+do
+  local function ticks(sec) return math.ceil(sec / model.TICK_DT) end
+  local function shock_world()
+    local st = world.new(41)
+    world.add_player(st, "a", { quest_done = true })
+    world.add_player(st, "b", { quest_done = true })
+    world.add_player(st, "c", { quest_done = true })
+    world.begin_try(st, {})
+    local h = st.hogger
+    h.state, h.engaged = "combat", true
+    h.shock_cd = 0
+    h.charge_cd = 999
+    local near, mid, far = st.players[1], st.players[2], st.players[3]
+    for _, p in ipairs(st.players) do
+      p.alive, p.ghost, p.class = true, false, "warrior"
+      p.max_hp, p.hp = 100000, 100000
+      p.resource = 100
+    end
+    near.x, near.y = h.x + 20, h.y
+    mid.x, mid.y = h.x, h.y + 60
+    far.x, far.y = h.x + 400, h.y
+    h.threat[near.id], h.threat[mid.id], h.threat[far.id] = 1000, 500, 100
+    return st, h, near, mid, far
+  end
+
+  -- Telegraph, dann Stoss: alle im Radius fliegen, Schaden, Cast bricht
+  local st, h, near, mid, far = shock_world()
+  local evs = step.step(st, {})
+  T.ok(h.shock ~= nil, "schock: der Telegraph beginnt im Nahkampf")
+  local started = false
+  for _, e in ipairs(evs) do if e.ev == "shockwave" and e.val == -1 then started = true end end
+  T.ok(started, "schock: Ereignis mit val -1 beim Telegraph")
+  T.near(h.shock_cd, model.p("hogger_shock_cd"), "schock: Cooldown gesetzt")
+  mid.cast = { slot = 1, t_left = 1, total = 2 }
+  local d_near0 = world.dist(near.x, near.y, h.x, h.y)
+  local d_far0 = world.dist(far.x, far.y, h.x, h.y)
+  local hit_ev
+  for _ = 1, ticks(model.p("hogger_shock_windup")) + 1 do
+    for _, e in ipairs(step.step(st, {})) do
+      if e.ev == "shockwave" and (e.val or -1) >= 0 then hit_ev = e end
+    end
+  end
+  T.ok(hit_ev ~= nil and hit_ev.val == 2, "schock: zwei im Radius getroffen (" .. tostring(hit_ev and hit_ev.val) .. ")")
+  T.eq(h.shock, nil, "schock: der Stoss ist vorbei")
+  T.ok(world.dist(near.x, near.y, h.x, h.y) >= d_near0 + model.p("hogger_shock_knockback") * 0.8,
+    "schock: der Nahkaempfer fliegt zurueck")
+  T.near(world.dist(far.x, far.y, h.x, h.y), d_far0, "schock: der Fernkaempfer bleibt")
+  T.ok(model.p("hogger_shock_dmg") == 0 and near.hp == near.max_hp or near.hp < near.max_hp,
+    "schock: Schaden nur, wenn hogger_shock_dmg > 0 (Standard 0: nur Bewegung)")
+  T.eq(mid.cast, nil, "schock: der Stoss bricht den Cast")
+  T.ok(h.charge_cd <= 0 or h.charge ~= nil, "schock: danach sofort die Charge (hogger_shock_charge)")
+  step.step(st, {})
+  T.ok(h.charge ~= nil, "schock: die Charge laeuft auf den Weitesten")
+  T.eq(h.charge and h.charge.target, far.id, "schock: ... und zwar auf far")
+
+  -- Wer im Telegraph aus dem Ring tritt, bleibt verschont
+  local st2, h2, n2 = shock_world()
+  step.step(st2, {})
+  n2.x = h2.x + model.p("hogger_shock_radius") + 30
+  local hp0 = n2.hp
+  for _ = 1, ticks(model.p("hogger_shock_windup")) + 1 do step.step(st2, {}) end
+  T.eq(n2.hp, hp0, "schock: aus dem Ring getreten -> kein Schaden")
+  T.ok(world.dist(n2.x, n2.y, h2.x, h2.y) < model.p("hogger_shock_radius") + 60,
+    "schock: aus dem Ring getreten -> kein Rueckstoss")
+  -- mit Schaden (F10) trifft der Stoss auch die HP
+  local sd = model.params.hogger_shock_dmg.wert
+  model.params.hogger_shock_dmg.wert = 10
+  local st2b, h2b, n2b = shock_world()
+  step.step(st2b, {})
+  for _ = 1, ticks(model.p("hogger_shock_windup")) + 1 do step.step(st2b, {}) end
+  T.ok(n2b.hp < n2b.max_hp, "schock: mit hogger_shock_dmg 10 macht der Stoss Schaden")
+  model.params.hogger_shock_dmg.wert = sd
+
+  -- 0 = aus
+  local saved = model.params.hogger_shock_cd.wert
+  model.params.hogger_shock_cd.wert = 0
+  local st3, h3 = shock_world()
+  for _ = 1, 60 do step.step(st3, {}) end
+  T.eq(h3.shock, nil, "schock: hogger_shock_cd 0 schaltet ab")
+  model.params.hogger_shock_cd.wert = saved
+
+  -- kein Krit auf den Stoss
+  T.ok(not model.can_crit("shock"), "13.2 der Rundumschlag kann NICHT kritten")
+  local killcam = require("game.gamesim.killcam")
+  T.ok(killcam.CAUSE.shock ~= nil and step.HOGGER_CAUSES[killcam.CAUSE.shock],
+    "schock: eigene Todesursache, zaehlt als Hogger-Tod")
+
+  -- HP-Obergrenze (Rob: "max hp ist max hp"): Verjuengung, Lebensentzug und
+  -- Blutpakt heben die HP nie ueber das effektive Maximum
+  local st4 = world.new(42)
+  world.add_player(st4, "d", { quest_done = true })
+  world.add_player(st4, "w", { quest_done = true })
+  world.begin_try(st4, {})
+  local dr, wl = st4.players[1], st4.players[2]
+  for _, p in ipairs(st4.players) do
+    p.alive, p.ghost = true, false
+    p.resource = 100
+    p.x, p.y = st4.hogger.x + 150, st4.hogger.y
+  end
+  dr.class, dr.max_hp = "druid", model.hp_for_class("druid")
+  wl.class, wl.max_hp = "warlock", model.hp_for_class("warlock")
+  dr.hp, wl.hp = dr.max_hp - 1, wl.max_hp - 1
+  wl.pact = true
+  dr.hot = { src = dr.id, left = 12, next = 0.1, per = 50 }
+  wl.hot = { src = dr.id, left = 12, next = 0.1, per = 50 }
+  for _ = 1, ticks(3) do
+    step.step(st4, {})
+    T.ok(dr.hp <= step.effective_max_hp(dr) + 1e-6, "hp: Druide nie ueber dem Maximum")
+    T.ok(wl.hp <= step.effective_max_hp(wl) + 1e-6, "hp: Hexer nie ueber dem Blutpakt-Maximum")
+  end
+  T.eq(step.effective_max_hp(wl) % 1, 0, "hp: das Blutpakt-Maximum ist ganzzahlig")
+end

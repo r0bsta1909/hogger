@@ -208,6 +208,7 @@ local function reset_hogger(state)
     patrol_i = 1,
     threat = {},            -- pid -> Bedrohung
     next_auto = 0, slice_cd = 0, charge_cd = model.p("hogger_charge_cd"),
+    shock_cd = model.p("hogger_shock_cd"), shock = nil, -- Rundumschlag (Runde 22)
     eat_cd = 0,
     eating = nil,           -- { phase = "drag"|"channel", t_left, corpse }
                             -- (Unterbrechung nur per Tritt, Runde 12 #140)

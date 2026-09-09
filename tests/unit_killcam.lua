@@ -10,7 +10,7 @@ T.ok(killcam.count() >= 28, "Pool umfasst ~30 Zeilen (" .. killcam.count() .. ")
 -- eine neue Ursache ohne Zeilengruppe soll hier auffallen.
 local hoechste = 0
 for _, v in pairs(killcam.CAUSE) do hoechste = math.max(hoechste, v) end
-T.eq(hoechste, killcam.CAUSE.enrage, "Enrage ist die juengste Todesursache")
+T.eq(hoechste, killcam.CAUSE.shock, "Rundumschlag ist die juengste Todesursache (Runde 22; Enrage 10)")
 for cause = 1, hoechste do
   for deaths = 0, 20 do
     local line = killcam.pick(cause, false, deaths, false)

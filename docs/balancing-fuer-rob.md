@@ -36,6 +36,7 @@ Wenn diese drei stimmen, ist das Spiel im Lot. Alles Weitere ist Geschmack.
 | `hogger_charge_dodge_px` | runter (z. B. 20) | Ausweichen wird leichter; 0 = die Charge trifft immer wie bis Runde 20. Der Log-Leser zeigt die Ausweichquote eures Abends |
 | `hogger_threat_swap_melee` / `_ranged` | hoch (z. B. 1,3 / 1,6) | Hogger klebt länger an seinem Ziel — der Krieger hält ihn, Stoff lebt länger, der Krieger stirbt öfter. 1,0 / 1,0 = ein Punkt kippt wie bis Runde 20 |
 | `hogger_charge_threat_loss` | hoch | die Charge lässt die Aggro stärker rotieren; 0 = sie kostet keine Bedrohung |
+| `hogger_shock_cd` / `_radius` / `_knockback` / `_dmg` | `_cd` runter (z. B. 20) = mehr Bewegung; 0 = kein Rundumschlag | Der rote Ring alle 30 s: wer drinsteht, fliegt; danach die Charge. Mehr Stöße heißt mehr Tode im Nahkampf und kürzere Casts |
 | `hogger_cleave_divisor` | hoch | er trifft weniger Leute gleichzeitig; entlastet den Nahkampfklumpen |
 
 Vorher aber prüfen, **woran** ihr scheitert: Wipe (alle tot) oder Zeitlimit? Bei Zeitlimit ist es die HP-Zahl, bei Wipes sind es die Schadenswerte oder die Heilung.

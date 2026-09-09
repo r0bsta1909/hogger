@@ -36,6 +36,7 @@ W.EV = {
   -- kein Client — genau der Fehler, den der Kommentar darueber festhaelt.
   enrage = 23,
   nova = 24, -- Runde 22: der blaue Ring der Frostnova (val = Radius)
+  shockwave = 25, -- Runde 22: Rundumschlag (val -1 = Telegraph beginnt, sonst Getroffene)
 }
 W.EV_NAMES = {}
 for name, id in pairs(W.EV) do W.EV_NAMES[id] = name end
@@ -48,7 +49,7 @@ W.CLASS_IDX, W.CLASS_NAMES = CLASS_IDX, CLASS_NAMES
 
 -- Schadensarten (GDD 17.3, Feld "art"): Index = Wire-ID, 0 = unbestimmt.
 -- Sie steuert Geschoss-/Schlag-Darstellung und Trefferklang (GDD 4.1/12).
-W.DMG_ARTS = { "autohit", "ability", "dot", "charge", "slice", "mob", "add", "nova" } -- nova: Wurzel der Frostnova (Runde 22)
+W.DMG_ARTS = { "autohit", "ability", "dot", "charge", "slice", "mob", "add", "nova", "shock" } -- nova: Wurzel der Frostnova (Runde 22)
 local ART_IDX = {}
 for i, name in ipairs(W.DMG_ARTS) do ART_IDX[name] = i end
 
@@ -325,6 +326,10 @@ function W.snapshot_body(state)
   -- mit der Spieleranzahl-Unterbrechung); sie bleiben als 0 im Format, kein
   -- PROTO-Bump (bewusste Politik seit Runde 8)
   local eatphase, eathit, eatneed, eatprog = 0, 0, 0, 0
+  -- eathit traegt seit Runde 22 den Telegraph des Rundumschlags (0 = keiner)
+  if h.shock and h.shock.total and h.shock.total > 0 then
+    eathit = math.max(1, q8(1 - h.shock.t_left / h.shock.total))
+  end
   if h.eating then
     eatphase = h.eating.phase == "drag" and 1 or 2
     local total = (eatphase == 1) and model.p("eat_drag_duration")
@@ -496,9 +501,10 @@ function W.read_snapshot(data, off)
     x = hx, y = hy, hp = hhp, max_hp = hmax,
     state = ({ [0] = "idle", "combat", "eating", "reset" })[hstate],
     eat = eatphase > 0 and { phase = eatphase == 1 and "drag" or "channel",
-                             hitters = eathit, needed = eatneed,
+                             hitters = 0, needed = eatneed,
                              progress = eatprog / 255 } or nil,
     charge = ctarget ~= 255 and { target = ctarget, progress = cprog / 255 } or nil,
+    shock = eathit > 0 and (eathit / 255) or nil, -- Rundumschlag-Telegraph (Runde 22)
     target = htarget ~= 255 and htarget or nil,
     slow_rest = hslow, -- Runde 8 (#107): Frost-Slow-Restsekunden
   }

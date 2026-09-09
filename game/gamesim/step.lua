@@ -85,7 +85,7 @@ local CAUSE = require("game.gamesim.killcam").CAUSE
 -- was sie meint, und der Enrage (Ursache 10) waere still durchgefallen.
 local HOGGER_CAUSES = {
   [CAUSE.autohit] = true, [CAUSE.charge] = true, [CAUSE.slice] = true,
-  [CAUSE.dot] = true, [CAUSE.enrage] = true,
+  [CAUSE.dot] = true, [CAUSE.enrage] = true, [CAUSE.shock] = true,
 }
 S.HOGGER_CAUSES = HOGGER_CAUSES -- der Test prueft die Menge, nicht die Zahl
 
@@ -1610,6 +1610,7 @@ local function hogger_reset(state, cause)
   h.state = "reset"
   h.eating = nil
   h.charge = nil
+  h.shock = nil
   h.target_id = nil
   h.reset_cause = cause -- S.step wertet den Try aus
 end
@@ -1621,6 +1622,7 @@ local function hogger_tick(state, ev)
   if h.eat_cd > 0 then h.eat_cd = h.eat_cd - DT end
   if h.slice_cd > 0 then h.slice_cd = h.slice_cd - DT end
   if h.charge_cd > 0 then h.charge_cd = h.charge_cd - DT end
+  if (h.shock_cd or 0) > 0 then h.shock_cd = h.shock_cd - DT end
   h.next_auto = h.next_auto - DT
 
   -- Nach einem Reset endet der Try im selben Tick (S.step); der Zustand
@@ -1679,6 +1681,36 @@ local function hogger_tick(state, ev)
       end
       return
     end
+  end
+
+  -- Rundumschlag (Runde 22, Rob: "wenig Bewegung"): der rote Ring pulsiert
+  -- hogger_shock_windup lang, dann fliegt alles im Umkreis zurueck — wer
+  -- rechtzeitig aus dem Ring tritt, bleibt stehen. Danach sofort die Charge
+  -- auf den Weitesten (hogger_shock_charge). Kein Krit, kein Fressen dabei.
+  if h.shock then
+    h.shock.t_left = h.shock.t_left - DT
+    if h.shock.t_left <= 0 then
+      local r = model.p("hogger_shock_radius")
+      local kb = model.p("hogger_shock_knockback")
+      local dmg = model.p("hogger_shock_dmg")
+      local hit = 0
+      for _, p in ipairs(state.players) do
+        if p.alive and not p.stealth and not unseen(state, p)
+           and world.dist(p.x, p.y, h.x, h.y) <= r then
+          hit = hit + 1
+          local dx, dy = p.x - h.x, p.y - h.y
+          local d = math.max(1, math.sqrt(dx * dx + dy * dy))
+          p.x, p.y = map.clamp(p.x + dx / d * kb, p.y + dy / d * kb)
+          if p.cast then break_cast(p) end
+          if dmg > 0 then hogger_damage_player(state, p, dmg, "shock", ev) end
+        end
+      end
+      events.push(ev, state.tick, "shockwave", "hogger", nil, hit, nil)
+      h.shock = nil
+      h.next_auto = math.max(h.next_auto, 0.5)
+      if model.p("hogger_shock_charge") >= 1 then h.charge_cd = 0 end
+    end
+    return
   end
 
   -- Charge-Anlauf laeuft (pausiert die Kein-Kontakt-Uhr, GDD 9.1)
@@ -1772,6 +1804,15 @@ local function hogger_tick(state, ev)
     if not hogger_try_eat(state, ev) then
       h.state = "idle"
     end
+    return
+  end
+
+  -- Rundumschlag starten (Runde 22): im Kampf, alle hogger_shock_cd s,
+  -- nur wenn jemand in Schlagweite steht — sonst waere es ein Stoss ins Leere
+  if model.p("hogger_shock_cd") > 0 and (h.shock_cd or 0) <= 0 and in_melee then
+    h.shock_cd = model.p("hogger_shock_cd")
+    h.shock = { t_left = model.p("hogger_shock_windup"), total = model.p("hogger_shock_windup") }
+    events.push(ev, state.tick, "shockwave", "hogger", nil, -1, nil) -- -1 = Telegraph beginnt
     return
   end
 

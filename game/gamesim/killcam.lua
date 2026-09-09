@@ -12,6 +12,7 @@ K.CAUSE = {
   autohit = 1, charge = 2, slice = 3, dot = 4,
   boar = 5, wolf = 6, kobold = 7, murloc = 8, add = 9,
   enrage = 10, -- Runde 18: die Schockwelle am Ende der Frist (GDD 6/9.1)
+  shock = 11,  -- Runde 22: der Rundumschlag (GDD 9.2)
 }
 
 -- Zeilengruppen je Ursache
@@ -56,6 +57,11 @@ local GROUPS = {
   },
   [9] = { -- Gnoll-Welpe
     "Ein Welpe. Niemand hat es gesehen. Ausser allen.",
+  },
+  [11] = { -- Rundumschlag (Runde 22)
+    "Der rote Ring war eine Einladung. Zum Gehen.",
+    "Rundumschlag. Du standest rundum.",
+    "Zu nah dran. Jetzt zu weit weg.",
   },
   [10] = { -- Enrage: Hogger wurde langweilig (Runde 18)
     "Hogger wurde langweilig. Du warst der Beweis.",
