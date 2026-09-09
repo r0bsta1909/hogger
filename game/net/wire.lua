@@ -35,6 +35,7 @@ W.EV = {
   -- Runde 18: der Enrage am Ende der Frist. Ohne Eintrag hier saehe ihn
   -- kein Client — genau der Fehler, den der Kommentar darueber festhaelt.
   enrage = 23,
+  nova = 24, -- Runde 22: der blaue Ring der Frostnova (val = Radius)
 }
 W.EV_NAMES = {}
 for name, id in pairs(W.EV) do W.EV_NAMES[id] = name end
@@ -47,7 +48,7 @@ W.CLASS_IDX, W.CLASS_NAMES = CLASS_IDX, CLASS_NAMES
 
 -- Schadensarten (GDD 17.3, Feld "art"): Index = Wire-ID, 0 = unbestimmt.
 -- Sie steuert Geschoss-/Schlag-Darstellung und Trefferklang (GDD 4.1/12).
-W.DMG_ARTS = { "autohit", "ability", "dot", "charge", "slice", "mob", "add" }
+W.DMG_ARTS = { "autohit", "ability", "dot", "charge", "slice", "mob", "add", "nova" } -- nova: Wurzel der Frostnova (Runde 22)
 local ART_IDX = {}
 for i, name in ipairs(W.DMG_ARTS) do ART_IDX[name] = i end
 
