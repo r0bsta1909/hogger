@@ -61,7 +61,7 @@ do
   T.ok(joined(pws):find("Absorbiert " .. model.p("priest_pws_absorb")),
     "tooltip: Absorptionswert steht da")
 
-  local kick = lines_for("rogue", 4) -- Tritt
+  local kick = lines_for("rogue", 3) -- Tritt (seit Runde 22 Slot 3)
   T.eq(kick[2], "Unterbrechung", "tooltip: der Tritt ist eine Unterbrechung")
   T.ok(joined(kick):find("Abklingzeit"), "tooltip: Cooldown steht da")
 
@@ -76,9 +76,12 @@ do
   local taunt = lines_for("warrior", 3) -- Spott
   T.eq(taunt[2], "Aggro", "tooltip: Spott zieht Aggro")
 
-  local stealth = lines_for("rogue", 3)
-  T.eq(stealth[2], "Tarnung", "tooltip: Verstohlenheit ist Tarnung")
-  T.ok(joined(stealth):find("60 %% Tempo"), "tooltip: Tempoanteil steht da")
+  local nova = lines_for("mage", 3)
+  T.eq(nova[2], "Kontrolle", "tooltip: Frostnova ist Kontrolle")
+  local drain = lines_for("warlock", 3)
+  T.ok(joined(drain):find("Selbstheilung"), "tooltip: Lebensentzug heilt den Hexer")
+  local rejuv = lines_for("druid", 2)
+  T.ok(joined(rejuv):find("Zeit"), "tooltip: Verjuengung ist Heilung ueber Zeit")
 end
 
 -- Vollstaendigkeit: JEDE Faehigkeit hat eine Kategorie ----------------------
@@ -93,7 +96,7 @@ do
       n = n + 1
     end
   end
-  T.eq(n, 22, "art: alle 22 Faehigkeiten der acht Klassen sind erfasst")
+  T.eq(n, 23, "art: alle 23 Faehigkeiten der acht Klassen sind erfasst (Runde 22: 3+3+2+3+3+3+3+3)")
 end
 
 -- Abgeschaltete Faehigkeiten haben trotzdem einen sauberen Tooltip ----------

@@ -73,7 +73,7 @@ Ist niemand da, der tritt, hilft kein Regler — das ist eine Ansage-Frage. **De
 ### Die Heiler halten nichts
 | Regler | Richtung |
 |---|---|
-| `priest_heal_amount`, `druid_touch_heal`, `paladin_holylight_heal` | hoch |
+| `priest_heal_amount`, `druid_rejuv_total`, `paladin_holylight_heal` | hoch |
 | `mana_regen_rate` | hoch |
 | `threat_per_heal` | runter, wenn Heiler dauernd Aggro ziehen und sterben |
 

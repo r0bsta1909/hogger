@@ -377,3 +377,44 @@ do
   bot.SKIP = {}
   T.ok(not smoved, "SKIP.dodge: typisch weicht nicht aus")
 end
+
+-- Runde 22: Frostnova bei zwei Welpen, Lebensentzug unter 50 %, Druide
+-- ueberspringt Ziele mit Verjuengung
+do
+  local st, h = arena(1, "mage")
+  local m = st.players[2]
+  m.x, m.y = h.x + 150, h.y
+  m.frost_armor = true
+  for i = 1, 2 do
+    local a = world.add_npc(st, "add", m.x + 30 * i, m.y, model.p("add_hp"))
+    a.state, a.spawn_x, a.spawn_y = "combat", a.x, a.y
+  end
+  local pressed = false
+  for _ = 1, 60 do
+    st.tick = st.tick + 1; st.time = st.tick * model.TICK_DT
+    local dec = bot.decide(st, m.id)
+    if has(dec.mask, input.AB3) then pressed = true end
+  end
+  T.ok(pressed, "typisch: Magier zuendet die Frostnova bei zwei Welpen")
+
+  local st2, h2 = arena(1, "warlock")
+  local w = st2.players[2]
+  w.x, w.y = h2.x + 150, h2.y
+  w.hp = 0.3 * w.max_hp
+  local imp = world.add_npc(st2, "imp", w.x, w.y, model.p("imp_hp"), w.id)
+  w.imp_id = imp.id
+  local pressed2 = false
+  for _ = 1, 60 do
+    st2.tick = st2.tick + 1; st2.time = st2.tick * model.TICK_DT
+    local dec = bot.decide(st2, w.id)
+    if has(dec.mask, input.AB3) then pressed2 = true end
+  end
+  T.ok(pressed2, "typisch: Hexer zieht Leben unter 50 %")
+
+  local st3 = arena(3, "druid")
+  local d, a, b = st3.players[2], st3.players[3], st3.players[4]
+  a.hp, b.hp = 10, 20
+  a.hot = { src = d.id, left = 5, next = 1, per = 5 }
+  local t = bot.heal_target(st3, d)
+  T.ok(t and t.id == b.id, "typisch: Druide ueberspringt das Ziel mit laufender Verjuengung")
+end

@@ -155,6 +155,7 @@ local function revive_as(state, p, class, race)
   p.next_auto = 0
   p.shout_until = 0
   p.bleed_t = 0
+  p.hot = nil -- Verjuengung endet mit Tod/Wiederbelebung (Runde 22)
   p.dead_until = 0
   p.release_wish = nil
   for i, r in ipairs(model.RACES) do
@@ -223,6 +224,7 @@ local function kill_player(state, p, ev, was_crit, cause)
   p.frost_armor = false
   p.shout_until = 0
   p.bleed_t = 0
+  p.hot = nil -- Verjuengung endet mit Tod/Wiederbelebung (Runde 22)
   p.bleed_next = 0
   p.shield_hp = 0 -- Machtwort verfaellt mit dem Tod (Runde 13, #156)
   p.weak_soul_until = 0
@@ -426,7 +428,9 @@ local function player_damage_npc(state, p, npc, amount, kind, ev)
   end
   amount = amount * (p.skill or 1) -- Streuungsmodell, s. player_damage_hogger
   npc.hp = npc.hp - amount
-  npc.rooted_until = 0 -- Schaden bricht die Gnarlwurzeln (Runde 13, #158)
+  if state.time >= (npc.nova_until or 0) then
+    npc.rooted_until = 0 -- Schaden bricht die Gnarlwurzeln (Runde 13, #158), nicht die Frostnova (Runde 22)
+  end
   p.dmg_done = p.dmg_done + amount
   local sp = stat_p(state, p.id)
   if sp then sp.dmg = sp.dmg + amount end
@@ -508,11 +512,7 @@ local function unseen(state, p)
   return p.stealth or state.time < (p.feign_until or 0)
 end
 
-local function set_stealth(state, p, on)
-  p.stealth = on
-  -- Verstohlenheit schaltet den Angriff ab (Vanilla; Issue #86)
-  if on then p.attack_on = false end
-end
+-- Verstohlenheit: seit Runde 22 weg (Rob: maximal drei Faehigkeiten); p.stealth bleibt als totes Feld false
 
 local function dmg_fx(param)
   return function(state, p, _, ev)
@@ -630,19 +630,13 @@ local ABILITIES = {
           model.p("rogue_evis_dmg_per_cp") * p.cp, "ability", ev)
         p.cp = 0
       end },
-    -- Verstohlenheit (Runde 14, #169): nur AUSSERHALB des Kampfes, wie im
-    -- Original. Sie setzt keine Aggro zurueck — wer schon auf der Liste
-    -- steht, bleibt drauf; sie macht nur unsichtbar fuers Zielen. Das
-    -- Ausschalten geht dagegen jederzeit, auch mitten im Kampf.
-    { id = "stealth", target = "self", enabled = "rogue_stealth_enabled",
-      ready = function(state, p)
-        return p.stealth or not S.in_combat(state, p)
-      end,
-      effect = function(state, p) set_stealth(state, p, not p.stealth) end },
+    -- Die Verstohlenheit ist seit Runde 22 weg (Rob: maximal drei
+    -- Faehigkeiten je Klasse). Der Tritt rueckt auf Slot 3 und hat damit
+    -- ein Masken-Bit (Taste 3); die Wire-Msg KICK / S.kick bleibt fuer
+    -- Bots und den Klick.
     -- Tritt (Runde 12, #140): der EINZIGE Fress-Unterbrecher im Spiel.
     -- Off-GCD wie das Vanilla-Original; greift nur im Fresskanal (ready),
-    -- damit kein Cooldown ins Leere verpufft. Slot 4 hat kein Masken-Bit —
-    -- er kommt ueber die Wire-Msg KICK / S.kick (wie ENGAGE/HEAL_REQUEST).
+    -- damit kein Cooldown ins Leere verpufft.
     { id = "kick", cost = "rogue_kick_energy", cd_field = "kick_cd",
       cd = "rogue_kick_cd", range = "melee_range", target = "enemy",
       no_gcd = true,
@@ -687,6 +681,22 @@ local ABILITIES = {
       range = "cast_range", target = "enemy", effect = dmg_fx("mage_fireball_dmg") },
     { id = "frostarmor", target = "self",
       effect = function(_, p) p.frost_armor = true end },
+    -- Frostnova (Runde 22, Rob): alles ausser Hogger im Umkreis bleibt
+    -- stehen; Schaden bricht diese Wurzel NICHT (nova_until schuetzt sie),
+    -- anders als die Gnarlwurzeln. Add-Kontrolle fuer den Welpen-Nachschub.
+    { id = "nova", cost = "mage_nova_mana", cd_field = "nova_cd", cd = "mage_nova_cd",
+      target = "self",
+      effect = function(state, p, _, ev)
+        local r, dur = model.p("mage_nova_radius"), model.p("mage_nova_duration")
+        for id = world.NPC_ID_BASE, 250 do
+          local npc = state.npcs[id]
+          if npc and npc.kind ~= "imp" and world.dist(p.x, p.y, npc.x, npc.y) <= r then
+            npc.rooted_until = state.time + dur
+            npc.nova_until = state.time + dur
+            events.push(ev, state.tick, "root", p.id, npc.id, dur, nil)
+          end
+        end
+      end },
   },
   warlock = {
     { id = "bolt", cost = "warlock_bolt_mana", cast = "warlock_bolt_cast",
@@ -701,12 +711,37 @@ local ABILITIES = {
         -- "zieht kurz Aggro" (GDD 8.2): kleiner Startimpuls auf der Threat-Liste
         state.hogger.threat[npc.id] = 5
       end },
+    -- Lebensentzug (Runde 22, Rob): Kanal auf Hogger — jede Sekunde
+    -- warlock_drain_dps Schaden und dieselbe Heilung am Hexer. Kosten und
+    -- Cooldown fallen beim Beginn (channel), die Ticks laufen in
+    -- player_tick; Bewegung bricht ab wie jeden Cast.
+    { id = "drain", cost = "warlock_drain_mana", cast = "warlock_drain_cast",
+      channel = true, cd_field = "drain_cd", cd = "warlock_drain_cd",
+      range = "cast_range", target = "enemy",
+      tick = function(state, p, ev)
+        local enemy, etype = current_enemy(state, p)
+        if etype ~= "hogger" then return end
+        local amount = model.p("warlock_drain_dps")
+        player_damage_hogger(state, p, amount, "ability", ev)
+        heal_player(state, p, p, amount, ev)
+      end,
+      effect = function() end },
   },
   druid = {
     { id = "wrath", cost = "druid_wrath_mana", cast = "druid_wrath_cast",
       range = "cast_range", target = "enemy", effect = dmg_fx("druid_wrath_dmg") },
-    { id = "touch", cost = "druid_touch_mana", cast = "druid_touch_cast",
-      target = "ally", effect = heal_fx("druid_touch_heal") },
+    -- Verjuengung (Runde 22, Rob): Heal-over-Time mit kurzer Castzeit
+    -- statt der 3-s-Heilung. Erneuern setzt die Dauer zurueck, stapelt
+    -- nicht; die Ticks laufen in player_tick (Vorbild: Hoggers Blutung).
+    { id = "rejuv", cost = "druid_rejuv_mana", cast = "druid_rejuv_cast",
+      target = "ally",
+      effect = function(state, p, target, ev)
+        local t = target or p
+        local dur, tick = model.p("druid_rejuv_duration"), model.p("druid_rejuv_tick")
+        t.hot = { src = p.id, left = dur, next = tick,
+                  per = model.p("druid_rejuv_total") / math.max(1, dur / tick) }
+        events.push(ev, state.tick, "heal", p.id, t.id, 0, false)
+      end },
     -- Gnarlwurzeln (Runde 13, #158): wurzelt das NPC-Ziel fest — die
     -- Anmarsch-Sicherung gegen Woelfe und Welpen. Hogger ist immun
     -- (Boss, klassisch; ready-Gate verbrennt keinen Cooldown), Schaden
@@ -749,6 +784,14 @@ end
 
 -- Schalter aus dem F10-Panel (Runde 13): Faehigkeiten mit enabled-Param
 -- lassen sich einzeln abschalten — Button verschwindet, Host verwirft
+-- Slot des Schurken-Tritts (Runde 22: Slot 3, seit die Verstohlenheit weg
+-- ist) — eine Wahrheit fuer S.kick, Client und Bots
+S.KICK_SLOT = nil
+for slot, spec in ipairs(ABILITIES.rogue) do
+  if spec.id == "kick" then S.KICK_SLOT = slot end
+end
+assert(S.KICK_SLOT, "Schurke ohne Tritt")
+
 function S.ability_enabled(spec)
   return not spec.enabled or model.p(spec.enabled) >= 1
 end
@@ -812,14 +855,18 @@ local function try_ability(state, p, slot, ev, ally_id)
       return false
     end
   end
-  if p.stealth and spec.id ~= "stealth" then
-    set_stealth(state, p, false) -- bricht beim Angriff (GDD 8.2)
-  end
   if spec.cast then
     p.cast = { slot = slot, t_left = model.p(spec.cast),
                total = model.p(spec.cast),
-               target = spec.target == "ally" and ally.id or nil }
+               target = spec.target == "ally" and ally.id or nil,
+               next_tick = spec.channel and 1.0 or nil }
     p.gcd = model.p("gcd")
+    if spec.channel then
+      -- Kanal (Runde 22): Kosten und Cooldown beim Beginn, die Wirkung
+      -- kommt je Sekunde aus spec.tick
+      spend(state, p, cost)
+      if spec.cd_field then p[spec.cd_field] = model.p(spec.cd) end
+    end
     return true
   end
   spend(state, p, cost)
@@ -834,6 +881,7 @@ local function finish_cast(state, p, ev)
   p.cast = nil
   local spec = ABILITIES[p.class] and ABILITIES[p.class][c.slot]
   if not spec then return end
+  if spec.channel then return end -- Kanal: alles lief schon in den Ticks
   local cost = spec.cost and model.p(spec.cost) or 0
   if p.resource < cost then return end
   if spec.target == "enemy" and spec.range
@@ -926,7 +974,6 @@ local function player_tick(state, p, inp, ev)
 
   -- lebend --------------------------------------------------------------
   local speed = model.p("move_speed_alive")
-  if p.stealth then speed = speed * model.p("rogue_stealth_speed") end
   if moving then
     p.x, p.y = map.clamp(p.x + dx * speed * DT, p.y + dy * speed * DT)
     if p.cast then break_cast(p) end -- Bewegung bricht den Cast
@@ -964,6 +1011,8 @@ local function player_tick(state, p, inp, ev)
   if (p.kick_cd or 0) > 0 then p.kick_cd = p.kick_cd - DT end
   if (p.feign_cd or 0) > 0 then p.feign_cd = p.feign_cd - DT end
   if (p.roots_cd or 0) > 0 then p.roots_cd = p.roots_cd - DT end
+  if (p.nova_cd or 0) > 0 then p.nova_cd = p.nova_cd - DT end   -- Frostnova (Runde 22)
+  if (p.drain_cd or 0) > 0 then p.drain_cd = p.drain_cd - DT end -- Lebensentzug (Runde 22)
 
   -- Cast abschliessen; Wegdrehen bricht ihn ab wie Bewegung (GDD 8.1,
   -- Issue #32) — das Ziel muss die ganze Zeit vor einem bleiben
@@ -977,7 +1026,29 @@ local function player_tick(state, p, inp, ev)
   end
   if p.cast then
     p.cast.t_left = p.cast.t_left - DT
-    if p.cast.t_left <= 0 then finish_cast(state, p, ev) end
+    -- Kanal-Ticks (Runde 22, Lebensentzug): je volle Sekunde einmal
+    if p.cast.next_tick and p.cast.total - p.cast.t_left >= p.cast.next_tick - 1e-6 then
+      p.cast.next_tick = p.cast.next_tick + 1.0
+      local cspec = ABILITIES[p.class] and ABILITIES[p.class][p.cast.slot]
+      if cspec and cspec.tick then cspec.tick(state, p, ev) end
+      if not p.alive then p.prev_mask = mask return end
+    end
+    if p.cast and p.cast.t_left <= 0 then finish_cast(state, p, ev) end
+  end
+
+  -- Verjuengung (Runde 22): Heal-over-Time-Ticks, Heiler bekommt die
+  -- Bedrohung wie bei jeder Heilung; endet mit dem Tod (revive_as/kill
+  -- setzen hot = nil ueber die Feldliste)
+  if p.hot then
+    local hot = p.hot
+    hot.left = hot.left - DT
+    hot.next = hot.next - DT
+    if hot.next <= 0 then
+      hot.next = hot.next + model.p("druid_rejuv_tick")
+      local src = state.players[hot.src] or p
+      heal_player(state, src, p, hot.per, ev)
+    end
+    if hot.left <= 0 then p.hot = nil end
   end
 
   -- Faehigkeiten per Flanke (ADR-002). Jeder Faehigkeitsdruck schaltet
@@ -1340,8 +1411,10 @@ end
 function S.kick(state, pid, ev)
   local p = state.players[pid]
   if not p or not p.alive then return false end
+  local spec = ABILITIES[p.class] and ABILITIES[p.class][S.KICK_SLOT]
+  if not (spec and spec.id == "kick") then return false end -- nur der Schurke tritt
   p.attack_on = true -- ein Tritt ist ein Angriff (Engage-Regel, Issue #86)
-  return try_ability(state, p, 4, ev)
+  return try_ability(state, p, S.KICK_SLOT, ev)
 end
 
 -- Questannahme (GDD Kap. 5): ab jetzt darf sich der Spieler bewegen, und
@@ -1419,7 +1492,9 @@ end
 
 local function hogger_damage_npc(state, npc, amount, ev)
   npc.hp = npc.hp - amount
-  npc.rooted_until = 0 -- Schaden bricht die Gnarlwurzeln (Runde 13, #158)
+  if state.time >= (npc.nova_until or 0) then
+    npc.rooted_until = 0 -- Schaden bricht die Gnarlwurzeln (Runde 13, #158), nicht die Frostnova (Runde 22)
+  end
   events.push(ev, state.tick, "damage", "hogger", npc.id, amount, nil, "autohit")
   if npc.hp <= 0 then
     events.push(ev, state.tick, "add_death", npc.id, nil, nil, nil)
@@ -1971,6 +2046,35 @@ function S.step(state, inputs)
 
   for _, p in ipairs(state.players) do
     player_tick(state, p, inputs[p.id], ev)
+  end
+  -- Welpen-Nachschub (Runde 22, Rob): alle add_respawn s kommen floor(N/8)
+  -- neue Welpen am Huegelfuss, solange weniger als add_cap_factor x floor(N/8)
+  -- leben — damit Frostnova und Gnarlwurzeln im Kampf etwas zu tun haben.
+  -- Hogger selbst bekommt keine Phase (Encounter-Filter).
+  do
+    local every = model.p("add_respawn")
+    local h = state.hogger
+    if every > 0 and h.engaged and h.state ~= "reset" and h.hp > 0 then
+      state.add_next_t = state.add_next_t or (state.time + every)
+      if state.time >= state.add_next_t then
+        state.add_next_t = state.time + every
+        local base = model.adds(math.max(1, state.n_scale))
+        local cap = base * model.p("add_cap_factor")
+        local lebend = 0
+        each_npc(state, function(npc) if npc.kind == "add" then lebend = lebend + 1 end end)
+        local want = math.min(base, cap - lebend)
+        if want > 0 then
+          local addpos = map.add_positions(base)
+          for i = 1, want do
+            local pos = addpos[i]
+            local npc = world.add_npc(state, "add", pos.x, pos.y, model.p("add_hp"))
+            npc.state = "idle"
+            npc.spawn_x, npc.spawn_y = pos.x, pos.y
+            events.push(ev, state.tick, "spawn", npc.id, "add", nil, nil)
+          end
+        end
+      end
+    end
   end
   each_npc(state, function(npc) npc_tick(state, npc, ev) end)
   echo_tick(state, ev)

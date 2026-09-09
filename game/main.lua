@@ -645,7 +645,12 @@ function love.update(dt)
   if casting_now then
     app.casting_slot = me_now.cast_slot
   elseif app.was_casting and app.casting_slot and app.casting_slot > 0 then
-    app.cooldown_view[app.casting_slot] = 0
+    -- Runde 22: die Verjuengung castet kuerzer als die GCD — dann bleibt
+    -- nach dem Cast noch Rest-GCD, die Anzeige darf nicht auf null fallen
+    local me_c = view and view.players[view.me]
+    local def = me_c and me_c.class and model.classes[me_c.class].abilities[app.casting_slot]
+    local cast_t = def and def.cast and model.p(def.cast) or 0
+    app.cooldown_view[app.casting_slot] = math.max(0, model.p("gcd") - cast_t)
   end
   app.was_casting = casting_now
   app.floating:update(dt)
@@ -1006,8 +1011,9 @@ local function trigger_ability(slot, via_click)
     return true
   end
   app.last_ability_name = spec.name_de -- fuer die Zeile "letzte Aktion" (Runde 21)
-  if slot == 4 then
-    -- Schurken-Tritt (Runde 12, #140): kein Masken-Bit, eigene Wire-Msg
+  if spec.id == "kick" then
+    -- Schurken-Tritt (Runde 12, #140; seit Runde 22 auf Slot 3): eigene
+    -- Wire-Msg statt Masken-Bit, damit er off-GCD und zuverlaessig ankommt
     if app.mode == "host" then app.net:kick()
     elseif app.net.send_kick then app.net:send_kick() end
     local cd = model.p(spec.cd)

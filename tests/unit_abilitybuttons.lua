@@ -14,7 +14,7 @@ do
   local warrior = render.ability_slots(L, "warrior")
   T.eq(#warrior, 3, "buttons: der Krieger hat drei Faehigkeiten")
   local rogue = render.ability_slots(L, "rogue")
-  T.eq(#rogue, 4, "buttons: der Schurke hat vier (Tritt als Slot 4)")
+  T.eq(#rogue, 3, "buttons: der Schurke hat drei (Tritt als Slot 3, Runde 22)")
   local hunter = render.ability_slots(L, "hunter")
   T.eq(#hunter, 2, "buttons: der Jaeger hat zwei")
 
@@ -22,7 +22,7 @@ do
   T.ok(rogue[1].x < rogue[2].x, "buttons: Slot 1 links von Slot 2")
   T.ok(rogue[2].x < rogue[3].x, "buttons: ... und weiter aufsteigend")
   T.eq(rogue[1].slot, 1, "buttons: der erste Sitzplatz traegt Slot 1")
-  T.eq(rogue[4].slot, 4, "buttons: der letzte traegt Slot 4")
+  T.eq(rogue[3].slot, 3, "buttons: der letzte traegt Slot 3")
 
   -- alle auf der Ringbahn, unten mittig
   for _, e in ipairs(rogue) do
@@ -50,17 +50,18 @@ end
 
 -- Per F10 abgeschaltete Faehigkeiten haben keinen Sitzplatz ----------------
 do
-  local vorher = #render.ability_slots(L, "rogue")
-  model.params.rogue_stealth_enabled.wert = 0
-  local slots = render.ability_slots(L, "rogue")
+  local vorher = #render.ability_slots(L, "paladin")
+  model.params.paladin_loh_enabled.wert = 0
+  local slots = render.ability_slots(L, "paladin")
   T.eq(#slots, vorher - 1, "buttons: abgeschaltet = ein Sitzplatz weniger")
   for _, e in ipairs(slots) do
-    T.ok(e.slot ~= 3, "buttons: die Verstohlenheit ist raus")
+    T.ok(e.slot ~= 3, "buttons: die Handauflegung ist raus")
   end
-  -- ... und ihr alter Platz laesst sich nicht mehr anklicken: die uebrigen
-  -- Buttons ruecken zusammen, die Tastennummern bleiben aber am Slot
-  T.eq(slots[#slots].slot, 4, "buttons: der Tritt behaelt seine Nummer 4")
-  model.params.rogue_stealth_enabled.wert = 1
+  model.params.paladin_loh_enabled.wert = 1
+  -- Runde 22: der Tritt sitzt auf Slot 3 des Schurken, kein Slot 4 mehr
+  local rs = render.ability_slots(L, "rogue")
+  T.eq(#rs, 3, "buttons: der Schurke hat drei Buttons")
+  T.eq(rs[#rs].slot, 3, "buttons: der Tritt ist Nummer 3")
 end
 
 -- Das Layout darf die Buttons nicht aus dem Bild schieben ------------------

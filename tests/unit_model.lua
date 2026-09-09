@@ -136,11 +136,11 @@ local expected_kits = {
   warrior = { "Heroischer Stoss", "Schlachtruf", "Spott" },
   paladin = { "Heiliges Licht", "Siegel der Rechtschaffenheit", "Handauflegung" },
   hunter  = { "Raptorstoss", "Totstellen" },
-  rogue   = { "Finsterer Stoss", "Ausweiden", "Verstohlenheit", "Tritt" },
+  rogue   = { "Finsterer Stoss", "Ausweiden", "Tritt" },
   priest  = { "Goettliche Pein", "Geringes Heilen", "Machtwort: Schild" },
-  mage    = { "Feuerball", "Frostruestung" },
-  warlock = { "Schattenblitz", "Wichtel beschwoeren" },
-  druid   = { "Zorn", "Heilende Beruehrung", "Gnarlwurzeln" },
+  mage    = { "Feuerball", "Frostruestung", "Frostnova" },
+  warlock = { "Schattenblitz", "Wichtel beschwoeren", "Lebensentzug" },
+  druid   = { "Zorn", "Verjuengung", "Gnarlwurzeln" },
 }
 -- Seit Runde 5 (Issue #86): der Jaeger hat die einzige Fernkampf-
 -- Autoattack, alle anderen schlagen im Nahkampf (Zauberstab gestrichen)
@@ -237,3 +237,13 @@ for mob_id, mob in pairs(M.mobs) do
   T.ok(type(M.p(mob.hp)) == "number", "7.2 Mob-HP-Parameter existiert: " .. mob_id)
   T.ok(type(M.p(mob.dmg)) == "number", "7.2 Mob-Schadens-Parameter existiert: " .. mob_id)
 end
+
+-- Runde 22 (Rob): maximal drei Faehigkeiten je Klasse, Verstohlenheit weg
+for _, class in ipairs(M.CLASS_IDS) do
+  T.ok(#M.classes[class].abilities <= 3, "8.2 hoechstens drei Faehigkeiten: " .. class)
+end
+T.eq(M.params.rogue_stealth_enabled, nil, "8.2 Verstohlenheit ist weg (Runde 22)")
+T.eq(M.p("mage_frostarmor_slow_duration"), 6, "8.2 Frostruestung verlangsamt 6 s (Runde 22)")
+T.near(M.p("mage_frostarmor_slow"), 0.40, "8.2 Frostruestung verlangsamt um 40 % (Runde 22)")
+T.ok(M.p("druid_rejuv_cast") <= 0.5, "8.2 Verjuengung mit sehr kurzer Castzeit (Rob)")
+T.ok(M.p("add_respawn") > 0, "9.2 Welpen-Nachschub an")

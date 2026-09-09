@@ -345,7 +345,7 @@ function T.run()
 
   -- F10-Schalter aus: die Buttons verschwinden, der Rest muss stehen
   do
-    local schalter = { "rogue_stealth_enabled", "paladin_loh_enabled",
+    local schalter = { "paladin_loh_enabled",
                        "priest_pws_enabled", "hunter_feign_enabled",
                        "druid_roots_enabled", "warlock_pact_enabled",
                        "ui_threat_meter" }

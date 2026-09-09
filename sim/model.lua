@@ -214,11 +214,6 @@ M.params = {
   rogue_sinister_energy  = p(40, 10, 100, 5, "8.2"),
   rogue_evis_dmg_per_cp  = p(4, 1, 10, 1, "8.2"),
   rogue_evis_energy      = p(30, 10, 100, 5, "8.2"),
-  -- Verstohlenheit (Runde 14, #169): abschaltbar wie die Faehigkeiten aus
-  -- Runde 13; nutzbar nur ausserhalb des Kampfes, Aggro setzt sie NICHT
-  -- zurueck (Rob-Entscheid)
-  rogue_stealth_enabled  = p(1, 0, 1, 1, "8.2"),
-  rogue_stealth_speed    = p(0.6, 0.3, 1.0, 0.05, "8.2"),
   -- Tritt (Runde 12, #140): der EINZIGE Fress-Unterbrecher. 10 s Cooldown
   -- ist Robs Vorgabe; 25 Energie ist der Vanilla-Kick-Preis.
   rogue_kick_energy      = p(25, 0, 100, 5, "8.2"),
@@ -240,11 +235,23 @@ M.params = {
   mage_fireball_cast     = p(2.5, 0.5, 5.0, 0.1, "8.2"),
   mage_fireball_dmg      = p(11, 1, 30, 1, "8.2"),
   mage_fireball_mana     = p(30, 5, 100, 5, "8.2"),
-  mage_frostarmor_slow   = p(0.25, 0, 0.75, 0.05, "8.2"),
-  mage_frostarmor_slow_duration = p(3, 1, 10, 0.5, "8.2"),
+  mage_frostarmor_slow   = p(0.40, 0, 0.75, 0.05, "8.2"),  -- Runde 22: 0,25 -> 0,40
+  mage_frostarmor_slow_duration = p(6, 1, 12, 0.5, "8.2"),  -- Runde 22: 3 -> 6 s
+  -- Frostnova (Runde 22, Rob): alles ausser Hogger im Umkreis festhalten;
+  -- Schaden bricht diese Wurzel NICHT (anders als die Gnarlwurzeln)
+  mage_nova_radius       = p(120, 40, 300, 10, "8.2"),
+  mage_nova_duration     = p(6, 1, 15, 0.5, "8.2"),
+  mage_nova_cd           = p(25, 5, 60, 1, "8.2"),
+  mage_nova_mana         = p(30, 0, 100, 5, "8.2"),
   warlock_bolt_cast      = p(2.0, 0.5, 5.0, 0.1, "8.2"),
   warlock_bolt_dmg       = p(8, 1, 30, 1, "8.2"),
   warlock_bolt_mana      = p(25, 5, 100, 5, "8.2"),
+  -- Lebensentzug (Runde 22, Rob): Kanal, Schaden je Sekunde an Hogger,
+  -- heilt den Hexer um denselben Betrag — wann rette ich mich selbst?
+  warlock_drain_cast     = p(3.0, 1.0, 6.0, 0.5, "8.2"),
+  warlock_drain_dps      = p(3, 1, 10, 1, "8.2"),
+  warlock_drain_cd       = p(15, 2, 60, 1, "8.2"),
+  warlock_drain_mana     = p(20, 0, 100, 5, "8.2"),
   warlock_imp_cast       = p(3.0, 0.5, 6.0, 0.5, "8.2"),
   warlock_imp_mana       = p(30, 5, 100, 5, "8.2"),
   -- Blutpakt (Runde 13, #159): der lebende Wichtel staerkt alle Spieler
@@ -259,9 +266,13 @@ M.params = {
   druid_wrath_cast       = p(1.5, 0.5, 4.0, 0.1, "8.2"),
   druid_wrath_dmg        = p(6, 1, 20, 1, "8.2"),
   druid_wrath_mana       = p(20, 5, 100, 5, "8.2"),
-  druid_touch_cast       = p(3.0, 0.5, 6.0, 0.1, "8.2"),
-  druid_touch_heal       = p(30, 5, 80, 1, "8.2"),
-  druid_touch_mana       = p(35, 5, 100, 5, "8.2"),
+  -- Verjuengung (Runde 22, Rob): Heal-over-Time mit sehr kurzer Castzeit
+  -- statt der 3-s-Heilung — der Heiler mit Vorlauf
+  druid_rejuv_cast       = p(0.5, 0, 2.0, 0.1, "8.2"),
+  druid_rejuv_total      = p(30, 5, 80, 1, "8.2"),
+  druid_rejuv_duration   = p(12, 4, 30, 1, "8.2"),
+  druid_rejuv_tick       = p(2.0, 0.5, 4.0, 0.5, "8.2"),
+  druid_rejuv_mana       = p(30, 5, 100, 5, "8.2"),
   -- Gnarlwurzeln (Runde 13, #158): Mob-/Add-Kontrolle. Hogger ist immun
   -- (Boss, klassisch), Schaden bricht die Wurzeln.
   druid_roots_enabled    = p(1, 0, 1, 1, "8.2"),
@@ -319,6 +330,10 @@ M.params = {
   add_hp                 = p(20, 5, 60, 5, "9.2"),
   add_dmg                = p(10, 1, 30, 1, "9.2"),
   add_attack_interval    = p(2.0, 0.5, 4.0, 0.5, "9.2"),
+  -- Welpen-Nachschub (Runde 22, Rob): alle add_respawn s floor(N/8) neue
+  -- Welpen, solange weniger als add_cap_factor x floor(N/8) leben; 0 = aus
+  add_respawn            = p(60, 0, 300, 5, "9.2"),
+  add_cap_factor         = p(2, 1, 4, 1, "9.2"),
 
   -- Leeroy (GDD 10)
   leeroy_announcer_throttle = p(10, 2, 60, 1, "10"),
@@ -423,8 +438,6 @@ M.classes = {
     abilities = {
       { id = "sinister_strike", art = "Schaden + Combopunkt", name_de = "Finsterer Stoss", dmg = "rogue_sinister_dmg", cost = "rogue_sinister_energy" },
       { id = "eviscerate", art = "Schaden, verbraucht Combopunkte", name_de = "Ausweiden", dmg_per_cp = "rogue_evis_dmg_per_cp", cost = "rogue_evis_energy" },
-      { id = "stealth", art = "Tarnung", name_de = "Verstohlenheit", speed_factor = "rogue_stealth_speed",
-        enabled = "rogue_stealth_enabled" },
       { id = "kick", art = "Unterbrechung", name_de = "Tritt", cost = "rogue_kick_energy", cd = "rogue_kick_cd" },
     },
   },
@@ -444,6 +457,8 @@ M.classes = {
     abilities = {
       { id = "fireball", art = "Schaden", name_de = "Feuerball", dmg = "mage_fireball_dmg", cast = "mage_fireball_cast", cost = "mage_fireball_mana" },
       { id = "frost_armor", art = "Verstaerkung + Verlangsamung", name_de = "Frostruestung", slow = "mage_frostarmor_slow", slow_duration = "mage_frostarmor_slow_duration" },
+      { id = "frost_nova", art = "Kontrolle", name_de = "Frostnova", radius = "mage_nova_radius",
+        duration = "mage_nova_duration", cd = "mage_nova_cd", cost = "mage_nova_mana" },
     },
   },
   warlock = {
@@ -452,6 +467,8 @@ M.classes = {
     abilities = {
       { id = "shadow_bolt", art = "Schaden", name_de = "Schattenblitz", dmg = "warlock_bolt_dmg", cast = "warlock_bolt_cast", cost = "warlock_bolt_mana" },
       { id = "summon_imp", art = "Beschwoerung", name_de = "Wichtel beschwoeren", cast = "warlock_imp_cast", cost = "warlock_imp_mana" },
+      { id = "drain_life", art = "Schaden + Selbstheilung", name_de = "Lebensentzug", dps = "warlock_drain_dps",
+        cast = "warlock_drain_cast", cd = "warlock_drain_cd", cost = "warlock_drain_mana" },
     },
   },
   druid = {
@@ -459,7 +476,8 @@ M.classes = {
     armor = "leather", resource = "mana", attack = "melee",
     abilities = {
       { id = "wrath", art = "Schaden", name_de = "Zorn", dmg = "druid_wrath_dmg", cast = "druid_wrath_cast", cost = "druid_wrath_mana" },
-      { id = "healing_touch", art = "Heilung", name_de = "Heilende Beruehrung", heal = "druid_touch_heal", cast = "druid_touch_cast", cost = "druid_touch_mana" },
+      { id = "rejuvenation", art = "Heilung ueber Zeit", name_de = "Verjuengung", heal = "druid_rejuv_total",
+        duration = "druid_rejuv_duration", cast = "druid_rejuv_cast", cost = "druid_rejuv_mana" },
       { id = "entangling_roots", art = "Kontrolle", name_de = "Gnarlwurzeln", duration = "druid_roots_duration",
         cd = "druid_roots_cd", cost = "druid_roots_mana", enabled = "druid_roots_enabled" },
     },

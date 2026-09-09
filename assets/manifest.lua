@@ -72,13 +72,14 @@ return {
   ab_roots      = { form = "quadrat", groesse = 40, farbe = { 0.40, 0.70, 0.30 }, kuerzel = "GW", datei = "ab_roots.png" },
   ab_sinister   = { form = "quadrat", groesse = 40, farbe = { 0.85, 0.80, 0.35 }, kuerzel = "FS", datei = "ab_sinister.png" },
   ab_evis       = { form = "quadrat", groesse = 40, farbe = { 0.80, 0.30, 0.30 }, kuerzel = "AW", datei = "ab_evis.png" },
-  ab_stealth    = { form = "quadrat", groesse = 40, farbe = { 0.45, 0.45, 0.60 }, kuerzel = "VS", datei = "ab_stealth.png" },
+  ab_nova       = { form = "quadrat", groesse = 40, farbe = { 0.65, 0.85, 1.00 }, kuerzel = "FN", datei = "ab_nova.png" },
+  ab_drain      = { form = "quadrat", groesse = 40, farbe = { 0.45, 0.65, 0.35 }, kuerzel = "LE", datei = "ab_drain.png" },
+  ab_rejuv      = { form = "quadrat", groesse = 40, farbe = { 0.55, 0.90, 0.55 }, kuerzel = "VJ", datei = "ab_rejuv.png" },
   ab_fireball   = { form = "quadrat", groesse = 40, farbe = { 0.95, 0.45, 0.20 }, kuerzel = "FB", datei = "ab_fireball.png" },
   ab_frostarmor = { form = "quadrat", groesse = 40, farbe = { 0.55, 0.75, 0.95 }, kuerzel = "FR", datei = "ab_frostarmor.png" },
   ab_bolt       = { form = "quadrat", groesse = 40, farbe = { 0.55, 0.40, 0.75 }, kuerzel = "SB", datei = "ab_bolt.png" },
   ab_imp        = { form = "quadrat", groesse = 40, farbe = { 0.75, 0.35, 0.85 }, kuerzel = "WI", datei = "ab_imp.png" },
   ab_wrath      = { form = "quadrat", groesse = 40, farbe = { 0.95, 0.60, 0.25 }, kuerzel = "ZO", datei = "ab_wrath.png" },
-  ab_touch      = { form = "quadrat", groesse = 40, farbe = { 0.45, 0.85, 0.45 }, kuerzel = "HB", datei = "ab_touch.png" },
   -- Standard-Aktion Nahkampf, jede Klasse (Runde 5, Issue #86)
 
   -- =========================================================================

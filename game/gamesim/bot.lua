@@ -44,7 +44,7 @@ M.DECIDE_EVERY = 3
 M.SKIP = {}
 M.SKIP_KEYS = { "shout", "taunt", "seal", "loh", "raptor", "feign", "evis",
                 "pws", "frostarmor", "imp", "roots", "kick", "reserve",
-                "needclass", "npc", "dodge" }
+                "needclass", "npc", "dodge", "nova", "drain" }
 
 local HEALER = { paladin = true, priest = true, druid = true }
 local CASTER = { priest = true, mage = true, warlock = true, druid = true }
@@ -64,9 +64,12 @@ end
 -- die Wahl deterministisch
 function M.heal_target(state, p, frac)
   frac = frac or 0.8
+  -- Druide (Runde 22): wer schon eine Verjuengung traegt, braucht keine zweite
+  local skip_hot = p.class == "druid"
   local best, best_frac
   for _, q in ipairs(state.players) do
     if q.alive and (q.max_hp or 0) > 0 and q.hp <= frac * q.max_hp
+       and not (skip_hot and q.hot)
        and world.dist(p.x, p.y, q.x, q.y) <= model.p("heal_range") then
       local f = q.hp / q.max_hp
       if best == nil or f < best_frac then best, best_frac = q, f end
@@ -521,11 +524,28 @@ local function decide_typisch(state, p, brain)
         mask = mask + input.AB3
       elseif on_tick then mask = mask + input.AB1 end
     elseif cls == "mage" then
-      if not p.frost_armor and half_tick and not SKIP.frostarmor then mask = mask + input.AB2
+      -- Frostnova (Runde 22), wenn mindestens zwei Welpen/Mobs im Umkreis
+      -- stehen; sonst Frostruestung pflegen, sonst Feuerball
+      local nahe = 0
+      if state.npcs and (p.nova_cd or 0) <= 0 and not SKIP.nova then
+        for id = world.NPC_ID_BASE, 250 do
+          local npc = state.npcs[id]
+          if npc and npc.kind ~= "imp" and (npc.hp or 1) > 0
+             and world.dist(p.x, p.y, npc.x, npc.y) <= model.p("mage_nova_radius") then
+            nahe = nahe + 1
+          end
+        end
+      end
+      if nahe >= 2 and half_tick then mask = mask + input.AB3
+      elseif not p.frost_armor and half_tick and not SKIP.frostarmor then mask = mask + input.AB2
       elseif on_tick then mask = mask + input.AB1 end
     elseif cls == "warlock" then
       local has_imp = p.imp_id and state.npcs and state.npcs[p.imp_id] ~= nil
-      if not has_imp and half_tick and not SKIP.imp then mask = mask + input.AB2
+      -- Lebensentzug (Runde 22), wenn es eng wird und Hogger in Reichweite steht
+      if p.hp < 0.5 * p.max_hp and (p.drain_cd or 0) <= 0 and not SKIP.drain
+         and target_id == world.HOGGER_ID and half_tick then
+        mask = mask + input.AB3
+      elseif not has_imp and half_tick and not SKIP.imp then mask = mask + input.AB2
       elseif on_tick then mask = mask + input.AB1 end
     elseif cls == "druid" then
       -- Wurzeln auf den Mob, der mich angreift; sonst Zorn
