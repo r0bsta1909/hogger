@@ -77,32 +77,77 @@ do
     "layout: Healbar row_h uebernommen")
 end
 
--- Dock-Variante: tangential an 10-/2-Uhr, Ableitungen wandern mit -----------
+-- Rand-Saeulen (Runde 21, Robs Skizze): reicht der Rand, stehen die Tafeln
+-- NEBEN dem Kreis, und der ganze Stapel darunter laeuft am Kreis vorbei ---
 do
   local L = render.layout(1280, 800, true)
-  T.eq(L.frames.unit.x, 106, "layout dock: Einheitenfenster x")
-  T.eq(L.frames.unit.y, 163, "layout dock: Einheitenfenster y")
-  T.eq(L.frames.target.x, 959, "layout dock: Zielfenster x")
-  T.eq(L.frames.target.y, 163, "layout dock: Zielfenster y")
-  T.eq(L.frames.healbar.x, 106, "layout dock: Heil-Leiste folgt dem Fenster")
-  T.eq(L.frames.healbar.y, 163 + 132, "layout dock: Heil-Leiste y-Offset (M13)")
-  T.eq(L.frames.buffs_self.x, 106, "layout dock: eigene Auren folgen")
-  T.eq(L.frames.buffs_self.y, 163 + 60, "layout dock: eigene Auren y-Offset")
-  T.eq(L.frames.money.y, 163 + 94, "layout dock: Kupferzeile y-Offset (M13)")
-  T.eq(L.frames.buffs.x, 959, "layout dock: Buffs folgen dem Zielfenster")
-  T.eq(L.frames.buffs.y, 163 + 86, "layout dock: Buffs y-Offset")
-  T.eq(L.frames.money.x, 106 + 2, "layout dock: Kupferzeile folgt")
-  -- Combopunkt-Leiste im Standard-HUD: ueber der Tafel, mit Luft zum Rand
-  T.eq(L.frames.cp.x, 106 + 52, "layout dock: CP-Leiste folgt der Tafel")
-  T.eq(L.frames.cp.y, 163 - render.CP_STRIP_H, "layout dock: CP-Leiste sitzt darueber")
+  T.ok(L.saeulen, "layout saeulen: bei 1280x800 reicht der Rand")
+  T.eq(L.frames.unit.x, 262 - 12 - 214, "layout saeulen: Einheitenfenster links neben dem Kreis")
+  T.eq(L.frames.target.x, 1018 + 12, "layout saeulen: Zielfenster rechts neben dem Kreis")
+  T.eq(L.frames.unit.y, 22 + 26, "layout saeulen: Tafeln oben, unter der Ringoberkante")
+  T.eq(L.frames.target.y, L.frames.unit.y, "layout saeulen: beide Tafeln auf einer Hoehe")
+  -- nichts liegt im Kreis: die linke Spalte endet vor dem linken Kreisrand,
+  -- die rechte beginnt hinter dem rechten
+  T.ok(L.frames.unit.x + render.FRAME_W <= L.ox - L.radius,
+    "layout saeulen: linke Spalte komplett ausserhalb des Kreises")
+  T.ok(L.frames.healbar.x + L.frames.healbar.w <= L.ox - L.radius,
+    "layout saeulen: Heil-Leiste ausserhalb des Kreises")
+  T.ok(L.frames.target.x >= L.ox + L.radius,
+    "layout saeulen: rechte Spalte komplett ausserhalb des Kreises")
+  T.ok(L.frames.target.x + render.FRAME_W <= 1280,
+    "layout saeulen: Zielfenster im Bild")
+  T.ok(L.frames.unit.x >= 0, "layout saeulen: Einheitenfenster im Bild")
+  -- Ableitungen wandern mit
+  T.eq(L.frames.healbar.x, L.frames.unit.x, "layout saeulen: Heil-Leiste folgt dem Fenster")
+  T.eq(L.frames.healbar.y, L.frames.unit.y + 132, "layout saeulen: Heil-Leiste y-Offset (M13)")
+  T.eq(L.frames.buffs_self.y, L.frames.unit.y + 60, "layout saeulen: eigene Auren y-Offset")
+  T.eq(L.frames.money.y, L.frames.unit.y + 94, "layout saeulen: Kupferzeile y-Offset (M13)")
+  T.eq(L.frames.buffs.x, L.frames.target.x, "layout saeulen: Buffs folgen dem Zielfenster")
+  T.eq(L.frames.buffs.y, L.frames.target.y + 86, "layout saeulen: Buffs y-Offset")
+  T.eq(L.frames.tot.y, L.frames.target.y + 60, "layout saeulen: Ziel des Ziels y-Offset")
+  T.eq(L.frames.cp.x, L.frames.unit.x + 52, "layout saeulen: CP-Leiste folgt der Tafel")
+  T.eq(L.frames.cp.y, L.frames.unit.y - render.CP_STRIP_H, "layout saeulen: CP-Leiste sitzt darueber")
   T.ok(L.frames.cp.y + render.CP_STRIP_H <= L.frames.unit.y,
-    "layout dock: die Leiste ueberlappt das Einheitenfenster nicht")
+    "layout saeulen: die Leiste ueberlappt das Einheitenfenster nicht")
   T.eq(render.CP_MAX, require("sim.model").CP_MAX,
     "layout: die Anzeige kennt genauso viele Combopunkte wie die Simulation")
   -- Ring-Moeblierung ist von docked unabhaengig
   local U = render.layout(1280, 800, false)
-  T.eq(L.radius, U.radius, "layout dock: radius unveraendert")
-  T.eq(L.clock.cy, U.clock.cy, "layout dock: Uhr unveraendert")
+  T.eq(L.radius, U.radius, "layout saeulen: radius unveraendert")
+  T.eq(L.clock.cy, U.clock.cy, "layout saeulen: Uhr unveraendert")
+  -- 1920x1080 ebenso
+  local G = render.layout(1920, 1080, true)
+  T.ok(G.saeulen and G.frames.target.x >= G.ox + G.radius
+       and G.frames.unit.x + render.FRAME_W <= G.ox - G.radius,
+    "layout saeulen: 1920x1080 beide Spalten ausserhalb")
+end
+
+-- Dock-Variante (tangential an 10-/2-Uhr) bleibt der Rueckfall, wenn der
+-- Rand nicht reicht (4:3-Fenster) ----------------------------------------
+do
+  local L = render.layout(1024, 768, true)
+  T.ok(not L.saeulen, "layout dock: bei 1024x768 reicht der Rand nicht")
+  local radius = 768 / 2 - 22
+  local p2x = 512 + radius * 0.866
+  T.eq(L.frames.target.x, math.min(1024 - 226, math.floor(p2x - 8)),
+    "layout dock: Zielfenster tangential an 2 Uhr")
+  T.eq(L.frames.unit.y, math.max(10, math.floor(384 - radius * 0.5 - 56 + 8)),
+    "layout dock: Einheitenfenster tangential an 10 Uhr")
+  T.eq(L.frames.healbar.y, L.frames.unit.y + 132, "layout dock: Heil-Leiste y-Offset (M13)")
+end
+
+-- Icon-Balken (Runde 21): am Icon-Rand, skaliert mit dem Zoom -----------------
+do
+  local dy1, hw1, hh1 = render.bar_geom(16 * 1.8 * 1.43, 1.43) -- Zoom 1
+  local dy3, hw3, hh3 = render.bar_geom(16 * 1.8 * 0.71, 0.71) -- Zoom 3
+  T.ok(dy1 > 16 * 1.8 * 1.43, "bar: der Balken haengt UNTER dem Icon-Rand (Zoom 1)")
+  T.ok(dy3 > 16 * 1.8 * 0.71, "bar: der Balken haengt UNTER dem Icon-Rand (Zoom 3)")
+  T.ok(hw1 > hw3, "bar: auf Zoom 1 breiter als auf Zoom 3")
+  T.ok(hw1 * 2 <= 16 * 1.8 * 1.43 * 2, "bar: nie breiter als das Icon")
+  T.ok(hh1 >= 3 and hh1 <= 6 and hh3 >= 3 and hh3 <= 6, "bar: Hoehe 3-6 px")
+  T.ok(hh1 > hh3, "bar: auf Zoom 1 hoeher als auf Zoom 3")
+  local dyh, hwh = render.bar_geom(48 * 0.95, 0.95)
+  T.ok(dyh > 48 * 0.95 and hwh > hw1 * 0.5, "bar: Hoggers Balken unter seinem Ring, breiter als ein Spieler-Balken")
 end
 
 -- Klemmung bei schmalen Fenstern --------------------------------------------
