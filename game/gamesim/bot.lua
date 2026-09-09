@@ -44,7 +44,7 @@ M.DECIDE_EVERY = 3
 M.SKIP = {}
 M.SKIP_KEYS = { "shout", "taunt", "seal", "loh", "raptor", "feign", "evis",
                 "pws", "frostarmor", "imp", "roots", "kick", "reserve",
-                "needclass", "npc", "dodge", "nova", "drain" }
+                "needclass", "npc", "dodge", "nova", "drain", "shockdodge" }
 
 local HEALER = { paladin = true, priest = true, druid = true }
 local CASTER = { priest = true, mage = true, warlock = true, druid = true }
@@ -399,6 +399,26 @@ local function decide_typisch(state, p, brain)
     end
   else
     brain.charge_seen_t = nil
+  end
+
+  -- Rundumschlag-Ausweiche (Runde 22): pulsiert der rote Ring und stehe ich
+  -- drin, trete ich nach meiner Charge-Reaktion radial heraus — dieselbe
+  -- Reaktionszeit wie bei der Charge, dieselbe Haelfte schafft es.
+  local shock = state.hogger.shock
+  if shock and not M.SKIP.shockdodge and not turtle then
+    local dh = world.dist(p.x, p.y, h.x, h.y)
+    if dh <= model.p("hogger_shock_radius") + 6 then
+      brain.shock_seen_t = brain.shock_seen_t or now
+      if now - brain.shock_seen_t >= brain.charge_react then
+        local dx, dy = p.x - h.x, p.y - h.y
+        local len = math.max(1, math.sqrt(dx * dx + dy * dy))
+        local tx, ty = p.x + dx / len * 60, p.y + dy / len * 60
+        return { mask = move_mask_towards(p.x, p.y, tx, ty, 4),
+                 facing = input.facing_towards(p.x, p.y, h.x, h.y) }
+      end
+    end
+  else
+    brain.shock_seen_t = nil
   end
   local cls = p.class
   local duty = M.healer_duty(p)

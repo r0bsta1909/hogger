@@ -1637,6 +1637,19 @@ function R:draw(view, ui)
   -- Spielern, damit sie im Klumpen sichtbar bleiben (GDD 4.1)
   do
     local x, y = to_screen(hg.x, hg.y)
+    -- Rundumschlag-Telegraph (Runde 22): roter Ring im Schlagradius, der
+    -- mit dem Anlauf dichter wird — aus dem Ring treten heisst ausweichen
+    if hg.shock then
+      local r0 = model.p("hogger_shock_radius") * scale
+      local k = hg.shock
+      love.graphics.setColor(1, 0.25, 0.15, 0.12 + 0.25 * k)
+      love.graphics.circle("fill", x, y, r0)
+      local blink = (math.floor(love.timer.getTime() * 10) % 2 == 0) and 0.95 or 0.5
+      love.graphics.setColor(1, 0.3, 0.2, blink)
+      love.graphics.setLineWidth(3 + 3 * k)
+      love.graphics.circle("line", x, y, r0)
+      love.graphics.setLineWidth(1)
+    end
     -- Charge-Telegraph: blinkende Ziellinie (GDD 9.2)
     if hg.charge and view.players[hg.charge.target] then
       local t = view.players[hg.charge.target]

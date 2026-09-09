@@ -149,6 +149,7 @@ function T.run()
         render:add_hit_flash(st2.hogger.x, st2.hogger.y, { 1, 1, 1 }, true)
         -- Runde 22: Nova-Ring und Lebensentzug-Strahl
         render:add_nova_fx(me.x, me.y, model.p("mage_nova_radius"))
+        view.hogger.shock = 0.6 -- Rundumschlag-Telegraph (Runde 22)
         for _, q in pairs(view.players) do
           if q.class == "warlock" then q.cast_slot = render.DRAIN_SLOT; q.target = world.HOGGER_ID end
         end

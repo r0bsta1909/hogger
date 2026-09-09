@@ -55,14 +55,14 @@ M.params = {
   -- Sockel — der alte Sockel machte N=5 zum Zwerg-Kampf.
   -- Runde 22 Nachlese: quad 6 -> 5, slope 640 -> 630, Sockel 150 -> 100, add_dmg
   -- 10 -> 8 — der Welpen-Nachschub um Hogger drueckte N=10-40 auf 50-60 %
-  hogger_hp_quad         = p(5.0, 0, 20, 0.5, "9.3"),
+  hogger_hp_quad         = p(6.0, 0, 20, 0.5, "9.3"),  -- Rundumschlag: 5 -> 6 (N=40 lag bei 92 %)
   -- slope 560 -> 620 in Runde 13 (#155-#159): die fuenf neuen Klassen-
   -- Faehigkeiten (Handauflegung, Schild, Totstellen, Wurzeln, Blutpakt)
   -- hoben koordinierte Siege auf 98/95/87 % — der Aufschlag holt F1
   -- zurueck ins Band (Grid + Endsweep in GDD 17.9)
   -- Runde 17: 620 -> 640, Ausgleich fuer die auf 16 min verlaengerte Frist
   -- (mehr Zeit = mehr Siege; der Hebel fuer F1 ist laut GDD 13.3 die HP-Kurve)
-  hogger_hp_slope        = p(630, 100, 800, 10, "9.3"),
+  hogger_hp_slope        = p(600, 100, 800, 10, "9.3"),  -- Runde 22 Rundumschlag: 630 -> 600
   -- Historie: Offset 950 -> 850 in Runde 5 (#86, Zauberstab-Aus); Runde 6
   -- (#96) fixer Respawn -> quad-Term neu, slope/offset nachkalibriert.
   -- F1-F6-Belege: Sweeps in GDD 17.9.
@@ -109,6 +109,15 @@ M.params = {
   -- so viele px seitlich neben der Anlaufgeraden steht, wird verfehlt.
   -- 0 = die Charge trifft immer (Stand bis Runde 20).
   hogger_charge_dodge_px = p(40, 0, 150, 5, "9.2"),
+  -- Rundumschlag (Runde 22, Rob: "wenig Bewegung"): alle hogger_shock_cd s
+  -- ein telegrafierter Stoss, der alle im Umkreis zurueckwirft, danach
+  -- sofort die Charge. 0 = aus. Alles einstellbar.
+  hogger_shock_cd        = p(30, 0, 120, 5, "9.2"),
+  hogger_shock_windup    = p(0.8, 0.2, 2.0, 0.1, "9.2"),
+  hogger_shock_radius    = p(80, 40, 200, 10, "9.2"),
+  hogger_shock_knockback = p(150, 0, 300, 10, "9.2"),
+  hogger_shock_dmg       = p(0, 0, 40, 1, "9.2"),  -- Rob: Bewegung, kein Schaden (F7 bei N=5)
+  hogger_shock_charge    = p(1, 0, 1, 1, "9.2"),
 
   -- Fressen (GDD 9.2)
   eat_cd                 = p(20, 5, 60, 1, "9.2"),
@@ -617,6 +626,7 @@ end
 local CRIT_ALLOWED = {
   autohit = true, ability = true, heal = true, mob = true,
   charge = false, slice = false, dot = false, eat_heal = false, add = false,
+  shock = false, -- Rundumschlag (Runde 22): Choreo bleibt deterministisch
 }
 
 function M.can_crit(kind)
