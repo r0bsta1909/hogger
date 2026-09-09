@@ -91,18 +91,9 @@ do
   T.eq(rogue.resource, model.p("energy_max"), "step: Schurke startet mit voller Energie")
   T.ok(model.classes.warlock.races[1] ~= nil and lock.race ~= nil,
     "step: Hexer-Rasse gewuerfelt")
-  -- Verstohlenheit: Slot 3 druecken -> an, nochmal -> aus (GDD 8.2)
-  step.step(st, { [1] = { mask = input_mod.AB3 } })
-  step.step(st, { [1] = { mask = 0 } })
-  T.ok(rogue.stealth, "step: Verstohlenheit an")
-  T.ok(not st.hogger.threat[1] or st.hogger.threat[1] == 0,
-    "step: Hogger ignoriert Verstohlene")
-  for _ = 1, math.ceil(model.p("gcd") / model.TICK_DT) + 1 do
-    step.step(st, {})
-  end
-  step.step(st, { [1] = { mask = input_mod.AB3 } })
-  step.step(st, { [1] = { mask = 0 } })
-  T.ok(not rogue.stealth, "step: Verstohlenheit wieder aus")
+  -- Runde 22: Slot 3 des Schurken ist der Tritt (Verstohlenheit weg)
+  T.eq(step.KICK_SLOT, 3, "step: der Tritt sitzt auf Slot 3")
+  T.ok(not rogue.stealth, "step: keine Verstohlenheit mehr")
   -- Wichtel beschwoeren: Slot 2 (3-s-Cast, GDD 8.2)
   step.step(st, { [2] = { mask = input_mod.AB2 } })
   T.ok(lock.cast ~= nil, "step: Wichtel-Beschwoerung castet")
@@ -703,7 +694,8 @@ do
   r.max_hp, r.hp = model.hp_for_class("warrior"), 1
   r.shout_until = st3.time + 30
   r.bleed_t, r.bleed_next = 6, 1
-  r.stealth, r.frost_armor, r.seal_hits, r.cp = true, true, 3, 4
+  r.frost_armor, r.seal_hits, r.cp = true, 3, 4
+  r.hot = { src = r.id, left = 10, next = 1, per = 5 }
   r.x, r.y = map.hill.x, map.hill.y
   local guard = 0
   while r.alive and guard < 60 * 60 do
@@ -713,7 +705,7 @@ do
   T.ok(not r.alive, "Tod: gefallen")
   T.ok(r.shout_until <= st3.time, "Tod: Schlachtruf ist weg")
   T.eq(r.bleed_t, 0, "Tod: Blutung ist weg")
-  T.eq(r.stealth, false, "Tod: Verstohlenheit ist weg")
+  T.eq(r.hot, nil, "Tod: Verjuengung ist weg (Runde 22)")
   T.eq(r.frost_armor, false, "Tod: Frostruestung ist weg")
   T.eq(r.seal_hits, 0, "Tod: Siegel-Ladungen sind weg")
   T.eq(r.cp, 0, "Tod: Combopunkte sind weg")
@@ -1062,7 +1054,9 @@ do
   -- als die GCD, sonst waere das ein GCD-Bypass.
   for cl, spec in pairs(step.ABILITIES) do
     for slot, ab in pairs(spec) do
-      if ab.cast then
+      -- Runde 22: die Verjuengung castet KUERZER als die GCD (Rob: sehr
+      -- kurze Castzeit); main.lua rechnet dann die Rest-GCD in die Anzeige
+      if ab.cast and not ab.channel and ab.id ~= "rejuv" then
         T.ok(model.p(ab.cast) >= model.p("gcd"),
           "cast: Castzeit >= GCD (" .. cl .. ", Slot " .. slot .. ")")
       end
@@ -1729,70 +1723,6 @@ do
   model.params.hunter_feign_enabled.wert = 1
 end
 
--- Runde 14 (#169): Verstohlenheit nur ausserhalb des Kampfes -------------
-do
-  local st = world.new(61)
-  world.add_player(st, "sc", { quest_done = true })
-  world.begin_try(st, {})
-  local sc = st.players[1]
-  sc.alive, sc.ghost, sc.class, sc.race = true, false, "rogue", "mensch"
-  sc.max_hp, sc.hp = model.hp_for_class("rogue"), model.hp_for_class("rogue")
-  sc.resource = 100
-  sc.x, sc.y = st.hogger.x + 400, st.hogger.y
-
-  -- ausserhalb des Kampfes: geht
-  T.ok(not step.in_combat(st, sc), "stealth: ausser Kampf")
-  step.step(st, { [1] = { mask = input.AB3 } })
-  step.step(st, { [1] = { mask = 0 } })
-  T.ok(sc.stealth, "stealth: ausserhalb des Kampfes schaltet sie an")
-
-  -- Ausschalten geht auch im Kampf (sonst klebte man in der Tarnung fest)
-  st.hogger.threat[1] = 10
-  T.ok(step.in_combat(st, sc), "stealth: Bedrohung bei Hogger heisst Kampf")
-  for _ = 1, math.ceil(model.p("gcd") / model.TICK_DT) + 1 do step.step(st, {}) end
-  step.step(st, { [1] = { mask = input.AB3 } })
-  step.step(st, { [1] = { mask = 0 } })
-  T.ok(not sc.stealth, "stealth: ausschalten geht auch im Kampf")
-
-  -- ... anschalten im Kampf aber nicht, und der GCD bleibt unangetastet
-  for _ = 1, math.ceil(model.p("gcd") / model.TICK_DT) + 1 do step.step(st, {}) end
-  sc.gcd = 0
-  step.step(st, { [1] = { mask = input.AB3 } })
-  T.ok(not sc.stealth, "stealth: im Kampf laesst sie sich nicht anschalten")
-  T.eq(sc.gcd, 0, "stealth: der abgelehnte Versuch verbrennt keinen GCD")
-
-  -- Aggro bleibt stehen (Rob-Entscheid): Verstohlenheit ist kein Verschwinden
-  st.hogger.threat[1] = 10
-  sc.x, sc.y = st.hogger.x + 400, st.hogger.y
-  st.npcs = {}
-  st.npc_targets = nil
-  sc.gcd = 0
-  step.step(st, { [1] = { mask = input.AB3 } })
-  step.step(st, { [1] = { mask = 0 } })
-  T.eq(st.hogger.threat[1], 10,
-    "stealth: sie setzt die Bedrohung NICHT zurueck")
-
-  -- Ein Mob, der mich anvisiert, ist ebenfalls Kampf
-  st.hogger.threat[1] = nil
-  local wolf = world.add_npc(st, "wolf", sc.x + 500, sc.y, 10)
-  wolf.spawn_x, wolf.spawn_y = wolf.x, wolf.y
-  wolf.target_pid = 1
-  st.npc_targets = nil
-  T.ok(step.in_combat(st, sc), "stealth: ein Mob im Visier heisst Kampf")
-  wolf.target_pid = nil
-  st.npc_targets = nil
-  T.ok(not step.in_combat(st, sc), "stealth: laesst er ab, ist der Kampf vorbei")
-
-  -- F10-Schalter
-  sc.stealth = false
-  sc.gcd = 0
-  model.params.rogue_stealth_enabled.wert = 0
-  step.step(st, { [1] = { mask = input.AB3 } })
-  step.step(st, { [1] = { mask = 0 } })
-  T.ok(not sc.stealth, "stealth: per F10 abgeschaltet -> verworfen")
-  model.params.rogue_stealth_enabled.wert = 1
-end
-
 -- Runde 14 (#168): Totstellen war loechrig — vier Wege zurueck zum Angriff
 do
   local st = world.new(48)
@@ -2349,4 +2279,179 @@ do
   local said2
   for _, e in ipairs(ev2) do if e.ev == "leeroy_line" then said2 = e.dst end end
   T.eq(said2, nil, "echo: getroffene Charge -> keine Zeile")
+end
+
+-- Runde 22: die neuen Kits ---------------------------------------------------
+do
+  local function kit_world(class, seed)
+    local st = world.new(seed or 22)
+    world.add_player(st, "a", { quest_done = true })
+    world.add_player(st, "b", { quest_done = true })
+    world.begin_try(st, {})
+    local h = st.hogger
+    h.state, h.engaged = "combat", true
+    for _, p in ipairs(st.players) do
+      p.alive, p.ghost, p.class = true, false, class
+      p.max_hp = model.hp_for_class(class); p.hp = p.max_hp
+      p.resource = 100
+      p.x, p.y = h.x + 150, h.y
+      p.facing = input.facing_towards(p.x, p.y, h.x, h.y)
+      p.target = world.HOGGER_ID
+    end
+    -- Spieler 2 ist der unsterbliche Tank im Nahkampf: Hogger bleibt bei
+    -- ihm, der geprueften Klasse (Spieler 1) passiert nichts
+    local tank = st.players[2]
+    tank.max_hp, tank.hp = 100000, 100000
+    tank.x, tank.y = h.x + 20, h.y
+    h.threat[tank.id] = 1000
+    return st, h, st.players[1], st.players[2]
+  end
+  local function ticks(sec) return math.ceil(sec / model.TICK_DT) end
+  local function own_hits(evs, pid)
+    local n = 0
+    for _, e in ipairs(evs) do
+      if e.ev == "damage" and e.src == pid and e.art == "ability" then n = n + 1 end
+    end
+    return n
+  end
+
+  -- Verjuengung: kurzer Cast, dann Heilticks, erneuern stapelt nicht
+  local st, h, dr, other = kit_world("druid")
+  other.hp = 5000 -- der Tank steckt Hoggers Schlaege weg, die Ticks bleiben messbar
+  dr.target = other.id
+  step.step(st, { [dr.id] = { mask = input.AB2, facing = dr.facing } })
+  T.ok(dr.cast ~= nil, "rejuv: castet")
+  T.near(dr.cast.total, model.p("druid_rejuv_cast"), "rejuv: Castzeit aus dem Modell")
+  for _ = 1, ticks(model.p("druid_rejuv_cast")) + 1 do step.step(st, {}) end
+  T.ok(other.hot ~= nil, "rejuv: das Ziel traegt die Verjuengung")
+  T.near(dr.resource, 100 - model.p("druid_rejuv_mana"), "rejuv: Mana beim Abschluss")
+  local per = model.p("druid_rejuv_total") / (model.p("druid_rejuv_duration") / model.p("druid_rejuv_tick"))
+  local healed = 0
+  for _ = 1, ticks(model.p("druid_rejuv_tick")) + 1 do
+    for _, e in ipairs(step.step(st, {})) do
+      if e.ev == "heal" and e.src == dr.id and e.dst == other.id then healed = healed + e.val end
+    end
+  end
+  T.ok(healed >= per - 0.01 and healed <= per * 2 + 0.01, "rejuv: ein Tick heilt " .. per .. " (" .. healed .. ")")
+  T.ok((h.threat[dr.id] or 0) > 0, "rejuv: Heilung zieht Bedrohung fuer den Druiden")
+  local left0 = other.hot.left
+  for _ = 1, ticks(model.p("gcd")) + 1 do step.step(st, {}) end
+  step.step(st, { [dr.id] = { mask = input.AB2, facing = dr.facing } })
+  for _ = 1, ticks(model.p("druid_rejuv_cast")) + 1 do step.step(st, {}) end
+  T.ok(other.hot.left > left0 - 1 and other.hot.left <= model.p("druid_rejuv_duration"),
+    "rejuv: erneuern setzt die Dauer zurueck, stapelt nicht")
+  for _ = 1, ticks(model.p("druid_rejuv_duration")) + 2 do step.step(st, {}) end
+  T.eq(other.hot, nil, "rejuv: laeuft aus")
+  T.ok(other.hp <= other.max_hp, "rejuv: nie ueber Maximal-HP")
+
+  -- Frostnova: Welpen im Umkreis stehen, Schaden bricht das nicht, Hogger nicht
+  local st2, h2, mg = kit_world("mage", 23)
+  local add = world.add_npc(st2, "add", mg.x + 40, mg.y, model.p("add_hp"))
+  add.state, add.spawn_x, add.spawn_y = "combat", add.x, add.y
+  add.target_pid = mg.id
+  local far = world.add_npc(st2, "add", mg.x + model.p("mage_nova_radius") + 50, mg.y, model.p("add_hp"))
+  far.state, far.spawn_x, far.spawn_y = "idle", far.x, far.y
+  local evs = step.step(st2, { [mg.id] = { mask = input.AB3, facing = mg.facing } })
+  T.ok(add.rooted_until > st2.time, "nova: der nahe Welpe steht")
+  T.ok((far.rooted_until or 0) <= st2.time, "nova: der ferne nicht")
+  T.ok(h2.rooted_until == nil, "nova: Hogger ist immun")
+  T.near(mg.nova_cd, model.p("mage_nova_cd"), "nova: Cooldown gesetzt")
+  local rooted_ev = 0
+  for _, e in ipairs(evs) do if e.ev == "root" then rooted_ev = rooted_ev + 1 end end
+  T.eq(rooted_ev, 1, "nova: ein root-Ereignis je gewurzeltem Welpen")
+  local ax = add.x
+  for _ = 1, 30 do step.step(st2, {}) end
+  T.near(add.x, ax, "nova: der gewurzelte Welpe bewegt sich nicht")
+  -- Schaden bricht die Nova nicht
+  mg.target = add.id
+  mg.attack_on = true
+  mg.x, mg.y = add.x - 30, add.y
+  mg.facing = input.facing_towards(mg.x, mg.y, add.x, add.y)
+  for _ = 1, ticks(2.5) do step.step(st2, { [mg.id] = { mask = 0, facing = mg.facing } }) end
+  T.ok(add.hp < model.p("add_hp"), "nova: der Magier hat den Welpen getroffen")
+  T.ok(add.rooted_until > st2.time, "nova: Schaden bricht die Frostnova NICHT")
+
+  -- Lebensentzug: Kosten beim Beginn, je Sekunde Schaden und Selbstheilung
+  local st3, h3, wl = kit_world("warlock", 24)
+  wl.hp = 20
+  local hh0, mana0 = h3.hp, wl.resource
+  step.step(st3, { [wl.id] = { mask = input.AB3, facing = wl.facing } })
+  T.ok(wl.cast ~= nil and wl.cast.next_tick ~= nil, "drain: Kanal laeuft")
+  T.near(wl.resource, mana0 - model.p("warlock_drain_mana"), "drain: Mana beim Beginn")
+  T.near(wl.drain_cd, model.p("warlock_drain_cd"), "drain: Cooldown beim Beginn")
+  for _ = 1, ticks(1.05) do step.step(st3, {}) end
+  T.ok(h3.hp < hh0, "drain: nach einer Sekunde Schaden an Hogger")
+  T.ok(wl.hp > 20, "drain: ... und Heilung am Hexer")
+  for _ = 1, ticks(model.p("warlock_drain_cast")) do step.step(st3, {}) end
+  T.eq(wl.cast, nil, "drain: Kanal endet")
+  local dps = model.p("warlock_drain_dps")
+  T.ok(hh0 - h3.hp >= dps * model.p("warlock_drain_cast") * 0.99 - 0.01,
+    "drain: ein Tick je volle Sekunde (" .. (hh0 - h3.hp) .. ")")
+  -- Bewegung bricht ab, keine weiteren Ticks
+  local st4, h4, wl2 = kit_world("warlock", 25)
+  step.step(st4, { [wl2.id] = { mask = input.AB3, facing = wl2.facing } })
+  step.step(st4, { [wl2.id] = { mask = input.LEFT, facing = wl2.facing } })
+  T.eq(wl2.cast, nil, "drain: Bewegung bricht den Kanal")
+  local hits = 0
+  for _ = 1, ticks(2) do hits = hits + own_hits(step.step(st4, {}), wl2.id) end
+  T.eq(hits, 0, "drain: nach dem Abbruch keine Ticks mehr")
+
+  -- Frostruestung: 6 s, 40 %
+  local st5, h5, m5 = kit_world("mage", 26)
+  m5.frost_armor = true
+  m5.x, m5.y = h5.x + 10, h5.y
+  m5.max_hp, m5.hp = 100000, 100000
+  h5.threat[m5.id] = 5000 -- ueber der Schwelle gegen den Tank
+  for _ = 1, ticks(3) do step.step(st5, {}) end
+  T.ok(h5.slow_until - st5.time > 4, "frost: der Slow haelt laenger als 4 s (Runde 22: 6 s)")
+
+  -- Tritt per Taste 3 (Masken-Bit) und Slot 3
+  local st6, h6, r6 = kit_world("rogue", 27)
+  r6.x, r6.y = h6.x + 20, h6.y
+  r6.facing = input.facing_towards(r6.x, r6.y, h6.x, h6.y)
+  h6.eating = { phase = "channel", t_left = 8, corpse = 1, heal_tick = 0 }
+  step.step(st6, { [r6.id] = { mask = input.AB3, facing = r6.facing } })
+  T.eq(h6.eating, nil, "kick: Taste 3 tritt (Runde 22)")
+  T.eq(step.KICK_SLOT, 3, "kick: Slot 3")
+
+  -- Welpen-Nachschub: nach add_respawn kommen neue, gedeckelt
+  local function adds_alive(stx)
+    local n = 0
+    for id = world.NPC_ID_BASE, 250 do
+      local npc = stx.npcs[id]
+      if npc and npc.kind == "add" then n = n + 1 end
+    end
+    return n
+  end
+  local st7 = world.new(28)
+  for i = 1, 8 do world.add_player(st7, "p" .. i, { quest_done = true }) end
+  world.begin_try(st7, {})
+  local h7 = st7.hogger
+  h7.state, h7.engaged = "combat", true
+  local t7 = st7.players[1]
+  t7.alive, t7.ghost, t7.class = true, false, "warrior"
+  t7.max_hp, t7.hp = 100000, 100000
+  t7.x, t7.y = h7.x + 20, h7.y
+  h7.threat[t7.id] = 1000
+  local base = model.adds(st7.n_scale)
+  T.ok(base >= 1, "nachschub: bei N=8 gibt es Welpen")
+  T.eq(adds_alive(st7), base, "nachschub: Start mit floor(N/8)")
+  for _ = 1, ticks(model.p("add_respawn") + 0.5) do step.step(st7, {}) end
+  T.eq(adds_alive(st7), base * 2, "nachschub: nach add_respawn doppelt so viele")
+  for _ = 1, ticks(model.p("add_respawn") + 0.5) do step.step(st7, {}) end
+  T.eq(adds_alive(st7), base * model.p("add_cap_factor"), "nachschub: Deckel add_cap_factor x floor(N/8)")
+  local saved = model.params.add_respawn.wert
+  model.params.add_respawn.wert = 0
+  local st8 = world.new(29)
+  for i = 1, 8 do world.add_player(st8, "p" .. i, { quest_done = true }) end
+  world.begin_try(st8, {})
+  st8.hogger.state, st8.hogger.engaged = "combat", true
+  local t8 = st8.players[1]
+  t8.alive, t8.ghost, t8.class = true, false, "warrior"
+  t8.max_hp, t8.hp = 100000, 100000
+  t8.x, t8.y = st8.hogger.x + 20, st8.hogger.y
+  st8.hogger.threat[t8.id] = 1000
+  for _ = 1, ticks(70) do step.step(st8, {}) end
+  T.eq(adds_alive(st8), model.adds(st8.n_scale), "nachschub: add_respawn 0 = aus")
+  model.params.add_respawn.wert = saved
 end

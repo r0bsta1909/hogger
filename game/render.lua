@@ -20,10 +20,11 @@ for slot, class in ipairs(world.CLASSES) do
 end
 local ABILITY_ICON = {
   heroic = "ab_heroic", shout = "ab_shout", raptor = "ab_raptor",
-  sinister = "ab_sinister", evis = "ab_evis", stealth = "ab_stealth",
+  sinister = "ab_sinister", evis = "ab_evis",
   smite = "ab_smite", heal = "ab_heal", holylight = "ab_holylight",
   seal = "ab_seal", fireball = "ab_fireball", frostarmor = "ab_frostarmor",
-  bolt = "ab_bolt", imp = "ab_imp", wrath = "ab_wrath", touch = "ab_touch",
+  bolt = "ab_bolt", imp = "ab_imp", wrath = "ab_wrath",
+  nova = "ab_nova", drain = "ab_drain", rejuv = "ab_rejuv", -- Runde 22
   taunt = "ab_taunt", kick = "ab_kick", -- Spott/Tritt (Runde 12, #140/#141)
   loh = "ab_loh", -- Handauflegung (Runde 13, #155)
   pws = "ab_pws", -- Machtwort: Schild (Runde 13, #156)
@@ -108,12 +109,11 @@ local AURA = {
                string.format("um %d %% verlangsamt",
                  model.p("mage_frostarmor_slow") * 100) }
     end },
-  stealth = { kuerzel = "VS", name = "Verstohlenheit", debuff = false,
+  rejuv = { kuerzel = "VJ", name = "Verjuengung", debuff = false,
     text = function()
-      return { string.format("Unsichtbar, %d %% Tempo",
-                 model.p("rogue_stealth_speed") * 100),
-               "Hogger ignoriert dich",
-               "Bricht beim Angriff" }
+      return { string.format("Heilt %d ueber %d s",
+                 model.p("druid_rejuv_total"), model.p("druid_rejuv_duration")),
+               string.format("alle %g s ein Tick", model.p("druid_rejuv_tick")) }
     end },
   pws = { kuerzel = "MS", name = "Machtwort: Schild", debuff = false,
     text = function()
@@ -1176,7 +1176,7 @@ local function aura_list(p)
   if p.shout then auras[#auras + 1] = { AURA.shout, p.shout_rest } end
   if p.seal then auras[#auras + 1] = { AURA.seal } end
   if p.frost_armor then auras[#auras + 1] = { AURA.frost } end
-  if p.stealth then auras[#auras + 1] = { AURA.stealth } end
+  if p.hot then auras[#auras + 1] = { AURA.rejuv } end
   if p.feigning then auras[#auras + 1] = { AURA.feign } end
   if p.shielded then auras[#auras + 1] = { AURA.pws } end
   if p.pact then auras[#auras + 1] = { AURA.pact } end

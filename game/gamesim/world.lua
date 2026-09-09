@@ -323,6 +323,7 @@ function M.begin_try(state, evlist)
     npc.spawn_x, npc.spawn_y = pos.x, pos.y
   end
   state.adds_spawned = #addpos -- Basis fuer M.rescale (Runde 9, #118)
+  state.add_next_t = nil -- Welpen-Nachschub zaehlt ab dem Pull neu (Runde 22)
   -- Ambient-Mobs bestehen ueber Trys fort; fehlende Slots auffuellen
   M.ensure_mob_slots(state)
   if evlist then

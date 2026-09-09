@@ -384,7 +384,7 @@ function W.snapshot_body(state)
     if (p.bleed_t or 0) > 0 then flags = flags + PFLAG.bleeding end
     -- Buffs/Zustaende fuer die Buff-Leiste (GDD 4.3)
     local flags2 = 0
-    if p.stealth then flags2 = flags2 + 1 end
+    if p.hot then flags2 = flags2 + 1 end -- Runde 22: Bit 0 war die Verstohlenheit, jetzt Verjuengung
     if (p.shout_until or 0) > state.time then flags2 = flags2 + 2 end
     if (p.seal_hits or 0) > 0 then flags2 = flags2 + 4 end
     if p.frost_armor then flags2 = flags2 + 8 end
@@ -532,7 +532,8 @@ function W.read_snapshot(data, off)
       bleeding = flags % 128 >= 64, -- Hoggers Vicious Slice (GDD 9.2)
       class = CLASS_NAMES[cls],
       race = model.RACES[race],
-      stealth = flags2 % 2 >= 1,
+      hot = flags2 % 2 >= 1,   -- Verjuengung (Runde 22; vorher Verstohlenheit)
+      stealth = false,
       shout = flags2 % 4 >= 2,
       seal = flags2 % 8 >= 4,
       frost_armor = flags2 % 16 >= 8,
