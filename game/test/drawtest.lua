@@ -329,9 +329,16 @@ function T.run()
     render.docked = dock
     local frisch = baue_welt()
     local view = sicht(frisch, 4)
-    versuch("HUD " .. (dock and "angedockt" or "in den Ecken"), function()
+    versuch("HUD " .. (dock and "Rand-Saeulen/angedockt" or "in den Ecken"), function()
       render:draw(view, { facing_angle = 0, cooldowns = { 0, 0, 0, 0 },
                           mouse = { 40, 40 } })
+    end)
+    -- Zauber-Ring (Runde 21): der eigene Cast als Bogen um den Pfeil
+    versuch("HUD " .. (dock and "Saeulen" or "Ecken") .. " / Zauber-Ring", function()
+      local me = view.players[4]
+      me.casting, me.cast_slot, me.progress = true, 1, 0.6
+      render:draw(view, { facing_angle = 0, cooldowns = { 0, 0, 0, 0 } })
+      me.casting = false
     end)
   end
   render.docked = true

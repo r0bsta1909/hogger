@@ -373,6 +373,7 @@ end
 -- Geometrie inline im Zeichencode, also waren die Buttons reine Grafik.
 -- Abgeschaltete Faehigkeiten (F10) haben keinen Sitzplatz.
 R.BUTTON_R = 23
+R.CAST_RING_R = 22 -- Zauber-Ring um den eigenen Pfeil (Runde 21)
 
 function R.ability_slots(L, class)
   local out = {}
@@ -732,12 +733,26 @@ end
 -- an 10-/2-Uhr an den Ring statt in die Ecken; alles Abgeleitete (CP,
 -- Kupfer, Hinweis, Heil-Leiste, Ziel-des-Ziels, Buffs) wandert mit.
 R.FRAME_W, R.FRAME_H = 214, 56
+R.SAEULE_LUFT = 12 -- Abstand Tafel <-> Kreisrand in den Rand-Saeulen (Runde 21)
 
 function R.layout(w, h, docked)
   local ox, oy = w / 2, h / 2
   local radius = h / 2 - 22 -- war -8; Platz fuer Plaketten AUF dem Ring (M12)
   local unit, target
-  if docked then
+  local saeulen = false
+  -- Rand-Saeulen (Runde 21, Robs Skizze): reicht der Rand neben dem Kreis
+  -- fuer eine Tafel plus Luft, stehen Einheiten- und Zielfenster NEBEN dem
+  -- Kreis, und alles darunter (Auren, Kupfer, Heil-Leiste; Ziel des
+  -- Ziels, Ziel-Auren, Aktionszeile) laeuft als Spalte am Kreis vorbei —
+  -- nichts ueberlagert mehr den inneren Kreis, XP- und Bedrohungsbogen
+  -- bleiben frei. Angedockt (tangential an 10/2 Uhr) lagen die Tafeln zwar
+  -- nur mit einer Ecke im Kreis, der Stapel darunter aber ganz.
+  if docked and (ox - radius) >= R.FRAME_W + R.SAEULE_LUFT * 2 then
+    saeulen = true
+    local top = math.floor(oy - radius) + 26
+    unit = { x = math.floor(ox - radius) - R.SAEULE_LUFT - R.FRAME_W, y = top }
+    target = { x = math.floor(ox + radius) + R.SAEULE_LUFT, y = top }
+  elseif docked then
     local p10x, p10y = ox - radius * 0.866, oy - radius * 0.5
     local p2x = ox + radius * 0.866
     unit = { x = math.max(12, math.floor(p10x - R.FRAME_W + 8)),
@@ -757,6 +772,7 @@ function R.layout(w, h, docked)
     math.floor((h - healbar_y - HB.header_h - 8) / HB.row_h) - 1))
   return {
     ox = ox, oy = oy, radius = radius,
+    saeulen = saeulen, -- Tafeln neben dem Kreis (Runde 21)
     ring_r = radius * 0.87, -- Bahn der Faehigkeits-Buttons
     banner = { cx = ox, cy = oy - radius, h = 26, pad = 14, min_w = 140 },
     npip = { x = ox, y = oy - radius + 26, r = 9 },
@@ -1127,11 +1143,23 @@ function R:make_transform(cx, cy)
   end, scale, ox, oy, radius
 end
 
-local function hp_bar(x, y, w2, frac, r, g, b)
+-- HP-Balken unter einem Icon. Runde 21 (Rob: "die Lebensbalken skalieren
+-- komisch"): bis dahin konstant 32 x 4 px an festem Versatz, waehrend das
+-- Icon mit dem Zoom skalierte — auf Zoom 1 lag der Balken IM Icon. Jetzt
+-- haengt er am Icon-Rand und waechst mit (R.bar_geom, love-frei getestet).
+local function hp_bar(x, y, w2, frac, r, g, b, hgt)
+  hgt = hgt or 4
   love.graphics.setColor(0, 0, 0, 0.6)
-  love.graphics.rectangle("fill", x - w2, y, w2 * 2, 4)
+  love.graphics.rectangle("fill", x - w2, y, w2 * 2, hgt)
   love.graphics.setColor(r, g, b, 1)
-  love.graphics.rectangle("fill", x - w2, y, w2 * 2 * math.max(0, math.min(1, frac)), 4)
+  love.graphics.rectangle("fill", x - w2, y, w2 * 2 * math.max(0, math.min(1, frac)), hgt)
+end
+
+-- Geometrie eines Icon-Balkens: icon_r = Icon-Radius auf dem Schirm.
+-- Liefert y-Versatz unter dem Icon, halbe Breite, Hoehe.
+function R.bar_geom(icon_r, scale)
+  local hgt = math.max(3, math.min(6, 4 * (scale or 1)))
+  return icon_r + 3, math.max(8, icon_r * 0.8), hgt
 end
 
 -- Tooltip im Original-Stil (GDD 4.2/4.3): erste Zeile gold (Name), Rest
@@ -1423,7 +1451,8 @@ function R:draw(view, ui)
             love.graphics.circle("fill", x, y, 8 * scale * 1.8)
           end
           if p.alive and p.class then
-            hp_bar(x, y + 14, 16, p.hp / client_max_hp(p), 0.2, 0.8, 0.2)
+            local dy, hw, hh = R.bar_geom(16 * 1.8 * scale, scale)
+            hp_bar(x, y + dy, hw, p.hp / client_max_hp(p), 0.2, 0.8, 0.2, hh)
           end
         end
       end
@@ -1517,7 +1546,8 @@ function R:draw(view, ui)
       if npc.kind ~= "imp" then
         local maxhp = npc.kind == "add" and model.p("add_hp")
                       or model.p(npc.kind .. "_hp")
-        hp_bar(x, y + 12, 10, npc.hp / maxhp, 0.85, 0.75, 0.2)
+        local dy, hw, hh = R.bar_geom(assets.size("icon_" .. npc.kind) / 2 * 1.8 * scale, scale)
+        hp_bar(x, y + dy, hw, npc.hp / maxhp, 0.85, 0.75, 0.2, hh)
       end
     end
   end
@@ -1562,7 +1592,8 @@ function R:draw(view, ui)
       love.graphics.setLineWidth(1)
     end
     if hg.state ~= "reset" then
-      hp_bar(x, y + 20, 26, hg.hp / math.max(1, hg.max_hp), 0.85, 0.2, 0.15)
+      local dy, hw, hh = R.bar_geom(48 * scale, scale)
+      hp_bar(x, y + dy, hw, hg.hp / math.max(1, hg.max_hp), 0.85, 0.2, 0.15, hh)
       -- Fresskanal: Pflicht-UI (GDD 9.2). Der alte Spieler-Zaehler ("2/4")
       -- fiel mit Runde 12 (#140) — unterbrechen kann nur noch der
       -- Schurken-Tritt, also sagt die Zeile genau das
@@ -1571,7 +1602,7 @@ function R:draw(view, ui)
       -- ohnehin aus, und die Transferleistung vom Ruf zum eigenen Tritt
       -- darf beim Spieler bleiben — ein Kommandotext am Boss nimmt sie ihm.
       if hg.eat and hg.eat.phase == "channel" then
-        hp_bar(x, y + 26, 26, hg.eat.progress, 0.9, 0.8, 0.2)
+        hp_bar(x, y + dy + hh + 2, hw, hg.eat.progress, 0.9, 0.8, 0.2, hh)
       end
     end
   end
@@ -2186,8 +2217,30 @@ function R:draw(view, ui)
       local def = me.class and model.classes[me.class].abilities[me.cast_slot or 0]
       label = def and def.name_de or "Zauber"
     end
-    local bw2, bx2, by2 = 260, L.ox - 130, L.oy + L.radius * 0.34
-    ui_bar(bx2, by2, bw2, 18, me.progress, { 0.85, 0.72, 0.28 }, label)
+    -- Zauber-Ring (Runde 21, Rob: "der Castbalken ist im Weg"): statt
+    -- eines 260-px-Balkens mitten im Kampfbild ein Bogen um den eigenen
+    -- Pfeil, der sich im Uhrzeigersinn fuellt, und der Name klein darueber.
+    -- Deckt nichts ab und bleibt da, wo das Auge ist.
+    local cr, prog = R.CAST_RING_R, math.max(0, math.min(1, me.progress or 0))
+    love.graphics.setColor(0, 0, 0, 0.55)
+    love.graphics.setLineWidth(6)
+    love.graphics.circle("line", L.ox, L.oy, cr)
+    love.graphics.setColor(0.85, 0.72, 0.28, 0.95)
+    love.graphics.setLineWidth(4)
+    if prog > 0 then
+      love.graphics.arc("line", "open", L.ox, L.oy, cr,
+        -math.pi / 2, -math.pi / 2 + prog * 2 * math.pi)
+    end
+    love.graphics.setLineWidth(1)
+    local font = love.graphics.getFont()
+    local tw = font:getWidth(label)
+    local px, py = L.ox - tw / 2, L.oy - cr - 22
+    love.graphics.setColor(0.02, 0.02, 0.02, 0.9)
+    for _, o in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+      love.graphics.print(label, px + o[1], py + o[2])
+    end
+    love.graphics.setColor(0.95, 0.85, 0.45, 1)
+    love.graphics.print(label, px, py)
   end
 
   -- Faehigkeits-Tooltip ueber dem Button (Original-Stil, GDD 4.2)
