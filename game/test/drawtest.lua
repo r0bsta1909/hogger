@@ -229,6 +229,10 @@ function T.run()
         corpse = 1, total = 8 }; s.hogger.state = "eating" end },
     { "chargt", function(s) s.hogger.charge = { target = 1, t_left = 0.5,
         total = 0.8 } end },
+    -- Heisshunger (Runde 23): Linie zur Leiche + "Hunger"
+    { "hat Hunger", function(s)
+        s.corpses[1] = { x = s.hogger.x + 350, y = s.hogger.y - 120 }
+        s.hogger.seek = { corpse = 1, t_left = 3, total = 5 } end },
     { "tot", function(s) s.hogger.hp = 0 end },
     { "trabt heim", function(s) s.hogger.state = "reset" end },
     { "verlangsamt", function(s) s.hogger.slow_until = 99 end },

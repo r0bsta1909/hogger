@@ -1650,6 +1650,27 @@ function R:draw(view, ui)
       love.graphics.circle("line", x, y, r0)
       love.graphics.setLineWidth(1)
     end
+    -- Heisshunger (Runde 23): gestrichelte Linie zur angesteuerten Leiche
+    -- plus "Hunger" am Icon — der Weg ist der Telegraph fuer den Tritt
+    if hg.eat and hg.eat.phase == "seek" and view.corpses
+       and view.corpses[hg.eat.corpse or 0] then
+      local c = view.corpses[hg.eat.corpse]
+      local cx, cy = to_screen(c.x, c.y)
+      local dx, dy = cx - x, cy - y
+      local len = math.max(1, math.sqrt(dx * dx + dy * dy))
+      local ux, uy = dx / len, dy / len
+      local phase = (love.timer.getTime() * 60) % 16
+      love.graphics.setColor(0.95, 0.8, 0.25, 0.85)
+      love.graphics.setLineWidth(3)
+      local s = phase
+      while s < len do
+        local e = math.min(len, s + 8)
+        love.graphics.line(x + ux * s, y + uy * s, x + ux * e, y + uy * e)
+        s = s + 16
+      end
+      love.graphics.setLineWidth(1)
+      love.graphics.printf("Hunger", x - 40, y - 48 * scale - 16, 80, "center")
+    end
     -- Charge-Telegraph: blinkende Ziellinie (GDD 9.2)
     if hg.charge and view.players[hg.charge.target] then
       local t = view.players[hg.charge.target]

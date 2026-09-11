@@ -37,6 +37,7 @@ W.EV = {
   enrage = 23,
   nova = 24, -- Runde 22: der blaue Ring der Frostnova (val = Radius)
   shockwave = 25, -- Runde 22: Rundumschlag (val -1 = Telegraph beginnt, sonst Getroffene)
+  eat_seek = 26, -- Runde 23: Heisshunger — Hogger laeuft zu einer Leiche (dst = Index)
 }
 W.EV_NAMES = {}
 for name, id in pairs(W.EV) do W.EV_NAMES[id] = name end
@@ -308,6 +309,7 @@ local PFLAG = { alive = 1, ghost = 2, casting = 4, jumping = 8, reviving = 16,
 W.PFLAG = PFLAG
 
 local model = require("sim.model")
+local DT_EPS = 1e-6
 
 function W.snapshot_body(state)
   local h = state.hogger
@@ -335,6 +337,12 @@ function W.snapshot_body(state)
     local total = (eatphase == 1) and model.p("eat_drag_duration")
                                     or model.p("eat_channel_duration")
     eatprog = q8(1 - h.eating.t_left / total)
+  elseif h.seek then
+    -- Heisshunger (Runde 23): Phase 3, das tote Byte eatneed traegt den
+    -- Leichenindex (1..255) — der Client zeichnet die Linie zur Leiche
+    eatphase = 3
+    eatneed = math.min(255, h.seek.corpse)
+    eatprog = q8(1 - h.seek.t_left / math.max(DT_EPS, h.seek.total or 1))
   end
   local ctarget, cprog = 255, 0
   if h.charge then
@@ -500,9 +508,11 @@ function W.read_snapshot(data, off)
   s.hogger = {
     x = hx, y = hy, hp = hhp, max_hp = hmax,
     state = ({ [0] = "idle", "combat", "eating", "reset" })[hstate],
-    eat = eatphase > 0 and { phase = eatphase == 1 and "drag" or "channel",
-                             hitters = 0, needed = eatneed,
-                             progress = eatprog / 255 } or nil,
+    eat = eatphase > 0 and {
+      phase = ({ [1] = "drag", [2] = "channel", [3] = "seek" })[eatphase] or "channel",
+      hitters = 0, needed = eatneed,
+      corpse = eatphase == 3 and eatneed or nil, -- Heisshunger: Leichenindex
+      progress = eatprog / 255 } or nil,
     charge = ctarget ~= 255 and { target = ctarget, progress = cprog / 255 } or nil,
     shock = eathit > 0 and (eathit / 255) or nil, -- Rundumschlag-Telegraph (Runde 22)
     target = htarget ~= 255 and htarget or nil,

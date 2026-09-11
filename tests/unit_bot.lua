@@ -418,3 +418,37 @@ do
   local t = bot.heal_target(st3, d)
   T.ok(t and t.id == b.id, "typisch: Druide ueberspringt das Ziel mit laufender Verjuengung")
 end
+
+-- Runde 23: Heisshunger — der Kicker folgt Hogger, sobald er zu einer Leiche laeuft
+do
+  local st, h = arena(2, "rogue")
+  local kicker = st.players[2]
+  kicker.x, kicker.y = h.x + 200, h.y
+  -- Ein Welpe beisst ihn: ohne Hunger bleibt der Kicker beim Welpen stehen
+  -- (er steht in Schlagweite), mit Hunger geht er zu Hogger
+  local npc = world.add_npc(st, "add", kicker.x + 20, kicker.y, 20)
+  npc.state, npc.target_pid = "combat", kicker.id
+  local d0 = bot.decide(st, kicker.id)
+  T.eq(d0.mask % 16, 0, "typisch: ohne Hunger bleibt der Kicker am beissenden Welpen")
+  st.tick = st.tick + 10; kicker.brain.cached = nil
+  st.corpses[1] = { x = h.x - 400, y = h.y, owner = 3 }
+  h.seek = { corpse = 1, t_left = 4, total = 5 }
+  local d = bot.decide(st, kicker.id)
+  T.ok(has(d.mask, input.LEFT), "typisch: der Kicker laeuft dem hungrigen Hogger nach")
+  T.ok(not d.kick, "typisch: unterwegs wird nicht getreten (kein Kanal)")
+  -- Snapshot-Sicht: eat.phase == "seek"
+  h.seek = nil
+  h.eat = { phase = "seek", corpse = 1, progress = 0.2 }
+  st.tick = st.tick + 10; kicker.brain.cached = nil
+  d = bot.decide(st, kicker.id)
+  T.ok(has(d.mask, input.LEFT), "typisch: auch aus dem Snapshot (eat.phase seek) folgt er")
+  h.eat = nil
+  -- SKIP seekfollow: er bleibt stehen
+  bot.SKIP = { seekfollow = true }
+  h.seek = { corpse = 1, t_left = 4, total = 5 }
+  st.tick = st.tick + 10; kicker.brain.cached = nil
+  d = bot.decide(st, kicker.id)
+  T.ok(not has(d.mask, input.LEFT), "typisch: --skip seekfollow laesst den Kicker stehen")
+  bot.SKIP = {}
+  T.ok(bot.hogger_hungry({ seek = {} }) and not bot.hogger_hungry({}), "bot: hogger_hungry liest den Zustand")
+end

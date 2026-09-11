@@ -208,6 +208,29 @@ local function finale_gather(state, ev)
   end
 end
 
+-- Leichen-Deckel (Runde 23, #202): liegen mehr als corpse_cap_factor x N
+-- Leichen, weicht die aelteste — nie die, die Hogger gerade frisst oder
+-- ansteuert. Leichen sind ein Array; table.remove verschiebt alle Indizes
+-- dahinter, also ruecken eating.corpse/seek.corpse mit. 0 = unbegrenzt.
+local function cap_corpses(state)
+  local factor = model.p("corpse_cap_factor")
+  if factor <= 0 then return end
+  local cap = factor * math.max(1, state.n_scale)
+  local h = state.hogger
+  while #state.corpses > cap do
+    local busy_a = h.eating and h.eating.corpse
+    local busy_b = h.seek and h.seek.corpse
+    local victim
+    for i = 1, #state.corpses do
+      if i ~= busy_a and i ~= busy_b then victim = i; break end
+    end
+    if not victim then return end
+    table.remove(state.corpses, victim)
+    if busy_a and busy_a > victim then h.eating.corpse = busy_a - 1 end
+    if busy_b and busy_b > victim then h.seek.corpse = busy_b - 1 end
+  end
+end
+
 -- cause: Todesursache fuer die Killcam (killcam.CAUSE, GDD Kap. 11)
 local function kill_player(state, p, ev, was_crit, cause)
   p.alive = false
@@ -240,6 +263,7 @@ local function kill_player(state, p, ev, was_crit, cause)
   state.hogger.threat[p.id] = nil -- Bedrohung wird beim Tod geloescht (GDD 9.4)
   -- owner: "Am haeufigsten gefressen worden" braucht den Leichen-Besitzer
   state.corpses[#state.corpses + 1] = { x = p.x, y = p.y, owner = p.id }
+  cap_corpses(state)
   local s = state.stats
   if s then
     local sp = stat_p(state, p.id)
@@ -1541,6 +1565,25 @@ local function hogger_try_eat(state, ev)
       return true
     end
   end
+  -- Heisshunger (Runde 23, Rob-Entscheid): keine Leiche im Zugradius, aber
+  -- eine in Suchweite — dann laeuft er hin (hogger_tick, Block "seek") und
+  -- laesst sich von nichts ablenken. Bis Runde 22 suchte er nie: wer ihn
+  -- von den Leichen wegkitete, nahm ihm still seine einzige Heilquelle und
+  -- dem Schurken den Tritt. Der Weg ist Telegraph, kein Kanal.
+  local seek_r = model.p("eat_seek_radius")
+  if seek_r > 0 and not h.seek and state.time >= (h.seek_block_t or 0) then
+    local best, best_d = nil, seek_r
+    for i, c in ipairs(state.corpses) do
+      local d = world.dist(c.x, c.y, h.x, h.y)
+      if d < best_d then best, best_d = i, d end -- Gleichstand: kleinster Index
+    end
+    if best then
+      local total = model.p("eat_seek_timeout")
+      h.seek = { corpse = best, t_left = total, total = total }
+      events.push(ev, state.tick, "eat_seek", "hogger", best, best_d, nil)
+      return true
+    end
+  end
   return false
 end
 
@@ -1564,7 +1607,9 @@ local function hogger_no_contact(state)
   -- Abbruch dauerhaft. Fressen pausiert seit Runde 10 NICHT mehr — jeder
   -- Treffer stellt die Uhr ohnehin auf 0, und Fresskanaele haetten die Frist
   -- sonst unvorhersehbar gedehnt (der Wert im Panel soll stimmen).
-  if h.charge then return false end
+  -- Der Hunger-Lauf (Runde 23) pausiert sie ebenso: er hat ein Ziel, nur
+  -- keinen Spieler — und der Timeout deckelt ihn ohnehin.
+  if h.charge or h.seek then return false end
   local reach = model.p("melee_range")
   local contact = false
   for _, p in ipairs(state.players) do
@@ -1611,6 +1656,7 @@ local function hogger_reset(state, cause)
   h.eating = nil
   h.charge = nil
   h.shock = nil
+  h.seek = nil
   h.target_id = nil
   h.reset_cause = cause -- S.step wertet den Try aus
 end
@@ -1681,6 +1727,34 @@ local function hogger_tick(state, ev)
       end
       return
     end
+  end
+
+  -- Heisshunger (Runde 23): er laeuft zur angesteuerten Leiche und tut
+  -- nichts anderes — kein Autohit, keine Charge, kein Rundumschlag. Ist die
+  -- Leiche weg oder die Frist um, kaempft er weiter und sucht erst nach
+  -- einer Pause von derselben Laenge erneut (sonst pendelt er). Gilt auch
+  -- im Leerlauf: nach dem Wipe raeumt er das Feld im Suchradius ab.
+  if h.seek then
+    local c = state.corpses[h.seek.corpse]
+    h.seek.t_left = h.seek.t_left - DT
+    if not c or h.seek.t_left <= 0 then
+      h.seek = nil
+      h.seek_block_t = state.time + model.p("eat_seek_timeout")
+      return
+    end
+    if world.dist(c.x, c.y, h.x, h.y) <= model.p("eat_corpse_radius") then
+      h.seek = nil
+      if not hogger_try_eat(state, ev) then
+        h.seek_block_t = state.time + model.p("eat_seek_timeout")
+      end
+      return
+    end
+    local speed = model.p("hogger_speed")
+    if h.slow_until > state.time then
+      speed = speed * (1 - model.p("mage_frostarmor_slow"))
+    end
+    hogger_move_towards(state, c.x, c.y, speed)
+    return
   end
 
   -- Rundumschlag (Runde 22, Rob: "wenig Bewegung"): der rote Ring pulsiert
@@ -2207,6 +2281,7 @@ function S.step(state, inputs)
     state.enrage_t = 0
     state.hogger.eating = nil
     state.hogger.charge = nil
+    state.hogger.seek = nil
     events.push(ev, state.tick, "enrage", "hogger", nil,
       math.max(0, state.hogger.hp), nil)
   end

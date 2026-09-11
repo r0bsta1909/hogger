@@ -55,6 +55,14 @@ Vorher aber prüfen, **woran** ihr scheitert: Wipe (alle tot) oder Zeitlimit? Be
 | `eat_channel_duration` | runter | er frisst kürzer — Achtung, während er frisst, **schlägt er nicht**: kürzer heißt auch weniger Verschnaufpause für euch |
 | `eat_hp_threshold` | runter | er fängt erst später an zu fressen (nur unter X % seiner HP) |
 
+### Er frisst nie, weil ihr ihn von den Leichen wegzieht (der Log-Leser zählt „Hunger-Läufe")
+Seit Runde 23 läuft Hogger zur nächsten Leiche, wenn keine in Reichweite liegt — und ignoriert dabei alles.
+| Regler | Richtung | Bedeutung |
+|---|---|---|
+| `eat_seek_radius` | hoch | er holt sich Leichen von weiter her; 0 = er sucht nie (Stand bis Runde 22: Kiten schaltet das Fressen ab) |
+| `eat_seek_timeout` | hoch | er läuft länger hinterher, bevor er aufgibt und weiterkämpft |
+| `corpse_cap_factor` | runter | weniger Leichen liegen herum (Vielfaches der Raidgröße); 0 = unbegrenzt — bei 40 Spielern wird der Snapshot dann groß |
+
 ### Das Fressen wird nie unterbrochen
 Erst schauen, **warum**: Ist ein Schurke da? Steht er nah genug? Drückt er die 4?
 | Regler | Richtung |

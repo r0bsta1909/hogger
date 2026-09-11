@@ -2669,3 +2669,143 @@ do
   end
   T.eq(step.effective_max_hp(wl) % 1, 0, "hp: das Blutpakt-Maximum ist ganzzahlig")
 end
+
+-- ---------------------------------------------------------------------------
+-- Runde 23: Heisshunger — Hogger laeuft zur Leiche (mit Leine) + Leichen-Deckel
+-- ---------------------------------------------------------------------------
+do
+  local function ticks(sec) return math.ceil(sec / model.TICK_DT) end
+  local function hungry_world(corpse_dist)
+    local st, h = reset_world({ n = 2 })
+    h.hp = h.max_hp * 0.5 -- Fressen bereit
+    h.eat_cd = 0
+    st.corpses[1] = { x = h.x + corpse_dist, y = h.y, owner = 2 }
+    return st, h
+  end
+
+  -- Leiche ausserhalb 200 px, innerhalb 600 px: er laeuft hin und frisst
+  local st, h = hungry_world(400)
+  local seek_ev, eat_ev, autohits = nil, nil, 0
+  local x0 = h.x
+  for _ = 1, ticks(6) do
+    for _, e in ipairs(step.step(st, {})) do
+      if e.ev == "eat_seek" then seek_ev = e end
+      if e.ev == "eat_start" then eat_ev = e end
+      if e.ev == "damage" and e.src == "hogger" then autohits = autohits + 1 end
+    end
+    -- Spieler bleiben ihm auf den Fersen: ohne Hunger wuerde er zuschlagen
+    for _, p in ipairs(st.players) do p.x, p.y = h.x + 10, h.y end
+  end
+  T.ok(seek_ev ~= nil, "hunger: eat_seek beim Loslaufen")
+  T.eq(seek_ev and seek_ev.dst, 1, "hunger: eat_seek nennt den Leichenindex")
+  -- (er ist vor dem ersten Suchlauf schon einen Tick auf die Spieler zugelaufen)
+  T.ok(seek_ev and seek_ev.val > 200 and seek_ev.val <= 400, "hunger: eat_seek traegt die Distanz")
+  T.ok(h.x > x0 + 100, "hunger: er hat sich zur Leiche bewegt")
+  T.ok(eat_ev ~= nil, "hunger: angekommen beginnt das Fressen")
+  T.eq(autohits, 0, "hunger: unterwegs schlaegt er nicht zu")
+
+  -- Leiche ausserhalb des Suchradius (auf der den Spielern abgewandten
+  -- Seite, sonst laeuft er ihr beim Verfolgen in den Radius): kein Suchlauf
+  local st2, h2 = hungry_world(-800)
+  local sought = false
+  for _ = 1, ticks(2) do
+    for _, e in ipairs(step.step(st2, {})) do
+      if e.ev == "eat_seek" then sought = true end
+    end
+  end
+  T.ok(not sought and h2.seek == nil, "hunger: jenseits des Suchradius laeuft er nicht los")
+
+  -- Timeout: unerreichbare Leiche (hinter der Friedhofssperre) -> nach der
+  -- Frist kaempft er weiter und sucht vorerst nicht erneut
+  local st3, h3 = reset_world({ n = 1 })
+  h3.hp = h3.max_hp * 0.5; h3.eat_cd = 0
+  local g = map.graveyard()
+  h3.x, h3.y = g.x + map.GRAVEYARD_RADIUS + 30, g.y
+  st3.corpses[1] = { x = g.x + map.GRAVEYARD_RADIUS - 300, y = g.y, owner = 1 }
+  st3.players[1].x, st3.players[1].y = h3.x + 10, h3.y
+  local seeks, hits = 0, 0
+  for _ = 1, ticks(model.p("eat_seek_timeout") * 2 + 1) do
+    for _, e in ipairs(step.step(st3, {})) do
+      if e.ev == "eat_seek" then seeks = seeks + 1 end
+      if e.ev == "damage" and e.src == "hogger" then hits = hits + 1 end
+    end
+    st3.players[1].x, st3.players[1].y = h3.x + 10, h3.y
+  end
+  T.eq(seeks, 1, "hunger: nach dem Timeout kein sofortiger neuer Suchlauf")
+  T.ok(h3.seek == nil, "hunger: der Suchlauf ist beendet")
+  T.ok(hits > 0, "hunger: nach dem Timeout kaempft er weiter")
+
+  -- Tritt waehrend der Suche: kein Kanal, nichts zu treten, Cooldown bleibt
+  local st4, h4 = hungry_world(400)
+  local rogue = st4.players[1]
+  rogue.class, rogue.resource, rogue.target = "rogue", 100, world.HOGGER_ID
+  step.step(st4, {})
+  T.ok(h4.seek ~= nil, "hunger: Suche laeuft")
+  rogue.x, rogue.y = h4.x + 10, h4.y
+  rogue.facing = input.facing_towards(rogue.x, rogue.y, h4.x, h4.y)
+  T.ok(not step.kick(st4, rogue.id, {}), "hunger: der Tritt greift nur im Kanal")
+  T.eq(rogue.kick_cd or 0, 0, "hunger: der Tritt verbrennt keinen Cooldown")
+
+  -- Kein-Kontakt-Uhr pausiert waehrend der Suche
+  local st5, h5 = reset_world({ n = 1 })
+  h5.no_contact_t = 3
+  h5.seek = { corpse = 1, t_left = 999, total = 999 }
+  st5.corpses[1] = { x = h5.x + 5000, y = h5.y, owner = 1 } -- nie erreichbar
+  tick_pinned(st5, 3)
+  T.eq(h5.no_contact_t, 3, "hunger: die Kein-Kontakt-Uhr steht waehrend der Suche")
+
+  -- 0 = aus: Verhalten wie bis Runde 22
+  model.params.eat_seek_radius.wert = 0
+  local st6, h6 = hungry_world(400)
+  for _ = 1, ticks(2) do step.step(st6, {}) end
+  T.ok(h6.seek == nil, "hunger: eat_seek_radius 0 schaltet das Suchen ab")
+  model.params.eat_seek_radius.wert = model.defaults.eat_seek_radius
+
+  -- Leichen-Deckel (#202): mehr als 2 x N Leichen -> die aelteste weicht,
+  -- die angesteuerte/gefressene bleibt und ihr Index rueckt mit
+  -- Tod ueber die Sim: der Spieler mit 1 HP verblutet an Hoggers Blutung —
+  -- das laeuft im Spieler-Tick und ist unabhaengig davon, was Hogger tut
+  local function deckel_welt(prep)
+    local st, h = reset_world({ n = 2 })
+    for i = 1, 2 * st.n_scale do
+      st.corpses[i] = { x = 1000 + i, y = 1000, owner = 1 }
+    end
+    local victim = st.players[1]
+    victim.hp = 1
+    victim.x, victim.y = 2000, 500
+    victim.bleed_t, victim.bleed_next = 5, 0
+    h.x, h.y = 2500, 500 -- weit weg von den Leichen: kein Hunger-Lauf
+    if prep then prep(st, h) end
+    step.step(st, {})
+    T.ok(not victim.alive, "deckel: Testopfer ist gestorben")
+    return st, h, victim
+  end
+  local st7, _, victim = deckel_welt()
+  T.eq(#st7.corpses, 2 * st7.n_scale, "deckel: Leichenzahl bleibt bei 2 x N")
+  T.eq(st7.corpses[#st7.corpses].owner, victim.id, "deckel: die neue Leiche liegt am Ende")
+  T.eq(st7.corpses[1].x, 1002, "deckel: die aelteste (1001) ist gewichen")
+
+  -- die gerade gefressene Leiche ueberlebt den Deckel; ihr Index rueckt mit
+  local st8, h8 = deckel_welt(function(_, h)
+    h.eating = { phase = "drag", t_left = 999, corpse = 2 }
+  end)
+  T.ok(math.abs(st8.corpses[h8.eating.corpse].x - 1002) < 5,
+    "deckel: die gefressene Leiche bleibt dieselbe (Schleppen bewegt sie leicht)")
+  T.eq(h8.eating.corpse, 1, "deckel: ihr Index ist nachgerueckt")
+
+  -- 0 = unbegrenzt
+  model.params.corpse_cap_factor.wert = 0
+  local st9, h9 = reset_world({ n = 1 })
+  for i = 1, 10 do st9.corpses[i] = { x = 1000 + i, y = 1000, owner = 1 } end
+  local v9 = st9.players[1]
+  v9.hp = 1; h9.x, h9.y = v9.x - 10, v9.y; h9.threat[v9.id] = 99; h9.next_auto = 0
+  step.step(st9, {})
+  T.eq(#st9.corpses, 11, "deckel: corpse_cap_factor 0 laesst alles liegen")
+  model.params.corpse_cap_factor.wert = model.defaults.corpse_cap_factor
+
+  -- Vertrag: neuer Ereignistyp geht ans Netz
+  local wire_ok, wire = pcall(require, "game.net.wire")
+  if wire_ok then
+    T.ok(wire.EV.eat_seek ~= nil, "hunger: eat_seek steht in der Netz-Whitelist")
+  end
+end

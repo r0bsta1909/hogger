@@ -78,6 +78,12 @@ return {
     "hoeher = mehr Zeit zum Unterbrechen" },
   eat_heal_rate = { "Anteil der Maximal-HP, den Hogger je Sekunde frisst.",
     "hoeher = Fressen heilt ihn schneller" },
+  eat_seek_radius = { "Heisshunger: Umkreis, in dem Hogger zu einer Leiche laeuft; null = aus.",
+    "hoeher = Kiten weg von den Leichen hilft weniger" },
+  eat_seek_timeout = { "Heisshunger: wie lange er einer Leiche nachlaeuft, bevor er aufgibt.",
+    "hoeher = er erreicht auch ferne Leichen" },
+  corpse_cap_factor = { "Leichen-Deckel als Vielfaches der Raidgroesse; null = unbegrenzt.",
+    "hoeher = mehr Leichen liegen, groesserer Snapshot" },
 
   -- Hogger: Skalierung (9.3) ------------------------------------------------
   hogger_hp_quad = { "Quadratischer Anteil der HP-Formel.",

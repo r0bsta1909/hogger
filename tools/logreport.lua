@@ -82,7 +82,7 @@ local function new_try(nr, n, tick)
   return {
     nr = nr, n = n, t0 = tick, deaths = 0, causes = {},
     dmg_hogger = 0, dmg_mobs = 0, dmg_taken = 0, heal = 0,
-    eat_start = 0, eat_heal = 0,
+    eat_start = 0, eat_heal = 0, eat_seek = 0,
     eat_interrupt = 0, eat_complete = 0, complete_with_rogue = 0,
     charges = 0, charges_dodged = 0, crit_kills = 0, heal_aggro = 0, class_changes = 0,
     interrupts_by = {}, dmg_by = {}, deaths_by = {}, last_heal_t = {},
@@ -181,6 +181,11 @@ function M.analyse_events(next_event)
       elseif e.ev == "heal" then
         cur.heal = cur.heal + (e.val or 0)
         if dst then cur.last_heal_t[dst] = e.t end
+      elseif e.ev == "eat_seek" then
+        -- Heisshunger (Runde 23): Fressen ohne Leiche in Reichweite — er
+        -- laeuft erst hin. Viele Laeufe heissen: der Raid stirbt weit weg
+        -- oder kitet ihn von den Leichen.
+        cur.eat_seek = cur.eat_seek + 1
       elseif e.ev == "eat_start" then
         cur.eat_start = cur.eat_start + 1
         cur.eat_t0 = e.t
@@ -236,7 +241,7 @@ function M.analyse_events(next_event)
   if cur then cur.dauer = 0; trys[#trys + 1] = cur end
 
   -- Summen
-  local sum = { deaths = 0, eat_start = 0, eat_heal = 0,
+  local sum = { deaths = 0, eat_start = 0, eat_heal = 0, eat_seek = 0,
                 eat_interrupt = 0, eat_complete = 0,
                 complete_with_rogue = 0, dmg_hogger = 0, dmg_mobs = 0,
                 charges = 0, charges_dodged = 0, heal_aggro = 0, crit_kills = 0,
@@ -333,6 +338,9 @@ function M.hints(r)
      and r.sum.complete_with_rogue / r.sum.eat_complete > 0.5 then
     out[#out + 1] = "Meist lebte ein Schurke, als das Fressen durchging: die Unterbrecher-Rolle wird nicht gespielt. Das ist eine Ansage-Frage, kein Zahlenproblem."
   end
+  if r.sum.eat_start > 0 and r.sum.eat_seek / r.sum.eat_start > 0.5 then
+    out[#out + 1] = "Mehr als die Haelfte der Mahlzeiten begann mit einem Hunger-Lauf: der Raid stirbt weit weg von Hogger oder zieht ihn von den Leichen weg (eat_seek_radius, eat_seek_timeout)."
+  end
   if dmg_all > 0 and r.sum.dmg_mobs / dmg_all > 0.10 then
     out[#out + 1] = "Mehr als ein Zehntel des Schadens ging an Mobs statt an Hogger: die Ambient-Mobs lenken zu stark ab."
   end
@@ -385,6 +393,8 @@ function M.render(r, quelle, defaults)
     r.sum.eat_interrupt, eat_total)
   w("| Durchgegangen, obwohl ein Schurke lebte | %d von %d | die offene Frage aus Runde 12 |",
     r.sum.complete_with_rogue, r.sum.eat_complete)
+  w("| Hunger-Laeufe (keine Leiche in Reichweite, er lief hin) | %d | Runde 23: viele heisst, der Raid stirbt weit weg oder kitet |",
+    r.sum.eat_seek)
   w("| Ablenkung: Schaden an Mobs statt Hogger | %s | unter 10 %% (GDD 13.4) |",
     dmg_all > 0 and pct(r.sum.dmg_mobs / dmg_all) or "-")
   w("| Tode je Try | %.1f | Wipes sind gewollt, Dauersterben nicht |",

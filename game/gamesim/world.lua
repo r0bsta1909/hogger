@@ -212,6 +212,8 @@ local function reset_hogger(state)
     eat_cd = 0,
     eating = nil,           -- { phase = "drag"|"channel", t_left, corpse }
                             -- (Unterbrechung nur per Tritt, Runde 12 #140)
+    seek = nil,             -- Heisshunger (Runde 23): { corpse, t_left, total }
+    seek_block_t = 0,       -- kein neuer Suchlauf vor dieser Spielzeit
     charge = nil,           -- { target, t_left } (Anlauf/Telegraph)
     taunt = nil,            -- { pid, until_t } — Spott-Zwang (Runde 12, #141)
     target_id = nil,        -- aktuelles Ziel (Runde 21, #198: Zielgedaechtnis)

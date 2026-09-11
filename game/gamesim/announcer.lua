@@ -52,6 +52,14 @@ function A.process(state, ev)
         ann.last_alarm_t = state.time
         say(state, ev, pick(state, 2, 6))
       end
+    elseif e.ev == "eat_seek" then
+      -- Heisshunger (Runde 23): der Weg zur Leiche ist der Telegraph, das
+      -- Echo ruft ihn aus — im Fress-Alarm-Takt, kein pick(): der
+      -- Zufallsstrom bleibt stehen (wie Zeile 40)
+      if state.time - ann.last_alarm_t >= 6 then
+        ann.last_alarm_t = state.time
+        say(state, ev, 41)
+      end
     elseif e.ev == "eat_interrupt" then
       ann.try_had_interrupt = true
     elseif e.ev == "charge" then
