@@ -248,3 +248,27 @@ do
   local text = logreport.render(r, "leer.jsonl", nil)
   T.ok(text:find("nichts zu rechnen"), "logleser: leeres Log sagt das klar")
 end
+
+-- Runde 23: Hunger-Laeufe (eat_seek) werden gezaehlt, alte Logs bleiben gleich
+do
+  local L = {}
+  local function add(...) L[#L + 1] = ev(...) end
+  add(0, "try_start", "host", "1", 5)
+  add(0, "revive", "1", "rogue", 0)
+  add(100, "eat_seek", "hogger", "1", 350)
+  add(200, "eat_start", "hogger", nil, nil)
+  add(260, "eat_interrupt", "hogger", "1", 1)
+  add(400, "eat_start", "hogger", nil, nil)
+  add(900, "eat_complete", "hogger", nil, nil)
+  add(6000, "try_end", "host", "0", 1)
+  local r = logreport.analyse(lines_of(L))
+  T.eq(r.sum.eat_seek, 1, "logleser: Hunger-Lauf gezaehlt")
+  T.eq(r.sum.eat_start, 2, "logleser: Mahlzeiten unveraendert gezaehlt")
+  local text = logreport.render(r, "x.jsonl", nil)
+  T.ok(text:find("Hunger%-Laeufe"), "logleser: Hunger-Laeufe stehen im Bericht")
+  -- Hinweis erst, wenn mehr als die Haelfte der Mahlzeiten mit einem Lauf beginnt
+  local hints = logreport.hints(r)
+  local warned = false
+  for _, hnt in ipairs(hints) do if hnt:find("Hunger%-Lauf") then warned = true end end
+  T.ok(not warned, "logleser: ein Lauf von zwei Mahlzeiten loest keinen Hinweis aus")
+end

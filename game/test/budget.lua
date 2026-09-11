@@ -137,7 +137,11 @@ function M.run(ok)
     -- Das ist der dickste Snapshot, den ein FRISCHER Try erreichen kann —
     -- und die Frage, die beim Bauen der Sequenz offen war.
     { name = "N=40, Enrage (alle liegen)", n = 40, leichen = 40, beute = 6, imps = 5 },
-    { name = "N=40, Leichen am Deckel",  n = 40, leichen = 255, beute = 12, imps = 5 },
+    -- Runde 23: der Leichen-Deckel (corpse_cap_factor x N) begrenzt, was im
+    -- Spiel wirklich liegen kann; das Format erlaubt weiterhin 255
+    { name = "N=40, Leichen am Spiel-Deckel", n = 40,
+      leichen = model.p("corpse_cap_factor") * 40, beute = 12, imps = 5 },
+    { name = "N=40, Leichen am Format-Deckel", n = 40, leichen = 255, beute = 12, imps = 5 },
     { name = "N=40, alles am Anschlag",  n = 40, leichen = 400, beute = 60, imps = 20 },
   }
 
@@ -154,7 +158,7 @@ function M.run(ok)
       r.paket <= M.MTU and "passt"
         or ("UEBER um " .. (r.paket - M.MTU) .. " B")))
     if s.name == "N=40, frischer Try" then voll_frisch = r end
-    if s.name == "N=40, Leichen am Deckel" then voll_saturiert = r end
+    if s.name == "N=40, Leichen am Format-Deckel" then voll_saturiert = r end
   end
 
   -- 3) Der frische 40er-Try MUSS in ein Paket passen. Faellt das, ist der

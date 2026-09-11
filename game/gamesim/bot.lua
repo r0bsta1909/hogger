@@ -44,7 +44,8 @@ M.DECIDE_EVERY = 3
 M.SKIP = {}
 M.SKIP_KEYS = { "shout", "taunt", "seal", "loh", "raptor", "feign", "evis",
                 "pws", "frostarmor", "imp", "roots", "kick", "reserve",
-                "needclass", "npc", "dodge", "nova", "drain", "shockdodge" }
+                "needclass", "npc", "dodge", "nova", "drain", "shockdodge",
+                "seekfollow" } -- seekfollow: Kicker folgt dem Hunger-Lauf nicht
 
 local HEALER = { paladin = true, priest = true, druid = true }
 local CASTER = { priest = true, mage = true, warlock = true, druid = true }
@@ -140,6 +141,15 @@ local function eating_channel(h)
   local e = h.eating or h.eat
   return e ~= nil and e.phase == "channel"
 end
+
+-- Heisshunger (Runde 23): Hogger laeuft gerade zu einer Leiche — im Zustand
+-- h.seek, im Snapshot eat.phase == "seek"
+local function hogger_hungry(h)
+  if h.seek then return true end
+  local e = h.eat
+  return e ~= nil and e.phase == "seek"
+end
+M.hogger_hungry = hogger_hungry
 
 local function casting(p)
   return p.cast ~= nil or p.casting == true
@@ -592,6 +602,15 @@ local function decide_typisch(state, p, brain)
       end
     else
       brain.eat_seen_t = nil
+      -- Heisshunger (Runde 23): laeuft Hogger zu einer Leiche, laeuft der
+      -- Kicker mit — der Kanal beginnt, sobald er ankommt, und der Tritt
+      -- braucht Schlagweite. Die Reaktionsuhr startet weiter erst im Kanal.
+      if hogger_hungry(h) and is_kicker(state, p) and not hold
+         and not SKIP.seekfollow
+         and world.dist(p.x, p.y, h.x, h.y) > melee_r then
+        mask = move_mask_towards(p.x, p.y, h.x, h.y, 8)
+        ex, ey = h.x, h.y
+      end
     end
   end
 

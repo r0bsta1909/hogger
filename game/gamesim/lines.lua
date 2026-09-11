@@ -60,4 +60,6 @@ return {
   [39] = "Von einer Uhr besiegt. Das ist ein neuer Tiefpunkt.",
   -- 40: die Charge verfehlt (Runde 21, Rob-Wortlaut) — der verdiente Moment
   [40] = "DANEBEN! Der Gnoll trifft nur Luft!",
+  -- 41: Heisshunger (Runde 23) — er laeuft zu einer Leiche, der Tritt kommt gleich
+  [41] = "ER HAT HUNGER! Schurken, hinterher!",
 }

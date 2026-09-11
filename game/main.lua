@@ -421,6 +421,10 @@ local function process_cosmetics(view)
       audio.play_later(ENRAGE_WAVE, "snd_wipe_sting")
       app.render:add_shake(14)
       app.enrage_seen_t = app.uptime
+    elseif e.ev == "eat_seek" then
+      -- Heisshunger (Runde 23): er laeuft zu einer Leiche — Vorwarnung
+      app.render:announce("HOGGER HAT HUNGER!", 2.5)
+      audio.play("snd_hogger_growl")
     elseif e.ev == "eat_start" then
       app.render:announce("HOGGER FRISST!", 2.5)
     elseif e.ev == "eat_interrupt" then

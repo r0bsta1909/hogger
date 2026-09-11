@@ -129,6 +129,19 @@ M.params = {
   -- Tritt-Latenz (1-3 s) holte das Fressen 70-90 % des Raidschadens
   -- zurueck, selbst bei 87 % getretenen Kanaelen (Robs Abend: 88 %).
   eat_heal_rate          = p(0.010, 0.005, 0.05, 0.001, "9.2"),  -- Anteil Max-HP pro s
+  -- Heisshunger (Runde 23, Rob-Entscheid): liegt keine Leiche im Zugradius,
+  -- laeuft Hogger zur naechsten innerhalb eat_seek_radius und ignoriert
+  -- dabei alles; erreicht er sie nicht binnen eat_seek_timeout, kaempft er
+  -- weiter. Bis Runde 22 suchte er nie — wer ihn von den Leichen wegkitete,
+  -- schaltete seine einzige Heilquelle und damit den Tritt still ab.
+  -- 0 = aus (Stand bis Runde 22).
+  eat_seek_radius        = p(600, 0, 1500, 25, "9.2"),
+  eat_seek_timeout       = p(5, 1, 15, 0.5, "9.2"),
+  -- Leichen-Deckel (Runde 23, #202): liegen mehr als corpse_cap_factor x N
+  -- Leichen, weicht beim naechsten Tod die aelteste, die nicht gerade
+  -- gefressen oder angesteuert wird. 0 = unbegrenzt (bis zum 255er-Deckel
+  -- des Snapshots — bei N=40 lag der dann ueber der ENet-MTU).
+  corpse_cap_factor      = p(2, 0, 6, 1, "9.2"),
   -- Fress-Unterbrechung seit Runde 12 (#140) NUR noch per Schurken-Tritt:
   -- die Spieleranzahl-Bedingung (max(3; ceil(N/6)+1) verschiedene Spieler)
   -- und die 5-%-Schadensschwelle sind ersatzlos gestrichen (Rob-Entscheid).
