@@ -368,7 +368,9 @@ function S.effective_max_hp(p)
   return p.max_hp
 end
 
-local function heal_player(state, src, dst, amount, ev)
+-- art (optional): Heilungsart fuers Log, heute nur "loh" (Handauflegung),
+-- damit der Log-Leser Leeroys Reflex zaehlen kann (Runde 23)
+local function heal_player(state, src, dst, amount, ev, art)
   if not dst.alive then return end
   local crit = crit_roll(state, "player", "heal")
   if crit then amount = amount * model.p("crit_mult_player") end
@@ -380,7 +382,7 @@ local function heal_player(state, src, dst, amount, ev)
   if h.state == "combat" or h.state == "eating" then
     h.threat[src.id] = (h.threat[src.id] or 0) + model.threat_for(effective, true)
   end
-  events.push(ev, state.tick, "heal", src.id, dst.id, effective, crit)
+  events.push(ev, state.tick, "heal", src.id, dst.id, effective, crit, art)
 end
 
 -- ---------------------------------------------------------------------------
@@ -606,13 +608,18 @@ local ABILITIES = {
     -- Handauflegung (Runde 13, #155): heilt ein Ziel VOLL — die eine
     -- dramatische Rettung. Anti-OP per Regel statt Zahl: kostet ALLES
     -- Mana und geht nur einmal pro Leben (Reset in revive_as).
+    -- breaks_cast (Runde 23): die Notheilung bricht einen laufenden
+    -- eigenen Zauber ab (Heiliges Licht dauert 2,5 s — wer bei 10 % HP die
+    -- Handauflegung drueckt, wartet nicht auf das Licht); break_cast loescht
+    -- damit auch die GCD (#125)
     { id = "loh", target = "ally", enabled = "paladin_loh_enabled",
+      breaks_cast = true,
       ready = function(_, p) return not p.loh_used end,
       effect = function(state, p, target, ev)
         local t = target or p
         -- volle effektive Max-HP (inkl. Blutpakt-Deckel, #159); der
         -- Heil-Deckel kappt, ein Krit aendert nichts
-        heal_player(state, p, t, S.effective_max_hp(t), ev)
+        heal_player(state, p, t, S.effective_max_hp(t), ev, "loh")
         p.resource = 0
         p.loh_used = true
       end },
@@ -863,6 +870,7 @@ local function try_ability(state, p, slot, ev, ally_id)
   if not S.ability_enabled(spec) then return false end -- F10-Schalter (R13)
   -- Totstellen (Runde 13, #157): wer liegt, drueckt nichts
   if state.time < (p.feign_until or 0) then return false end
+  if spec.breaks_cast and p.cast then break_cast(p) end -- Notheilung (Runde 23)
   -- Off-GCD-Faehigkeiten (Tritt, Runde 12 #140) ignorieren die globale
   -- Abklingzeit in beide Richtungen: sie warten nicht auf sie und setzen
   -- keine — sonst waere der Unterbrecher im Rotations-Takt gefangen.

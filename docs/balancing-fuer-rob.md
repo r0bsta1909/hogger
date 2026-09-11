@@ -112,6 +112,13 @@ Auch wenn die Schurken treten: ein Mensch braucht 1 bis 3 Sekunden bis zum Tritt
 
 ---
 
+### Leeroy stirbt zu schnell / zu selten (seit Runde 23 heilt er sich wie ein Paladin)
+| Regler | Richtung | Bedeutung |
+|---|---|---|
+| `leeroy_loh_hp_pct` | hoch | er drückt die Handauflegung früher; 0 = nie (Stand bis Runde 22) |
+| `leeroy_loh_react` | runter | er reagiert schneller und schafft sie öfter; 0 = sofort |
+| `leeroy_holylight_hp_pct` | hoch | er heilt sich früher mit Heiligem Licht |
+
 ## Die Fallen
 
 - **`hogger_hp_offset` läuft andersherum.** Die Formel ist `3·N² + slope·N − offset`: **offset hoch = weniger HP.** Wer ihn für einen Härte-Regler hält, dreht in die falsche Richtung. Nimm `hogger_hp_slope`.

@@ -12,6 +12,7 @@ local world = require("game.gamesim.world")
 local map = require("game.data.map")
 local grid = require("game.gamesim.grid")
 local events = require("game.gamesim.events")
+local rngmod = require("sim.rng")
 
 local L = {}
 local DT = model.TICK_DT
@@ -46,6 +47,41 @@ function L.may_march(state)
     return true
   end
   return false
+end
+
+-- Handauflegung mit Reaktionszeit (Runde 23, Rob: "manchmal nicht
+-- reaktionsschnell genug, aber doch das ein oder andere Mal"). Faellt Leeroy
+-- unter leeroy_loh_hp_pct, laeuft eine Uhr; erst danach drueckt er. Die
+-- Reaktionszeit liegt zwischen LOH_REACT_MIN und leeroy_loh_react und kommt
+-- je Leben aus einem Nebenstrom (rng.mix aus Try-Seed und Todeszaehler) —
+-- der Spielzufall (state.rng) bleibt unberuehrt (GDD 13.2). Ob er die
+-- Frist ueberlebt, entscheidet Hoggers naechster Schlag, kein Wurf.
+-- Rueckgabe: true, wenn er JETZT drueckt.
+L.LOH_REACT_MIN = 0.5
+function L.loh_ready(state, p, ai)
+  local pct = model.p("leeroy_loh_hp_pct")
+  if pct <= 0 or p.loh_used or not p.alive then
+    ai.loh_seen_t = nil
+    return false
+  end
+  if model.p("paladin_loh_enabled") < 1 then return false end
+  if p.hp >= pct * p.max_hp then
+    ai.loh_seen_t = nil
+    return false
+  end
+  local now = state.time or 0
+  if not ai.loh_seen_t then
+    ai.loh_seen_t = now
+    local maxr = model.p("leeroy_loh_react")
+    if maxr <= 0 then
+      ai.loh_react = 0
+    else
+      local r = rngmod.new(rngmod.mix(state.seed or 0, 500 + (p.deaths or 0)))
+      local lo = math.min(L.LOH_REACT_MIN, maxr)
+      ai.loh_react = lo + (maxr - lo) * r:next()
+    end
+  end
+  return now - ai.loh_seen_t >= (ai.loh_react or 0)
 end
 
 function L.decide(state, ev)
@@ -128,14 +164,18 @@ function L.decide(state, ev)
       ai.wait_t = 3
     else
       local d = world.dist(p.x, p.y, h.x, h.y)
-      if d > model.p("melee_range") * 0.9 then
+      -- Handauflegung (Runde 23) geht vor allem anderen — auch auf dem Weg.
+      -- Das Bit wechselt je Tick, damit jeder Tick eine neue Flanke ist:
+      -- ein einzelner Versuch kann an der GCD scheitern, der naechste nicht.
+      if L.loh_ready(state, p, ai) then
+        if state.tick % 2 == 0 then mask = mask + input.AB3 end
+      elseif d > model.p("melee_range") * 0.9 then
         mask = mask_towards(p.x, p.y, h.x, h.y, 6)
       else
         -- Paladin-Kit (GDD 10.3, Runde 12 #138): Siegel der Rechtschaffenheit
-        -- halten, Heiliges Licht auf sich selbst unter halben HP — mehr Plan
-        -- hat er nicht. Slot 1 = Heiliges Licht (Selbst-Fallback ueber sein
-        -- Hogger-Ziel), Slot 2 = Siegel.
-        if state.tick % 90 == 30 and p.hp < 0.5 * p.max_hp
+        -- halten, Heiliges Licht auf sich selbst unter leeroy_holylight_hp_pct
+        -- (Slot 1, Selbst-Fallback ueber sein Hogger-Ziel), Slot 2 = Siegel.
+        if state.tick % 90 == 30 and p.hp < model.p("leeroy_holylight_hp_pct") * p.max_hp
            and p.resource >= model.p("paladin_holylight_mana") then
           mask = mask + input.AB1
         elseif state.tick % 30 == 0 and (p.seal_hits or 0) == 0 then
