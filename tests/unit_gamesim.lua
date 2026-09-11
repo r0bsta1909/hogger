@@ -2809,3 +2809,109 @@ do
     T.ok(wire.EV.eat_seek ~= nil, "hunger: eat_seek steht in der Netz-Whitelist")
   end
 end
+
+-- ---------------------------------------------------------------------------
+-- Runde 23: Leeroys Paladin-Reflexe — Handauflegung unter 10 % mit Reaktionszeit
+-- ---------------------------------------------------------------------------
+do
+  local leeroy = require("game.gamesim.leeroy")
+  local function ticks(sec) return math.ceil(sec / model.TICK_DT) end
+  -- Leeroy lebend im Nahkampf, Hogger schlaegt nicht (next_auto weit weg)
+  local function welt(next_auto)
+    local st = world.new(11)
+    world.add_leeroy(st)
+    world.add_player(st, "k1", { quest_done = true })
+    world.begin_try(st, {})
+    local lp = st.players[st.leeroy_pid]
+    lp.alive, lp.ghost, lp.class = true, false, "paladin"
+    lp.max_hp, lp.hp = model.hp_for_class("paladin"), model.hp_for_class("paladin")
+    lp.resource, lp.target, lp.loh_used = 100, world.HOGGER_ID, false
+    lp.ai = { phase = "fight", wait_t = 0, try_seen = st.try_nr, screamed_try = st.try_nr,
+              last_x = lp.x, last_y = lp.y, progress_t = 0 }
+    local h = st.hogger
+    h.state, h.engaged = "combat", true
+    h.charge_cd, h.shock_cd, h.slice_cd = 999, 999, 999
+    h.next_auto = next_auto
+    h.threat[lp.id] = 100
+    lp.x, lp.y = h.x + 20, h.y
+    lp.facing = input.facing_towards(lp.x, lp.y, h.x, h.y)
+    return st, lp, h
+  end
+
+  -- Ohne fael­ligen Schlag: er kommt nach seiner Reaktionszeit zur Handauflegung
+  local st, lp = welt(999)
+  lp.hp = 8
+  local loh_ev, t_loh = nil, nil
+  for i = 1, ticks(4) do
+    for _, e in ipairs(step.step(st, {})) do
+      if e.ev == "heal" and e.art == "loh" and e.src == lp.id then loh_ev, t_loh = e, i end
+    end
+  end
+  T.ok(loh_ev ~= nil, "leeroy: Handauflegung unter 10 % HP")
+  T.eq(lp.hp, lp.max_hp, "leeroy: danach volle HP")
+  T.ok(lp.loh_used, "leeroy: Handauflegung ist verbraucht")
+  T.ok(t_loh and t_loh * model.TICK_DT >= leeroy.LOH_REACT_MIN - 0.02
+       and t_loh * model.TICK_DT <= model.p("leeroy_loh_react") + 0.05,
+    "leeroy: Reaktionszeit zwischen Minimum und leeroy_loh_react ("
+    .. string.format("%.2f", (t_loh or 0) * model.TICK_DT) .. " s)")
+  local react1 = lp.ai.loh_react
+
+  -- Mit sofort faelligem Schlag stirbt er, bevor er drueckt
+  local st2, lp2 = welt(0.05)
+  lp2.hp = 8
+  local died, loh2 = false, false
+  for _ = 1, ticks(4) do
+    for _, e in ipairs(step.step(st2, {})) do
+      if e.ev == "death" and e.src == lp2.id then died = true end
+      if e.ev == "heal" and e.art == "loh" then loh2 = true end
+    end
+  end
+  T.ok(died and not loh2, "leeroy: Hoggers naechster Schlag kommt vor der Reaktion — zu spaet")
+
+  -- Laufendes Heiliges Licht wird fuer die Handauflegung abgebrochen
+  local st3, lp3 = welt(999)
+  lp3.hp = 8
+  lp3.cast = { slot = 1, t_left = 2.0, total = 2.5 }
+  lp3.gcd = 1.5
+  local loh3 = false
+  for _ = 1, ticks(4) do
+    for _, e in ipairs(step.step(st3, {})) do
+      if e.ev == "heal" and e.art == "loh" then loh3 = true end
+    end
+  end
+  T.ok(loh3, "leeroy: die Notheilung bricht das laufende Heilige Licht ab")
+
+  -- Reaktionszeit ist seedstabil und je Leben anders
+  local st4, lp4 = welt(999)
+  lp4.hp = 8
+  for _ = 1, ticks(4) do step.step(st4, {}) end
+  T.near(lp4.ai.loh_react, react1, "leeroy: gleicher Seed -> gleiche Reaktionszeit")
+  local st5, lp5 = welt(999)
+  lp5.hp = 8; lp5.deaths = 3
+  for _ = 1, ticks(4) do step.step(st5, {}) end
+  T.ok(math.abs(lp5.ai.loh_react - react1) > 1e-6, "leeroy: anderes Leben -> andere Reaktionszeit")
+
+  -- 0 = nie: Verhalten wie bis Runde 22
+  model.params.leeroy_loh_hp_pct.wert = 0
+  local st6, lp6 = welt(999)
+  lp6.hp = 8
+  local loh6 = false
+  for _ = 1, ticks(4) do
+    for _, e in ipairs(step.step(st6, {})) do
+      if e.ev == "heal" and e.art == "loh" then loh6 = true end
+    end
+  end
+  T.ok(not loh6, "leeroy: leeroy_loh_hp_pct 0 schaltet die Handauflegung ab")
+  model.params.leeroy_loh_hp_pct.wert = model.defaults.leeroy_loh_hp_pct
+
+  -- Heiliges Licht folgt der neuen Schwelle
+  local st7, lp7 = welt(999)
+  lp7.hp = 0.4 * lp7.max_hp
+  local hl = false
+  for _ = 1, ticks(5) do
+    for _, e in ipairs(step.step(st7, {})) do
+      if e.ev == "heal" and e.src == lp7.id and not e.art then hl = true end
+    end
+  end
+  T.ok(hl, "leeroy: Heiliges Licht unter leeroy_holylight_hp_pct")
+end

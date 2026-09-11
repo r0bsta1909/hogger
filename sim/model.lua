@@ -370,6 +370,15 @@ M.params = {
   leeroy_threat_factor   = p(0.5, 0.1, 1.0, 0.05, "10"),
   leeroy_kragen_trys     = p(3, 1, 10, 1, "10"),
   leeroy_stuck_timeout   = p(5, 1, 15, 1, "10"),
+  -- Leeroys Paladin-Reflexe (Runde 23, Rob): Heiliges Licht auf sich selbst
+  -- unter diesem HP-Anteil (stand bis dahin fest im Code), Handauflegung
+  -- unter leeroy_loh_hp_pct (0 = nie) — aber mit menschlicher Reaktionszeit
+  -- zwischen 0,5 s und leeroy_loh_react (je Leben aus einem Nebenstrom
+  -- gezogen, 0 = sofort). Ob er sie ueberlebt, entscheidet Hoggers naechster
+  -- Schlag, kein Wurf: "manchmal nicht reaktionsschnell genug".
+  leeroy_holylight_hp_pct = p(0.50, 0, 1.0, 0.05, "10"),
+  leeroy_loh_hp_pct      = p(0.10, 0, 0.5, 0.05, "10"),
+  leeroy_loh_react       = p(2.0, 0, 5.0, 0.1, "10"),
   -- Try-Start-Bedingung (GDD 10.3): Leeroys allererster Anmarsch wartet auf
   -- die erste angenommene Quest auf dem Realm — sonst rennt er los, waehrend
   -- sein Echo noch redet (Playtest 2026-08-16). Notbremse, falls niemand

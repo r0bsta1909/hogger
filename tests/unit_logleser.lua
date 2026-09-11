@@ -272,3 +272,23 @@ do
   for _, hnt in ipairs(hints) do if hnt:find("Hunger%-Lauf") then warned = true end end
   T.ok(not warned, "logleser: ein Lauf von zwei Mahlzeiten loest keinen Hinweis aus")
 end
+
+-- Runde 23: Leeroys Handauflegung (heal mit art loh, Spieler 1) wird gezaehlt
+do
+  local L = {}
+  local function add(...) L[#L + 1] = ev(...) end
+  add(0, "try_start", "host", "1", 5)
+  add(0, "param_change", "init", "leeroy_loh_hp_pct", 0.1)
+  add(0, "revive", "1", "paladin", 0)
+  add(0, "revive", "2", "paladin", 0)
+  add(300, "heal", "1", "1", 95, false, "loh")
+  add(400, "heal", "2", "2", 60, false, "loh")   -- ein Spieler-Paladin: zaehlt nicht
+  add(600, "death", "1", nil, 1, nil)
+  add(2400, "revive", "1", "paladin", 0)
+  add(6000, "try_end", "host", "0", 1)
+  local r = logreport.analyse(lines_of(L))
+  T.eq(r.sum.leeroy_loh, 1, "logleser: Leeroys Handauflegung gezaehlt, fremde nicht")
+  T.eq(r.sum.leeroy_lives, 2, "logleser: Leeroys Leben gezaehlt")
+  local text = logreport.render(r, "x.jsonl", nil)
+  T.ok(text:find("Leeroys Handauflegung | 1 in 2 Leben", 1, true), "logleser: Zeile im Bericht")
+end

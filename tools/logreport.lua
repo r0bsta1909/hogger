@@ -140,6 +140,7 @@ function M.analyse_events(next_event)
       if dst == "seed" then seed = e.val else params[dst] = e.val end
     elseif cur then
       if e.ev == "revive" then
+        if src == "1" then cur.leeroy_lives = (cur.leeroy_lives or 0) + 1 end
         class_of[src] = dst or class_of[src]
         alive[src] = true
         alive_since[src] = e.t
@@ -181,6 +182,10 @@ function M.analyse_events(next_event)
       elseif e.ev == "heal" then
         cur.heal = cur.heal + (e.val or 0)
         if dst then cur.last_heal_t[dst] = e.t end
+        -- Leeroys Handauflegung (Runde 23): art = loh, Leeroy ist Spieler 1
+        if e.art == "loh" and src == "1" then
+          cur.leeroy_loh = (cur.leeroy_loh or 0) + 1
+        end
       elseif e.ev == "eat_seek" then
         -- Heisshunger (Runde 23): Fressen ohne Leiche in Reichweite — er
         -- laeuft erst hin. Viele Laeufe heissen: der Raid stirbt weit weg
@@ -242,6 +247,7 @@ function M.analyse_events(next_event)
 
   -- Summen
   local sum = { deaths = 0, eat_start = 0, eat_heal = 0, eat_seek = 0,
+                leeroy_loh = 0, leeroy_lives = 0,
                 eat_interrupt = 0, eat_complete = 0,
                 complete_with_rogue = 0, dmg_hogger = 0, dmg_mobs = 0,
                 charges = 0, charges_dodged = 0, heal_aggro = 0, crit_kills = 0,
@@ -395,6 +401,11 @@ function M.render(r, quelle, defaults)
     r.sum.complete_with_rogue, r.sum.eat_complete)
   w("| Hunger-Laeufe (keine Leiche in Reichweite, er lief hin) | %d | Runde 23: viele heisst, der Raid stirbt weit weg oder kitet |",
     r.sum.eat_seek)
+  if r.sum.leeroy_lives > 0 then
+    w("| Leeroys Handauflegung | %d in %d Leben | Runde 23: er drueckt sie unter %s HP mit Reaktionszeit — manchmal zu spaet |",
+      r.sum.leeroy_loh, r.sum.leeroy_lives,
+      r.params.leeroy_loh_hp_pct and string.format("%.0f %%", r.params.leeroy_loh_hp_pct * 100) or "der Schwelle")
+  end
   w("| Ablenkung: Schaden an Mobs statt Hogger | %s | unter 10 %% (GDD 13.4) |",
     dmg_all > 0 and pct(r.sum.dmg_mobs / dmg_all) or "-")
   w("| Tode je Try | %.1f | Wipes sind gewollt, Dauersterben nicht |",
