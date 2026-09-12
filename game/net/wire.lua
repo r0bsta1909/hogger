@@ -438,6 +438,10 @@ function W.snapshot_body(state)
     -- Gesetzt wird das Flag in der Simulation (step.in_combat), hier reist
     -- es nur mit.
     if p.in_combat then flags3 = flags3 + 32 end
+    -- Bit 7 (Runde 24): im Rueckstoss-Flug. Der Client braucht es nicht zum
+    -- Zeichnen (die Position reist ohnehin), sondern damit Rebase + Replay
+    -- seine gehaltene Taste nicht gegen den Flug vorspielt und zittert.
+    if p.knock then flags3 = flags3 + 64 end
     -- Bedrohungsanteil (Runde 14, #174): eigener Wert geteilt durch die
     -- Spitzenbedrohung, als ein Byte. Der Client zeichnet daraus seinen
     -- Bogen und braucht die Tabelle nie zu sehen.
@@ -563,6 +567,7 @@ function W.read_snapshot(data, off)
       pact = flags3 % 16 >= 8,           -- Blutpakt-Aura (#159)
       weak_soul = flags3 % 32 >= 16,     -- Schwache Seele (#156)
       in_combat = flags3 % 64 >= 32,     -- im Kampf (Runde 14, #169)
+      knocked = flags3 % 128 >= 64,      -- Rueckstoss-Flug (Runde 24)
       cp = cp,
       x = px, y = py, hp = php, resource = pres / 255 * 100,
       facing = pfacing, target = ptarget, progress = pprog / 255,

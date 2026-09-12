@@ -85,6 +85,9 @@ local function new_try(nr, n, tick)
     eat_start = 0, eat_heal = 0, eat_seek = 0,
     eat_interrupt = 0, eat_complete = 0, complete_with_rogue = 0,
     charges = 0, charges_dodged = 0, crit_kills = 0, heal_aggro = 0, class_changes = 0,
+    -- Runde 24: Rundumschlaege, Getroffene, wer beim Telegraph im Ring stand
+    -- (Ausweichquote am Ring) und wen es je Spieler traf
+    shocks = 0, shock_hits = 0, shock_in_ring = 0, shock_hit_by = {},
     interrupts_by = {}, dmg_by = {}, deaths_by = {}, last_heal_t = {},
     -- Runde 20: Lebensdauer je Leben (Wiederbelebung -> Tod, Sekunden) —
     -- die Messgroesse hinter F7 ("wiederbeleben, um sofort zu sterben")
@@ -221,6 +224,19 @@ function M.analyse_events(next_event)
         cur.charges = cur.charges + 1
         -- Runde 21: val = 0 heisst verfehlt (ausgewichen), sonst getroffen
         if tonumber(e.val) == 0 then cur.charges_dodged = cur.charges_dodged + 1 end
+      elseif e.ev == "shockwave" then
+        -- Runde 24, vier Zeilenformen (GDD 17.3): ohne dst Telegraph (val -1)
+        -- bzw. Summe (val = Getroffene); mit dst je Spieler im Ring beim
+        -- Telegraph (val -1) bzw. je Getroffenem (val = Abstand)
+        local v = tonumber(e.val) or 0
+        if dst == nil then
+          if v < 0 then cur.shocks = cur.shocks + 1
+          else cur.shock_hits = cur.shock_hits + v end
+        elseif v < 0 then
+          cur.shock_in_ring = cur.shock_in_ring + 1
+        else
+          cur.shock_hit_by[dst] = (cur.shock_hit_by[dst] or 0) + 1
+        end
       elseif e.ev == "crit_kill" then
         cur.crit_kills = cur.crit_kills + 1
       elseif e.ev == "hogger_reset" then
@@ -251,9 +267,10 @@ function M.analyse_events(next_event)
                 eat_interrupt = 0, eat_complete = 0,
                 complete_with_rogue = 0, dmg_hogger = 0, dmg_mobs = 0,
                 charges = 0, charges_dodged = 0, heal_aggro = 0, crit_kills = 0,
+                shocks = 0, shock_hits = 0, shock_in_ring = 0,
                 class_changes = 0 }
   local lifetimes, kick_latencies = {}, {}
-  local causes, dmg_by, int_by, deaths_by = {}, {}, {}, {}
+  local causes, dmg_by, int_by, deaths_by, shock_by = {}, {}, {}, {}, {}
   local wins, aborts, total_time, win_durations = 0, 0, 0, {}
   for _, t in ipairs(trys) do
     if t.won then wins = wins + 1; win_durations[#win_durations + 1] = t.dauer or 0 end
@@ -264,6 +281,7 @@ function M.analyse_events(next_event)
     for p, v in pairs(t.dmg_by) do dmg_by[p] = (dmg_by[p] or 0) + v end
     for p, v in pairs(t.interrupts_by) do int_by[p] = (int_by[p] or 0) + v end
     for p, v in pairs(t.deaths_by) do deaths_by[p] = (deaths_by[p] or 0) + v end
+    for p, v in pairs(t.shock_hit_by) do shock_by[p] = (shock_by[p] or 0) + v end
     for _, v in ipairs(t.lifetimes) do lifetimes[#lifetimes + 1] = v end
     for _, v in ipairs(t.kick_latencies) do kick_latencies[#kick_latencies + 1] = v end
   end
@@ -280,7 +298,8 @@ function M.analyse_events(next_event)
 
   return {
     trys = trys, sum = sum, causes = causes, dmg_by = dmg_by,
-    interrupts_by = int_by, deaths_by = deaths_by, class_of = class_of,
+    interrupts_by = int_by, deaths_by = deaths_by, shock_hit_by = shock_by,
+    class_of = class_of,
     params = params, seed = seed, wins = wins, aborts = aborts,
     total_time = total_time, win_durations = win_durations,
     lifetimes = lifetimes, kick_latencies = kick_latencies,
@@ -336,6 +355,10 @@ function M.hints(r)
     out[#out + 1] = "Die Siegtrys dauern zu lang: hogger_hp_slope runter."
   elseif md and md < 6 * 60 then
     out[#out + 1] = "Die Siegtrys gehen zu schnell: hogger_hp_slope hoch."
+  end
+  if r.sum.shocks >= 5 and r.sum.shock_in_ring > 0
+     and 1 - r.sum.shock_hits / r.sum.shock_in_ring < 0.2 then
+    out[#out + 1] = "Kaum jemand tritt aus dem roten Ring: hogger_shock_windup hoch (mehr Zeit zum Austreten)."
   end
   if eat_total > 0 and r.sum.eat_interrupt / eat_total < 0.5 then
     out[#out + 1] = "Das Fressen wird selten unterbrochen — fehlen Schurken, oder kommt der Tritt nicht an? (rogue_kick_cd, rogue_kick_energy)"
@@ -415,6 +438,14 @@ function M.render(r, quelle, defaults)
   w("| Charges je Try | %.1f | davon ausgewichen: %s (Runde 21: die Ziellinie im Anlauf verlassen) |",
     r.sum.charges / r.n_try,
     r.sum.charges > 0 and pct(r.sum.charges_dodged / r.sum.charges) or "-")
+  -- Runde 24: der Rundumschlag — Getroffene je Stoss und die Ausweichquote am
+  -- Ring (wer beim Telegraph drinstand und beim Stoss nicht mehr). Alte Logs
+  -- ohne Ring-Zeilen zeigen "-".
+  w("| Rundumschlaege je Try | %.1f | Getroffene je Stoss: %s, am Ring ausgewichen: %s (Runde 24) |",
+    r.sum.shocks / r.n_try,
+    r.sum.shocks > 0 and string.format("%.1f", r.sum.shock_hits / r.sum.shocks) or "-",
+    r.sum.shock_in_ring > 0
+      and pct(math.max(0, 1 - r.sum.shock_hits / r.sum.shock_in_ring)) or "-")
   w("| Toedliche Krits | %d | |", r.sum.crit_kills)
   -- Runde 20 (F7): wie lange lebt man nach der Wiederbelebung, und wie oft
   -- stirbt man gleich wieder? Dazu, was das Fressen zurueckholt.
@@ -495,6 +526,7 @@ function M.render(r, quelle, defaults)
   top(r.dmg_by, "Schaden je Spieler", "Schaden", "%.0f")
   top(r.interrupts_by, "Unterbrechungen je Spieler (der Tritt)", "Tritte", "%d")
   top(r.deaths_by, "Tode je Spieler", "Tode", "%d")
+  top(r.shock_hit_by, "Vom Rundumschlag getroffen je Spieler", "Treffer", "%d")
 
   if next(r.causes) then
     local list = {}

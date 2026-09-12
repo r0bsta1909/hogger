@@ -2593,16 +2593,46 @@ do
   mid.cast = { slot = 1, t_left = 1, total = 2 }
   local d_near0 = world.dist(near.x, near.y, h.x, h.y)
   local d_far0 = world.dist(far.x, far.y, h.x, h.y)
-  local hit_ev
+  -- Runde 24: je Spieler im Ring eine Telegraph-Zeile mit dst (val -1)
+  local ring = {}
+  for _, e in ipairs(evs) do
+    if e.ev == "shockwave" and e.dst and e.val == -1 then ring[e.dst] = true end
+  end
+  T.ok(ring[near.id] and ring[mid.id] and not ring[far.id],
+    "schock: Ring-Zeilen beim Telegraph fuer near und mid, nicht fuer far")
+  local hit_ev, hit_by = nil, {}
   for _ = 1, ticks(model.p("hogger_shock_windup")) + 1 do
     for _, e in ipairs(step.step(st, {})) do
-      if e.ev == "shockwave" and (e.val or -1) >= 0 then hit_ev = e end
+      if e.ev == "shockwave" and (e.val or -1) >= 0 then
+        if e.dst then hit_by[e.dst] = e.val else hit_ev = e end
+      end
     end
   end
   T.ok(hit_ev ~= nil and hit_ev.val == 2, "schock: zwei im Radius getroffen (" .. tostring(hit_ev and hit_ev.val) .. ")")
+  T.ok(hit_by[near.id] ~= nil and hit_by[mid.id] ~= nil and hit_by[far.id] == nil,
+    "schock: je Getroffenem eine Zeile mit dst (Runde 24)")
+  T.near(hit_by[near.id] or 0, 20, "schock: Trefferzeile traegt den Abstand zu Hogger")
   T.eq(h.shock, nil, "schock: der Stoss ist vorbei")
+  -- Runde 24: kein Teleport mehr — einen Tick nach dem Stoss ist er noch
+  -- unterwegs (Flugzustand, unter der halben Strecke) ...
+  T.ok(near.knock ~= nil, "schock: der Nahkaempfer ist im Flug (knock gesetzt)")
+  T.ok(world.dist(near.x, near.y, h.x, h.y) < d_near0 + model.p("hogger_shock_knockback") * 0.5,
+    "schock: einen Tick spaeter noch nicht am Ziel")
+  -- ... und Eingabe GEGEN die Flugrichtung aendert nichts: er landet trotzdem
+  -- auf der vollen Strecke, und der Abstand waechst je Tick (Ease-out)
+  local d_prev = world.dist(near.x, near.y, h.x, h.y)
+  local monotone = true
+  for _ = 1, ticks(model.p("hogger_shock_fly_time")) + 1 do
+    local in_flight = near.knock ~= nil
+    step.step(st, { [near.id] = { mask = input.LEFT } })
+    local dn = world.dist(near.x, near.y, h.x, h.y)
+    if in_flight and dn < d_prev - 1e-6 then monotone = false end
+    d_prev = dn
+  end
+  T.ok(monotone, "schock: der Abstand waechst im Flug je Tick, nie rueckwaerts")
+  T.eq(near.knock, nil, "schock: nach der Flugzeit gelandet")
   T.ok(world.dist(near.x, near.y, h.x, h.y) >= d_near0 + model.p("hogger_shock_knockback") * 0.8,
-    "schock: der Nahkaempfer fliegt zurueck")
+    "schock: der Nahkaempfer fliegt zurueck — auch mit Taste gegen den Flug")
   T.near(world.dist(far.x, far.y, h.x, h.y), d_far0, "schock: der Fernkaempfer bleibt")
   T.ok(model.p("hogger_shock_dmg") == 0 and near.hp == near.max_hp or near.hp < near.max_hp,
     "schock: Schaden nur, wenn hogger_shock_dmg > 0 (Standard 0: nur Bewegung)")
@@ -2637,6 +2667,47 @@ do
   for _ = 1, 60 do step.step(st3, {}) end
   T.eq(h3.shock, nil, "schock: hogger_shock_cd 0 schaltet ab")
   model.params.hogger_shock_cd.wert = saved
+
+  -- Runde 24: hogger_shock_fly_time 0 = sofortiger Versatz wie bis Runde 23
+  local sf = model.params.hogger_shock_fly_time.wert
+  model.params.hogger_shock_fly_time.wert = 0
+  local st5, h5, n5 = shock_world()
+  step.step(st5, {})
+  local d5 = world.dist(n5.x, n5.y, h5.x, h5.y)
+  for _ = 1, ticks(model.p("hogger_shock_windup")) + 1 do step.step(st5, {}) end
+  T.eq(n5.knock, nil, "schock: fly_time 0 -> kein Flugzustand")
+  T.ok(world.dist(n5.x, n5.y, h5.x, h5.y) >= d5 + model.p("hogger_shock_knockback") * 0.8,
+    "schock: fly_time 0 -> sofort am Ziel (alter Stand)")
+  model.params.hogger_shock_fly_time.wert = sf
+
+  -- Runde 24: Tod im Flug loescht den Flug; knockback() direkt geprueft
+  local st6, h6, n6 = shock_world()
+  h6.shock_cd = 999 -- kein Telegraph dazwischen: Hogger soll einfach zuschlagen
+  step.knockback(n6, 1, 0, 5, 3.0) -- kurzer, langer Flug: bleibt in Schlagweite
+  T.ok(n6.knock ~= nil and n6.knock.x1 > n6.x, "knockback: Flug nach rechts angelegt")
+  n6.hp = 1
+  for _ = 1, 150 do if n6.alive then step.step(st6, {}) end end
+  T.ok(not n6.alive, "knockback: das Testobjekt ist gestorben")
+  T.eq(n6.knock, nil, "knockback: der Tod loescht den Flug")
+
+  -- Runde 24: die Charge fliegt genauso (hogger_charge_fly_time)
+  local st7, h7, n7, m7, f7 = shock_world()
+  h7.shock_cd = 999
+  h7.charge_cd = 0
+  local fx0 = f7.x
+  local charged
+  for _ = 1, ticks(model.p("hogger_charge_windup")) + 3 do
+    for _, e in ipairs(step.step(st7, {})) do
+      if e.ev == "charge" and e.val == 1 then charged = e end
+    end
+    if charged then break end
+  end
+  T.ok(charged ~= nil and charged.dst == f7.id, "charge: trifft far")
+  T.ok(f7.knock ~= nil, "charge: der Getroffene ist im Flug (Runde 24)")
+  for _ = 1, ticks(model.p("hogger_charge_fly_time")) + 1 do step.step(st7, {}) end
+  T.eq(f7.knock, nil, "charge: gelandet")
+  T.ok(f7.x >= fx0 + model.p("hogger_charge_knockback") * 0.8,
+    "charge: volle Rueckstoss-Strecke nach dem Flug")
 
   -- kein Krit auf den Stoss
   T.ok(not model.can_crit("shock"), "13.2 der Rundumschlag kann NICHT kritten")

@@ -118,6 +118,11 @@ M.params = {
   hogger_shock_knockback = p(150, 0, 300, 10, "9.2"),
   hogger_shock_dmg       = p(0, 0, 40, 1, "9.2"),  -- Rob: Bewegung, kein Schaden (F7 bei N=5)
   hogger_shock_charge    = p(1, 0, 1, 1, "9.2"),
+  -- Flug statt Teleport (Runde 24, Rob: "man sieht den Knockback nicht"):
+  -- der Rueckstoss reist ueber diese Zeit, Eingabe ist waehrenddessen
+  -- gesperrt (man fliegt). 0 = sofortiger Versatz (Stand Runde 22/23).
+  hogger_shock_fly_time  = p(0.35, 0, 1.0, 0.05, "9.2"),
+  hogger_charge_fly_time = p(0.35, 0, 1.0, 0.05, "9.2"),
 
   -- Fressen (GDD 9.2)
   eat_cd                 = p(20, 5, 60, 1, "9.2"),
