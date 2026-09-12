@@ -117,4 +117,24 @@ function A.draw(id, x, y, scale, alpha)
   love.graphics.draw(img, x, y, 0, sc, sc, iw / 2, ih / 2)
 end
 
+-- Icon als Kreisausschnitt (Runde 24, Rob: "die neuen Grafiken sind eckig
+-- und im Spiel rund dargestellt"): Original-Zaubericons sind Quadrate; die
+-- runden Buttons am Ring und das Portrait legten sie bisher unbeschnitten
+-- ueber einen gezeichneten Kreis, die Ecken standen ueber den Rand. Hier
+-- fuellt das Bild den Kreis mit Radius r ganz (Kante = 2r), der Ueberstand
+-- wird per Stencil abgeschnitten. Die PNGs bleiben quadratisch — Rob
+-- liefert weiter wie bisher. Der Stencil-Puffer wird ueberschrieben
+-- ("replace"): nur ausserhalb eines aktiven Stencil-Tests aufrufen (die
+-- Minimap hebt ihren auf, bevor HUD und Buttons gezeichnet werden).
+function A.draw_round(id, x, y, r, alpha)
+  local img = A.get(id)
+  local iw, ih = img:getDimensions()
+  local sc = (2 * r) / math.min(iw, ih)
+  love.graphics.stencil(function() love.graphics.circle("fill", x, y, r) end, "replace", 1)
+  love.graphics.setStencilTest("greater", 0)
+  love.graphics.setColor(1, 1, 1, alpha or 1)
+  love.graphics.draw(img, x, y, 0, sc, sc, iw / 2, ih / 2)
+  love.graphics.setStencilTest()
+end
+
 return A

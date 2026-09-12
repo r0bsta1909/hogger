@@ -1902,7 +1902,7 @@ function R:draw(view, ui)
     love.graphics.setColor(0.16, 0.15, 0.13, 1)
     love.graphics.circle("fill", px, py, 19)
     if u.icon then
-      assets.draw(u.icon, px, py, 32 / assets.size(u.icon))
+      assets.draw_round(u.icon, px, py, 19) -- kreisrund (Runde 24)
     else
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.print(u.rk or "?", px - 5, py - 8)
@@ -2231,7 +2231,9 @@ function R:draw(view, ui)
       love.graphics.setColor(0.10, 0.09, 0.07, 0.95)
       love.graphics.circle("fill", x, y, BR)
       local icon = ABILITY_ICON[entry.spec.id]
-      if icon then assets.draw(icon, x, y, (BR * 1.7) / assets.size(icon)) end
+      -- Runde 24: kreisrund zugeschnitten, 1 px unter dem 2-px-Ring — die
+      -- quadratischen Original-Icons standen sonst mit den Ecken ueber
+      if icon then assets.draw_round(icon, x, y, BR - 1) end
       -- Cooldown-Sweep im Uhrzeigersinn (Original-Verhalten)
       local cd = entry.slot and ui.cooldowns and ui.cooldowns[entry.slot] or 0
       if cd > 0 then
