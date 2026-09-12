@@ -420,6 +420,12 @@ Sonderfall, der bei jeder weiteren Socket-Szene neu gebaut werden müsste.
   zu knapp: derselbe Test lief lokal durch und riss auf dem macOS-Runner die 150-s-Frist mit
   32 statt > 50 Treffern. Das sieht wie ein Flake aus, ist aber eine Messgröße mit falscher
   Einheit — Zeit statt Fortschritt.
+- **[gemessen] Ein Agent mit Entscheidungsraster hat einen Cache — der Test muss das Raster
+  kennen.** Bots, die nur alle N Ticks neu entscheiden und dazwischen ihre letzte Maske
+  halten, liefern auf einen frisch gesetzten Zustand die **alte** Antwort. Ein Test, der den
+  Zustand setzt und sofort `decide` ruft, prüft damit nichts und wird erst rot, wenn jemand
+  das Raster ändert. Im Test den Tick um das Raster vorrücken (oder den Cache löschen) und
+  beides in derselben Zeile sichtbar machen, sonst sucht der Nächste den Fehler im Verhalten.
 - Paketverlust simulieren: Windows `clumsy`, macOS `dnctl/pfctl`, Linux `tc netem`.
 
 ## 9. Betrieb (LAN-Party-Realität)
@@ -583,6 +589,21 @@ Programmierung vollständig von der Kunst — beides ist sonst gegenseitig block
   einem 16:10-Fenster verliert bei `cover` oben und unten Streifen — also genau dort, wo Logo und
   Ladebalken sitzen. Schwarzer Rand ist hässlicher als nichts und besser als abgeschnitten. Solche
   Slots im Manifest als „mindestens"-Maß kennzeichnen, damit der Validator sie anders behandelt.
+- **[gemessen] Ein quadratisches Bild in einem runden Rahmen braucht einen Zuschnitt, keinen
+  Hintergrundkreis.** Die üblichen Icon-Quellen liefern Quadrate; runde Buttons und Portraits
+  entstehen im Code aus einem gefüllten Kreis, dem Bild darüber und einem Ring darauf. Das
+  sieht bei Platzhaltern gut aus (die sind selbst rund gezeichnet) und fällt beim ersten
+  echten Export auf: Die Diagonale eines Quadrats ist **41 % länger als seine Kante** — ein
+  Bild, dessen Kante schon dem Kreisdurchmesser entspricht, steht mit vier Ecken über
+  Hintergrund und Ring hinaus. Der Nutzer meldet das als „die Grafiken sind eckig, im Spiel
+  aber rund". Lösung sind zehn Zeilen und **keine** Änderung an den gelieferten Dateien: ein
+  Zeichenhelfer, der per Stencil einen Kreis maskiert, das Bild auf `2r / min(Breite, Höhe)`
+  skaliert (Kreis voll gefüllt, Überstand abgeschnitten) und den Stencil-Test danach wieder
+  aufhebt. Zwei Fallen: der Stencil-Puffer ist global — den Helfer nie **innerhalb** eines
+  schon aktiven Stencil-Tests aufrufen (bei uns maskiert die Minimap selbst, das HUD wird
+  danach gezeichnet); und ein Zeichentest, der nur auf Ausnahmen prüft, bemerkt eine falsche
+  Maske nicht — die Abdeckung beweist man, indem man vorübergehend einen Fehler in den Helfer
+  setzt und zählt, wie viele Zeichenläufe rot werden (bei uns 158 von 181).
 - Dateinamen strikt klein, keine Umlaute, keine Leerzeichen; Zeilenenden per `.gitattributes` auf
   LF erzwingen. Beides sind Fallen, die ausschließlich auf der jeweils anderen Plattform zünden.
 
@@ -670,3 +691,31 @@ Bautag verbrauchte 98 % eines Monatskontingents.
   alles andere lag im Rauschen — und zwei Basisläufe mit verschiedenen Seeds lagen 12,5 pp
   auseinander. Ohne den zweiten Basislauf hätte man die −14 pp einer Pflege-Fähigkeit für
   ein Ergebnis gehalten.
+- **[gemessen] Eine Zustandsänderung in einem einzigen Tick existiert für das Auge nicht.**
+  Der Rückstoß des Bosses setzte die Spielerposition um 150 px in einem Tick — mechanisch
+  korrekt, im Log nachweisbar (24 Stöße mit je 1–6 Getroffenen), und der Spieler meldete
+  „der Knockback funktioniert nicht oder man sieht es nicht". Ein Sprung von 150 px ist im
+  Gewühl nicht von einem Netzruckler zu unterscheiden, und die Gegner-KI stand eine Sekunde
+  später wieder da, wo sie war. Die Reparatur gehört **in die Simulation**, nicht in den
+  Client: der Getroffene reist über eine Flugzeit (~0,35 s, Ease-out) auf **dieselbe**
+  Endposition, und seine Eingabe ist währenddessen gesperrt — dann tragen die Snapshots die
+  Bewegung von selbst, und es gibt keine zweite Zeitbasis (§3). Drei Details, die dazugehören:
+  die Endposition **vorab** berechnen und den Flug daraus interpolieren (dann ist das Ergebnis
+  bitgleich mit dem alten Sprung und die Tests bleiben vergleichbar); ein Bit im Snapshot
+  „fliegt gerade", damit die Client-Vorhersage die gehaltene Taste nicht gegen den Flug
+  spielt; und die Bots brauchen eine Aufstehpause, sonst kleben sie nach der Landung sofort
+  wieder am Boss und der Stoß schafft messbar keinen Raum. Gemessen: balancing-neutral
+  (gepaarter Rasterpunkt im Rauschen), reiner Wahrnehmungsgewinn.
+- **[gemessen] Ein Ereignis ohne Adressat beantwortet die Frage nicht, die abends gestellt
+  wird.** Das Flächen-Ereignis trug nur die **Zahl** der Getroffenen. Damit ließ sich weder
+  beantworten „hat es mich je erwischt?" (die Frage des Spielers) noch „weichen Menschen
+  aus?" (die Frage des Balancings) — und der Client konnte keinen Treffer-Text am Opfer
+  zeigen, weil er die Opfer nicht kannte. Regel: Ein Ereignis, das mehrere trifft, bekommt
+  **eine Zeile je Betroffenem** (Adressat + Kennzahl, z. B. Abstand) und behält die
+  Summenzeile daneben; unterschieden wird am leeren Adressfeld. Kostenlos wird daraus eine
+  Ausweichquote, wenn zusätzlich beim **Beginn** des Telegraphs je Spieler in der Gefahrenzone
+  eine Zeile fällt: „stand drin" gegen „wurde getroffen" ist die Quote, ohne ein einziges
+  neues Ereignis-Schlüsselwort. Fallen dabei: der Client muss die Summenzeile am leeren
+  Adressfeld erkennen, sonst spielt er den Sound N+1-mal im selben Frame; und wer die
+  Adressfelder über das Netz quantisiert, bekommt für „niemand" einen Zahlenwert (bei uns
+  255) statt `nil` — beide Schreibweisen prüfen.
