@@ -292,3 +292,41 @@ do
   local text = logreport.render(r, "x.jsonl", nil)
   T.ok(text:find("Leeroys Handauflegung | 1 in 2 Leben", 1, true), "logleser: Zeile im Bericht")
 end
+
+-- Runde 24: der Rundumschlag im Log — vier Zeilenformen (GDD 17.3):
+-- Telegraph (dst nil, val -1), je Spieler im Ring (dst, val -1), je
+-- Getroffenem (dst, val = Abstand), Summe (dst nil, val = Getroffene)
+do
+  local L = {}
+  local function add(...) L[#L + 1] = ev(...) end
+  add(0, "try_start", "host", "1", 5)
+  add(0, "revive", "2", "warrior", 0)
+  add(0, "revive", "3", "rogue", 0)
+  add(100, "shockwave", "hogger", nil, -1)
+  add(100, "shockwave", "hogger", "2", -1)
+  add(100, "shockwave", "hogger", "3", -1)
+  add(148, "shockwave", "hogger", "2", 30)
+  add(148, "shockwave", "hogger", nil, 1)
+  add(6000, "try_end", "host", "0", 1)
+  local r = logreport.analyse(lines_of(L))
+  T.eq(r.sum.shocks, 1, "logleser: Rundumschlaege gezaehlt")
+  T.eq(r.sum.shock_hits, 1, "logleser: Getroffene aus der Summenzeile")
+  T.eq(r.sum.shock_in_ring, 2, "logleser: zwei standen beim Telegraph im Ring")
+  T.eq(r.shock_hit_by["2"], 1, "logleser: Treffer je Spieler")
+  T.eq(r.shock_hit_by["3"], nil, "logleser: der Ausweicher hat keinen Treffer")
+  local text = logreport.render(r, "x.jsonl", nil)
+  T.ok(text:find("am Ring ausgewichen: 50", 1, true), "logleser: Ausweichquote am Ring 50 %")
+  T.ok(text:find("Vom Rundumschlag getroffen je Spieler", 1, true), "logleser: Treffertabelle im Bericht")
+
+  -- altes Log (nur Summenzeilen, Runde 22/23): Quote unbekannt, kein Absturz
+  local L2 = {}
+  local function add2(...) L2[#L2 + 1] = ev(...) end
+  add2(0, "try_start", "host", "1", 5)
+  add2(100, "shockwave", "hogger", nil, -1)
+  add2(148, "shockwave", "hogger", nil, 3)
+  add2(6000, "try_end", "host", "0", 1)
+  local r2 = logreport.analyse(lines_of(L2))
+  T.eq(r2.sum.shock_hits, 3, "logleser: altes Log zaehlt die Summe")
+  local text2 = logreport.render(r2, "y.jsonl", nil)
+  T.ok(text2:find("am Ring ausgewichen: -", 1, true), "logleser: altes Log ohne Ring-Zeilen zeigt '-'")
+end

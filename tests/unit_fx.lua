@@ -52,3 +52,15 @@ do
   T.eq(#r.fx, 0, "Effekte laufen nach einer Sekunde aus")
   T.eq(r.hurt, 0, "Trefferrand klingt ab")
 end
+
+-- Runde 24: der Rundumschlag platzt — eigener Effekt mit Weltradius
+do
+  local r = render.new()
+  r:add_shock_fx(10, 20, 80)
+  local f = r.fx[1]
+  T.eq(f.form, "shockburst", "Rundumschlag-Effekt hat die Form shockburst")
+  T.eq(f.radius, 80, "Rundumschlag-Effekt traegt den Schlagradius")
+  T.ok(f.col[1] > 0.9 and f.col[3] < 0.4, "Rundumschlag-Effekt ist rot")
+  for _ = 1, 70 do r:add_shock_fx(0, 0, 80) end
+  T.ok(#r.fx <= 61, "Rundumschlag-Effekt haelt den Effekt-Deckel")
+end

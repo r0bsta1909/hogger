@@ -45,7 +45,8 @@ M.SKIP = {}
 M.SKIP_KEYS = { "shout", "taunt", "seal", "loh", "raptor", "feign", "evis",
                 "pws", "frostarmor", "imp", "roots", "kick", "reserve",
                 "needclass", "npc", "dodge", "nova", "drain", "shockdodge",
-                "seekfollow" } -- seekfollow: Kicker folgt dem Hunger-Lauf nicht
+                "seekfollow", -- seekfollow: Kicker folgt dem Hunger-Lauf nicht
+                "knockwait" } -- knockwait: keine Aufstehpause nach dem Flug (Runde 24)
 
 local HEALER = { paladin = true, priest = true, druid = true }
 local CASTER = { priest = true, mage = true, warlock = true, druid = true }
@@ -429,6 +430,25 @@ local function decide_typisch(state, p, brain)
     end
   else
     brain.shock_seen_t = nil
+  end
+
+  -- Aufstehen (Runde 24, Rob: der Stoss soll sichtbar Raum schaffen): wer
+  -- geflogen ist, braucht einen Moment, bevor er zurueckrennt — dieselbe
+  -- Reaktionszeit wie bei der Charge, KEIN neuer Zufallszug (der wuerde
+  -- alle Bot-Reaktionen verschieben und den gepaarten Rasterpunkt entwerten).
+  -- Im Flug selbst ist die Eingabe ohnehin gesperrt; der Bot schaut nur.
+  if p.knock then
+    brain.knocked = true
+    return { mask = 0, facing = input.facing_towards(p.x, p.y, h.x, h.y) }
+  elseif brain.knocked then
+    brain.knocked = nil
+    if not M.SKIP.knockwait then brain.stand_until = now + brain.charge_react end
+  end
+  if brain.stand_until then
+    if now < brain.stand_until then
+      return { mask = 0, facing = input.facing_towards(p.x, p.y, h.x, h.y) }
+    end
+    brain.stand_until = nil
   end
   local cls = p.class
   local duty = M.healer_duty(p)

@@ -55,7 +55,9 @@ function C:_rebase()
   local me = self.snap and self.pid and self.snap.players[self.pid]
   if not me then self.predicted = nil return end
   local x, y = me.x, me.y
-  local speed = me.alive and model.p("move_speed_alive")
+  -- im Rueckstoss-Flug (Runde 24) ignoriert der Host die Eingabe — die
+  -- Vorhersage muss das auch, sonst saegt sie je Snapshot gegen den Flug
+  local speed = (me.alive and not me.knocked) and model.p("move_speed_alive")
                 or me.ghost and model.p("move_speed_ghost") or 0
   local from = math.max(self.ack + 1, self.ctick - HISTORY_MAX)
   for t = from, self.ctick do

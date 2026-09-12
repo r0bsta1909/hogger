@@ -247,6 +247,18 @@ function R:add_nova_fx(x, y, radius)
                             radius = radius }
 end
 
+-- Rundumschlag platzt (Runde 24, Rob: "man sieht den Knockback nicht"): der
+-- rote Telegraph-Ring springt beim Stoss vom Schlagradius nach aussen und
+-- verglueht — der Moment, in dem der Stoss wirklich passiert. Weltradius,
+-- skaliert beim Zeichnen wie die Nova.
+function R:add_shock_fx(x, y, radius)
+  self.fx = self.fx or {}
+  if #self.fx > 60 then return end
+  self.fx[#self.fx + 1] = { form = "shockburst", col = { 1.0, 0.35, 0.2 },
+                            t = 0.35, total = 0.35, sx = x, sy = y, tx = x, ty = y,
+                            radius = radius }
+end
+
 function R:add_heal_fx(tx, ty)
   self.fx = self.fx or {}
   if #self.fx > 60 then return end
@@ -1141,6 +1153,19 @@ function R:draw_fx(to_screen, scale)
       love.graphics.circle("line", tx, ty, rw * grow)
       love.graphics.setLineWidth(2)
       love.graphics.circle("line", tx, ty, rw * math.max(0, grow - 0.2))
+      love.graphics.setLineWidth(1)
+    elseif f.form == "shockburst" then
+      -- Rundumschlag (Runde 24): die Fuellung des Telegraphs verglueht, ein
+      -- dicker Ring springt vom Schlagradius nach aussen (bis 1,6x), ein
+      -- duenner bleibt am Radius stehen
+      local rw = (f.radius or 80) * scale
+      love.graphics.setColor(c[1], c[2], c[3], 0.25 * (1 - k))
+      love.graphics.circle("fill", tx, ty, rw * (1 + 0.6 * k))
+      love.graphics.setColor(c[1], c[2], c[3], 0.95 * (1 - k))
+      love.graphics.setLineWidth(6 * (1 - k) + 1)
+      love.graphics.circle("line", tx, ty, rw * (1 + 0.6 * k))
+      love.graphics.setLineWidth(2)
+      love.graphics.circle("line", tx, ty, rw)
       love.graphics.setLineWidth(1)
     elseif f.form == "hitflash" then
       -- eigener Treffer (Runde 21): Fuellung blitzt auf und verglueht, ein

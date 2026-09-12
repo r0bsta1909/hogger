@@ -398,9 +398,24 @@ local function process_cosmetics(view)
     elseif e.ev == "crit_kill" and tonumber(e.dst) == view.me then
       app.render:add_shake(18) -- der "WAS?!"-Moment (GDD 9.2)
     elseif e.ev == "shockwave" then
-      -- Rundumschlag (Runde 22): Roar beim Telegraph, Schlag beim Stoss
-      audio.play("snd_hogger_charge")
-      if (e.val or 0) >= 0 then app.render:add_shake(6) end
+      -- Rundumschlag (Runde 22/24): vier Zeilenformen (GDD 17.3). Ohne
+      -- Spieler-dst (Host: nil, Client: 255) sind es Telegraph-Beginn und
+      -- Summe — Roar je einmal, beim Stoss platzt der Ring. Mit Spieler-dst
+      -- und val >= 0 ist es ein Getroffener: Fliesstext, Shake fuer mich.
+      -- Ring-Zeilen beim Telegraph (dst + val -1) sind nur fuers Log.
+      local n = tonumber(e.dst)
+      local hitp = n and view.players[n] or nil
+      if not hitp then
+        audio.play("snd_hogger_charge")
+        if (e.val or 0) >= 0 then
+          app.render:add_shock_fx(view.hogger.x, view.hogger.y, model.p("hogger_shock_radius"))
+          app.render:add_shake(6)
+        end
+      elseif (e.val or 0) >= 0 then
+        app.floating:add("Weggeschleudert!", hitp.x, hitp.y, { 1, 0.6, 0.35 }, 2,
+          n == view.me and { own = true, big = true } or nil)
+        if n == view.me then app.render:add_shake(14) end
+      end
     elseif e.ev == "charge" then
       audio.play("snd_hogger_charge") -- Boss-Lesbarkeit (GDD 12 Nr. 10)
       -- Runde 21: val = 0 heisst verfehlt — der Ausweicher sieht es

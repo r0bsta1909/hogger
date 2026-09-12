@@ -37,6 +37,7 @@ Wenn diese drei stimmen, ist das Spiel im Lot. Alles Weitere ist Geschmack.
 | `hogger_threat_swap_melee` / `_ranged` | hoch (z. B. 1,3 / 1,6) | Hogger klebt länger an seinem Ziel — der Krieger hält ihn, Stoff lebt länger, der Krieger stirbt öfter. 1,0 / 1,0 = ein Punkt kippt wie bis Runde 20 |
 | `hogger_charge_threat_loss` | hoch | die Charge lässt die Aggro stärker rotieren; 0 = sie kostet keine Bedrohung |
 | `hogger_shock_cd` / `_radius` / `_knockback` / `_dmg` | `_cd` runter (z. B. 20) = mehr Bewegung; 0 = kein Rundumschlag | Der rote Ring alle 30 s: wer drinsteht, fliegt; danach die Charge. Mehr Stöße heißt mehr Tode im Nahkampf und kürzere Casts |
+| `hogger_shock_fly_time` / `hogger_charge_fly_time` | hoch = länger in der Luft und ohne Kontrolle; 0 = Versatz ohne Flug wie bis Runde 23 | Seit Runde 24 fliegt man 0,35 s. Der Log-Leser zeigt, wie viele beim Telegraph im Ring standen und wie viele es trotzdem traf |
 | `hogger_cleave_divisor` | hoch | er trifft weniger Leute gleichzeitig; entlastet den Nahkampfklumpen |
 
 Vorher aber prüfen, **woran** ihr scheitert: Wipe (alle tot) oder Zeitlimit? Bei Zeitlimit ist es die HP-Zahl, bei Wipes sind es die Schadenswerte oder die Heilung.
@@ -140,7 +141,7 @@ Auch wenn die Schurken treten: ein Mensch braucht 1 bis 3 Sekunden bis zum Tritt
    ```
    lua tools/log_lesen.lua <pfad-zur-jsonl>
    ```
-   Das Werkzeug sagt dir dieselben Dinge auch selbst — Siegquote, Trylängen, ob das Fressen unterbrochen wurde, woran gestorben wurde, und welcher Regler dran wäre.
+   Das Werkzeug sagt dir dieselben Dinge auch selbst — Siegquote, Trylängen, ob das Fressen unterbrochen wurde, woran gestorben wurde, wen der Rundumschlag traf und wer aus dem Ring kam (seit Runde 24), und welcher Regler dran wäre.
 2. **`tuning.csv`**, falls du im Panel etwas verstellt hast.
 3. **`session.json` brauche ich nicht** — darin stehen nur XP, Kupfer, Plunder und der Try-Zähler.
 

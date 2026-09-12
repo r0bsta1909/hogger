@@ -124,6 +124,42 @@ local function break_cast(p)
   p.gcd = 0
 end
 
+-- Rueckstoss (Runde 24, Rob: "man sieht den Knockback nicht"): der Endpunkt
+-- ist derselbe wie beim frueheren Teleport (geclampt), aber der Spieler
+-- fliegt ueber fly_time dorthin — absolut aus Start und Ziel gerechnet, damit
+-- jeder Tick unabhaengig von Rundung auf dieselbe Stelle kommt. Waehrend des
+-- Flugs ignoriert player_tick seine Eingabe (man fliegt). Ease-out: schnell
+-- weg, dann ausbremsen. fly_time 0 = sofortiger Versatz (Stand Runde 22/23).
+-- EINE Funktion fuer Rundumschlag und Charge — vorher stand der Versatz
+-- wortgleich doppelt im File.
+local function knockback(p, fx, fy, dist, fly_time)
+  local d = math.max(1, math.sqrt(fx * fx + fy * fy))
+  local tx, ty = map.clamp(p.x + fx / d * dist, p.y + fy / d * dist)
+  if p.cast then break_cast(p) end -- die GCD faellt mit (#125)
+  if (fly_time or 0) <= 0 then
+    p.x, p.y = tx, ty
+    p.knock = nil
+    return
+  end
+  p.knock = { x0 = p.x, y0 = p.y, x1 = tx, y1 = ty, total = fly_time, t_left = fly_time }
+end
+S.knockback = knockback -- fuer Tests
+
+-- Ein Tick Flug: Anteil der Strecke nach Ease-out, am Ende exakt das Ziel.
+local function knock_tick(p)
+  local k = p.knock
+  k.t_left = k.t_left - DT
+  if k.t_left <= 0 then
+    p.x, p.y = k.x1, k.y1
+    p.knock = nil
+    return
+  end
+  local r = 1 - k.t_left / k.total
+  local e = 1 - (1 - r) * (1 - r)
+  p.x = k.x0 + (k.x1 - k.x0) * e
+  p.y = k.y0 + (k.y1 - k.y0) * e
+end
+
 -- Ein Spieler erwacht mit einer Klasse: Werte, Auren, Zustand (GDD 5/8.1).
 -- EINE Wahrheit fuer die Wiederbelebung am Klassenicon, den Admin-Teleport
 -- und das Finale (#131) — der Block lag vorher wortgleich doppelt im File.
@@ -156,6 +192,7 @@ local function revive_as(state, p, class, race)
   p.shout_until = 0
   p.bleed_t = 0
   p.hot = nil -- Verjuengung endet mit Tod/Wiederbelebung (Runde 22)
+  p.knock = nil -- niemand erwacht fliegend (Runde 24)
   p.dead_until = 0
   p.release_wish = nil
   for i, r in ipairs(model.RACES) do
@@ -248,6 +285,7 @@ local function kill_player(state, p, ev, was_crit, cause)
   p.shout_until = 0
   p.bleed_t = 0
   p.hot = nil -- Verjuengung endet mit Tod/Wiederbelebung (Runde 22)
+  p.knock = nil -- ein Toter fliegt nicht weiter (Runde 24)
   p.bleed_next = 0
   p.shield_hp = 0 -- Machtwort verfaellt mit dem Tod (Runde 13, #156)
   p.weak_soul_until = 0
@@ -950,6 +988,10 @@ local function player_tick(state, p, inp, ev)
   -- Vor der Questannahme darf man sich nur um die eigene Achse drehen
   -- (GDD Kap. 5, Issue #50) — host-seitig erzwungen, nicht nur in der UI
   if (p.quest or 2) < 2 then mask = 0 end
+  -- Im Rueckstoss-Flug (Runde 24) gibt es keine Eingabe: keine Bewegung,
+  -- kein Sprung, keine Faehigkeitsflanke — man fliegt. Ein gehaltener Knopf
+  -- wirkt nach der Landung als neue Flanke (wie nach der Quest-Sperre).
+  if p.knock and p.alive then mask = 0 end
 
   -- tot: man liegt an der Sterbeposition und wartet. Erst die Freigabe
   -- macht den Geist (GDD Kap. 11, Issue #54); nach der Nachfrist passiert
@@ -1017,6 +1059,7 @@ local function player_tick(state, p, inp, ev)
 
   -- lebend --------------------------------------------------------------
   local speed = model.p("move_speed_alive")
+  if p.knock then knock_tick(p) end -- Rueckstoss-Flug (Runde 24)
   if moving then
     p.x, p.y = map.clamp(p.x + dx * speed * DT, p.y + dy * speed * DT)
     if p.cast then break_cast(p) end -- Bewegung bricht den Cast
@@ -1780,10 +1823,11 @@ local function hogger_tick(state, ev)
         if p.alive and not p.stealth and not unseen(state, p)
            and world.dist(p.x, p.y, h.x, h.y) <= r then
           hit = hit + 1
-          local dx, dy = p.x - h.x, p.y - h.y
-          local d = math.max(1, math.sqrt(dx * dx + dy * dy))
-          p.x, p.y = map.clamp(p.x + dx / d * kb, p.y + dy / d * kb)
-          if p.cast then break_cast(p) end
+          -- je Getroffenem eine Zeile (Runde 24, GDD 17.3): dst = Spieler,
+          -- val = Abstand zu Hogger — der Log-Leser sagt damit, WEN es traf
+          events.push(ev, state.tick, "shockwave", "hogger", p.id,
+            world.dist(p.x, p.y, h.x, h.y), nil)
+          knockback(p, p.x - h.x, p.y - h.y, kb, model.p("hogger_shock_fly_time"))
           if dmg > 0 then hogger_damage_player(state, p, dmg, "shock", ev) end
         end
       end
@@ -1828,12 +1872,10 @@ local function hogger_tick(state, ev)
         events.push(ev, state.tick, "charge", "hogger", target.id, 0, nil)
       else
         h.x, h.y = target.x, target.y
-        -- Knockback: vom Anlaufvektor weg (GDD 9.2), kein Krit
-        local d = math.max(1, world.dist(ox, oy, target.x, target.y))
-        local kx = (target.x - ox) / d * model.p("hogger_charge_knockback")
-        local ky = (target.y - oy) / d * model.p("hogger_charge_knockback")
-        target.x, target.y = map.clamp(target.x + kx, target.y + ky)
-        if target.cast then break_cast(target) end
+        -- Knockback: vom Anlaufvektor weg (GDD 9.2), kein Krit; seit
+        -- Runde 24 als Flug (hogger_charge_fly_time)
+        knockback(target, target.x - ox, target.y - oy,
+          model.p("hogger_charge_knockback"), model.p("hogger_charge_fly_time"))
         events.push(ev, state.tick, "charge", "hogger", target.id, 1, nil)
         hogger_damage_player(state, target, model.p("hogger_charge_dmg"), "charge", ev)
         -- Die Charge frisst Bedrohung (Runde 21, #199): der Getroffene
@@ -1895,6 +1937,16 @@ local function hogger_tick(state, ev)
     h.shock_cd = model.p("hogger_shock_cd")
     h.shock = { t_left = model.p("hogger_shock_windup"), total = model.p("hogger_shock_windup") }
     events.push(ev, state.tick, "shockwave", "hogger", nil, -1, nil) -- -1 = Telegraph beginnt
+    -- je Spieler im Ring beim Telegraph-Start eine Zeile (Runde 24): gegen
+    -- die Trefferzeilen gehalten ergibt das die Ausweichquote am Ring —
+    -- dieselbe Bedingung wie beim Stoss, sonst misst man zwei Dinge
+    local r = model.p("hogger_shock_radius")
+    for _, p in ipairs(state.players) do
+      if p.alive and not p.stealth and not unseen(state, p)
+         and world.dist(p.x, p.y, h.x, h.y) <= r then
+        events.push(ev, state.tick, "shockwave", "hogger", p.id, -1, nil)
+      end
+    end
     return
   end
 

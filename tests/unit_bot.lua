@@ -452,3 +452,45 @@ do
   bot.SKIP = {}
   T.ok(bot.hogger_hungry({ seek = {} }) and not bot.hogger_hungry({}), "bot: hogger_hungry liest den Zustand")
 end
+
+-- Runde 24: Aufstehen nach dem Rueckstoss-Flug. Im Flug gibt der Bot keine
+-- Eingabe (die Sim ignoriert sie ohnehin); nach der Landung wartet typisch
+-- seine Charge-Reaktion lang, bevor er zurueckrennt; --skip knockwait nicht.
+do
+  local st, h = arena(1, "warrior")
+  local p = st.players[2]
+  p.x, p.y = h.x + 150, h.y
+  bot.decide(st, p.id) -- Gehirn anlegen
+  local every = bot.DECIDE_EVERY -- Bots entscheiden nur alle paar Ticks
+  p.knock = { x0 = h.x + 30, y0 = h.y, x1 = p.x, y1 = p.y, total = 0.35, t_left = 0.2 }
+  st.tick = st.tick + every; st.time = st.tick * model.TICK_DT
+  local d = bot.decide(st, p.id)
+  T.eq(d.mask, 0, "typisch: im Flug keine Eingabe")
+  p.knock = nil
+  st.tick = st.tick + every - 1; st.time = st.tick * model.TICK_DT
+  local t0 = st.time
+  local moved_at
+  for _ = 1, 90 do
+    st.tick = st.tick + 1; st.time = st.tick * model.TICK_DT
+    local dec = bot.decide(st, p.id)
+    if dec.mask % 16 > 0 then moved_at = st.time - t0; break end
+  end
+  T.ok(moved_at ~= nil, "typisch: rennt nach der Pause wieder los")
+  T.ok(moved_at >= p.brain.charge_react - model.TICK_DT * 2,
+    "typisch: wartet nach der Landung seine Charge-Reaktion lang ("
+    .. tostring(moved_at) .. " gegen " .. tostring(p.brain.charge_react) .. ")")
+
+  bot.SKIP = { knockwait = true }
+  local st2, h2 = arena(1, "warrior")
+  local q = st2.players[2]
+  q.x, q.y = h2.x + 150, h2.y
+  bot.decide(st2, q.id)
+  q.knock = { x0 = h2.x + 30, y0 = h2.y, x1 = q.x, y1 = q.y, total = 0.35, t_left = 0.2 }
+  st2.tick = st2.tick + every; st2.time = st2.tick * model.TICK_DT
+  bot.decide(st2, q.id)
+  q.knock = nil
+  st2.tick = st2.tick + every; st2.time = st2.tick * model.TICK_DT
+  local dec2 = bot.decide(st2, q.id)
+  bot.SKIP = {}
+  T.ok(dec2.mask % 16 > 0, "SKIP.knockwait: typisch rennt sofort zurueck")
+end

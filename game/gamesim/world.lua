@@ -160,6 +160,7 @@ function M.add_player(state, name, opts)
     imp_id = nil,
     dead_until = 0,          -- Respawn-Wartezeit (tot, noch kein Geist)
     revive = nil,            -- { slot, t_left } waehrend des Channels
+    knock = nil,             -- Rueckstoss-Flug { x0,y0,x1,y1,total,t_left } (Runde 24)
     prev_mask = 0,
     jump_t = 0, jumps = 0,
     dmg_done = 0, heal_done = 0, deaths = 0,
